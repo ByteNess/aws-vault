@@ -23,6 +23,9 @@ require (
 	gopkg.in/ini.v1 v1.67.0
 )
 
+// TODO: remove this once the keyring PR is merged upstream
+replace github.com/99designs/keyring => github.com/milesbxf/keyring milesbxf-touchid-support
+
 require (
 	github.com/alecthomas/units v0.0.0-20211218093645-b94a6e3cc137 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
@@ -61,9 +64,11 @@ require (
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/muesli/termenv v0.16.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
+	github.com/lox/go-touchid v0.0.0-20170712105233-619cc8e578d0 // indirect
 	github.com/xhit/go-str2duration/v2 v2.1.0 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	golang.org/x/sync v0.12.0 // indirect
 	golang.org/x/sys v0.35.0 // indirect
 	golang.org/x/text v0.23.0 // indirect
+	golang.org/x/crypto v0.0.0-20220829220503-c86fa9a7ed90 // indirect
 )
