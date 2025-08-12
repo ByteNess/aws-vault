@@ -19,7 +19,7 @@ require (
 	github.com/mattn/go-isatty v0.0.20
 	github.com/mattn/go-tty v0.0.7
 	github.com/skratchdot/open-golang v0.0.0-20200116055534-eef842397966
-	golang.org/x/term v0.33.0
+	golang.org/x/term v0.34.0
 	gopkg.in/ini.v1 v1.67.0
 )
 
@@ -64,6 +64,6 @@ require (
 	github.com/xhit/go-str2duration/v2 v2.1.0 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	golang.org/x/sync v0.12.0 // indirect
-	golang.org/x/sys v0.34.0 // indirect
+	golang.org/x/sys v0.35.0 // indirect
 	golang.org/x/text v0.23.0 // indirect
 )
