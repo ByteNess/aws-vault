@@ -189,7 +189,7 @@ func ConfigureGlobals(app *kingpin.Application) *AwsVault {
 
 func configureTouchID(k *keyring.Config) {
 	k.UseBiometrics = true
-	k.TouchIDAccount = "com.99designs.aws-vault.biometrics"
+	k.TouchIDAccount = "com.byteness.aws-vault.biometrics"
 	k.TouchIDService = "aws-vault"
 }
 
