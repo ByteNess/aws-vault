@@ -9,10 +9,10 @@ require (
 	github.com/alecthomas/kingpin/v2 v2.4.0
 	github.com/aws/aws-sdk-go-v2 v1.39.2
 	github.com/aws/aws-sdk-go-v2/config v1.31.9
-	github.com/aws/aws-sdk-go-v2/credentials v1.18.13
+	github.com/aws/aws-sdk-go-v2/credentials v1.18.15
 	github.com/aws/aws-sdk-go-v2/service/iam v1.47.7
-	github.com/aws/aws-sdk-go-v2/service/sso v1.29.3
-	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.34.5
+	github.com/aws/aws-sdk-go-v2/service/sso v1.29.5
+	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.35.1
 	github.com/aws/aws-sdk-go-v2/service/sts v1.38.6
 	github.com/byteness/keyring v1.4.3
 	github.com/charmbracelet/huh v0.7.0
@@ -30,7 +30,7 @@ require (
 	github.com/1password/onepassword-sdk-go v0.3.2-0.20250818130116-54fb7ee8021b // indirect
 	github.com/alecthomas/units v0.0.0-20211218093645-b94a6e3cc137 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
-	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.7 // indirect
+	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.9 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.9 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.7.9 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/ini v1.8.3 // indirect
