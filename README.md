@@ -98,6 +98,94 @@ AWS Vault then exposes the temporary credentials to the sub-process in one of tw
 
 The default is to use environment variables, but you can opt-in to the local instance metadata server with the `--server` flag on the `exec` command.
 
+## Credential Redaction
+
+AWS Vault can automatically redact AWS credentials from subprocess output to prevent accidental credential leakage. This is similar to the behavior of `op run` from 1Password.
+
+### Configuration
+
+Add an `[aws-vault]` section to your `~/.aws/config` file to enable redaction globally:
+
+```ini
+[aws-vault]
+redact_secrets = true
+```
+
+### Command-line Usage
+
+You can also enable redaction for individual commands using the `--redact` flag:
+
+```shell
+$ aws-vault exec --redact myprofile ./my-script.sh
+```
+
+The `--redact` flag overrides the configuration file setting.
+
+### How Redaction Works
+
+When redaction is enabled, AWS Vault will:
+- Monitor stdout and stderr from subprocesses
+- Replace any AWS credentials with `<REDACTED>`
+- Match actual credentials being used (access keys, secret keys, session tokens)
+- Use exact string matching to prevent false positives
+- Handle credentials split across buffer boundaries with a sliding window
+
+This prevents credentials from appearing in logs, terminal history, or process output while maintaining full functionality.
+
+### Advanced Configuration
+
+#### Stderr Window Size
+
+By default, stderr uses a 256-byte sliding window for credential redaction, 
+providing near-real-time output while still protecting against credentials 
+split at buffer boundaries.
+
+For scripts that output very long credentials (>256 bytes) to stderr, you 
+may notice a slight delay in output. You can adjust the window size:
+
+```bash
+# Increase stderr window size for more buffering (more secure, slower)
+export AWS_VAULT_STDERR_WINDOW_SIZE=512
+aws-vault exec --redact myprofile ./my-script.sh
+
+# Decrease for faster stderr output (less secure, faster)
+export AWS_VAULT_STDERR_WINDOW_SIZE=128
+aws-vault exec --redact myprofile ./my-script.sh
+```
+
+**Security Note:** `stdout` always uses the full credential-length window 
+regardless of this setting, as it's more likely to contain credential dumps.
+
+#### Child Process Buffering
+**Note:** Some programs (like Python) buffer their `stderr` output when not 
+connected to a terminal. If you notice delayed `stderr` output even with 
+redaction enabled, you may need to configure the child process to disable 
+its own buffering. For example:
+
+```bash
+# Python: disable buffering
+python3 -u script.py
+
+# Ruby: sync stderr
+ruby -e '$stderr.sync = true' script.rb
+```
+
+### Known Limitations
+
+**Output Ordering:** When redaction is enabled, `stdout` and `stderr` are processed 
+by separate goroutines reading from separate pipes. This means that output from 
+these streams may appear in a different order than when running the command 
+directly in a terminal. This is a fundamental limitation of the pipe-based 
+interception approach and does not affect the correctness of redaction.
+
+If your script requires precise `stdout`/`stderr` interleaving, you can redirect 
+`stderr` to `stdout` in your script:
+
+```bash
+aws-vault exec --redact profile -- bash -c "./script.sh 2>&1"
+```
+**Note:** This merges the streams, so you won't be able to separately capture `stderr`.
+
 ## Roles and MFA
 
 [Best-practice](https://docs.aws.amazon.com/IAM/latest/UserGuide/best-practices.html#delegate-using-roles) is to [create Roles to delegate permissions](https://docs.aws.amazon.com/cli/latest/userguide/cli-roles.html). For security, you should also require that users provide a one-time key generated from a multi-factor authentication (MFA) device.
