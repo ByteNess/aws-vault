@@ -156,6 +156,12 @@ type SSOSessionSection struct {
 	SSORegistrationScopes string `ini:"sso_registration_scopes,omitempty"`
 }
 
+// AwsVaultSection is an [aws-vault] section of the config file
+type AwsVaultSection struct {
+	Name           string `ini:"-"`
+	RedactSecrets  bool   `ini:"redact_secrets,omitempty"`
+}
+
 func (s ProfileSection) IsEmpty() bool {
 	s.Name = ""
 	return s == ProfileSection{}
@@ -179,6 +185,9 @@ func (c *ConfigFile) ProfileSections() []ProfileSection {
 
 			result = append(result, profile)
 		} else if strings.HasPrefix(section, "sso-session ") {
+			// Not a profile
+			continue
+		} else if section == "aws-vault" {
 			// Not a profile
 			continue
 		} else {
@@ -232,6 +241,25 @@ func (c *ConfigFile) SSOSessionSection(name string) (SSOSessionSection, bool) {
 		panic(err)
 	}
 	return ssoSession, true
+}
+
+// AwsVaultSection returns the [aws-vault] section. If there isn't any,
+// an empty aws-vault section is returned, along with false.
+func (c *ConfigFile) AwsVaultSection() (AwsVaultSection, bool) {
+	awsVault := AwsVaultSection{
+		Name: "aws-vault",
+	}
+	if c.iniFile == nil {
+		return awsVault, false
+	}
+	section, err := c.iniFile.GetSection("aws-vault")
+	if err != nil {
+		return awsVault, false
+	}
+	if err = section.MapTo(&awsVault); err != nil {
+		panic(err)
+	}
+	return awsVault, true
 }
 
 func (c *ConfigFile) Save() error {
@@ -415,6 +443,12 @@ func (cl *ConfigLoader) populateFromConfigFile(config *ProfileConfig, profileNam
 	// Ignore source_profile if it recursively refers to the profile
 	if config.SourceProfileName == config.ProfileName {
 		config.SourceProfileName = ""
+	}
+
+	// Read aws-vault section for global settings
+	awsVaultSection, ok := cl.File.AwsVaultSection()
+	if ok {
+		config.RedactSecrets = awsVaultSection.RedactSecrets
 	}
 
 	return nil
@@ -617,6 +651,9 @@ type ProfileConfig struct {
 
 	// CredentialProcess specifies external command to run to get an AWS credential
 	CredentialProcess string
+
+	// RedactSecrets specifies whether to redact AWS credentials from subprocess output
+	RedactSecrets bool
 }
 
 // SetSessionTags parses a comma separated key=vaue string and sets Config.SessionTags map
