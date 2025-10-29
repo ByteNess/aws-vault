@@ -13,12 +13,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/alecthomas/kingpin/v2"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/byteness/aws-vault/v7/iso8601"
 	"github.com/byteness/aws-vault/v7/server"
 	"github.com/byteness/aws-vault/v7/vault"
 	"github.com/byteness/keyring"
+	"github.com/spf13/cobra"
 )
 
 type ExecCommandInput struct {
@@ -66,108 +66,114 @@ func hasBackgroundServer(input ExecCommandInput) bool {
 	return input.StartEcsServer || input.StartEc2Server
 }
 
-func ConfigureExecCommand(app *kingpin.Application, a *AwsVault) {
+func ConfigureExecCommand(a *AwsVault) *cobra.Command {
 	input := ExecCommandInput{}
 
-	cmd := app.Command("exec", "Execute a command with AWS credentials.")
+	cmd := &cobra.Command{
+		Use:   "exec [profile] [cmd] [args...]",
+		Short: "Execute a command with AWS credentials",
+		Long:  "Execute a command with AWS credentials",
+		Args:  cobra.MinimumNArgs(0),
+		ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+			if len(args) == 0 {
+				return a.CompleteProfileNames()(cmd, args, toComplete)
+			}
+			// Disable file completion for command arguments
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Parse args: [profile] [command] [command args...]
+			if len(args) > 0 {
+				input.ProfileName = args[0]
+			}
+			if len(args) > 1 {
+				input.Command = args[1]
+				input.Args = args[2:]
+			}
 
-	cmd.Flag("duration", "Duration of the temporary or assume-role session. Defaults to 1h").
-		Short('d').
-		DurationVar(&input.SessionDuration)
+			// Apply defaults if profile not provided
+			if input.ProfileName == "" {
+				input.ProfileName = os.Getenv("AWS_PROFILE")
+			}
 
-	cmd.Flag("no-session", "Skip creating STS session with GetSessionToken").
-		Short('n').
-		BoolVar(&input.NoSession)
+			input.Config.MfaPromptMethod = a.PromptDriver(hasBackgroundServer(input))
+			input.Config.NonChainedGetSessionTokenDuration = input.SessionDuration
+			input.Config.AssumeRoleDuration = input.SessionDuration
+			input.Config.SSOUseStdout = input.UseStdout
+			input.ShowHelpMessages = !a.Debug && input.Command == "" && isATerminal() && os.Getenv("AWS_VAULT_DISABLE_HELP_MESSAGE") != "1"
 
-	cmd.Flag("region", "The AWS region").
-		StringVar(&input.Config.Region)
+			f, err := a.AwsConfigFile()
+			if err != nil {
+				return err
+			}
+			keyring, err := a.Keyring()
+			if err != nil {
+				return err
+			}
 
-	cmd.Flag("mfa-token", "The MFA token to use").
-		Short('t').
-		StringVar(&input.Config.MfaToken)
+			if input.ProfileName == "" {
+				// If no profile provided select from configured AWS profiles
+				ProfileName, err := pickAwsProfile(f.ProfileNames())
 
-	cmd.Flag("json", "Output credentials in JSON that can be used by credential_process").
-		Short('j').
-		Hidden().
-		BoolVar(&input.JSONDeprecated)
+				if err != nil {
+					return fmt.Errorf("unable to select a 'profile'. Try --help: %w", err)
+				}
 
-	cmd.Flag("server", "Alias for --ecs-server").
-		Short('s').
-		BoolVar(&input.StartEcsServer)
+				input.ProfileName = ProfileName
+			}
 
-	cmd.Flag("ec2-server", "Run a EC2 metadata server in the background for credentials").
-		BoolVar(&input.StartEc2Server)
+			exitcode := 0
+			if input.JSONDeprecated {
+				exportCommandInput := ExportCommandInput{
+					ProfileName:     input.ProfileName,
+					Format:          "json",
+					Config:          input.Config,
+					SessionDuration: input.SessionDuration,
+					NoSession:       input.NoSession,
+				}
 
-	cmd.Flag("ecs-server", "Run a ECS credential server in the background for credentials (the SDK or app must support AWS_CONTAINER_CREDENTIALS_FULL_URI)").
-		BoolVar(&input.StartEcsServer)
-
-	cmd.Flag("lazy", "When using --ecs-server, lazily fetch credentials").
-		BoolVar(&input.Lazy)
-
-	cmd.Flag("stdout", "Print the SSO link to the terminal without automatically opening the browser").
-		BoolVar(&input.UseStdout)
-
-	cmd.Arg("profile", "Name of the profile").
-		//Required().
-		Default(os.Getenv("AWS_PROFILE")).
-		HintAction(a.MustGetProfileNames).
-		StringVar(&input.ProfileName)
-
-	cmd.Arg("cmd", "Command to execute, defaults to $SHELL").
-		StringVar(&input.Command)
-
-	cmd.Arg("args", "Command arguments").
-		StringsVar(&input.Args)
-
-	cmd.Action(func(c *kingpin.ParseContext) (err error) {
-		input.Config.MfaPromptMethod = a.PromptDriver(hasBackgroundServer(input))
-		input.Config.NonChainedGetSessionTokenDuration = input.SessionDuration
-		input.Config.AssumeRoleDuration = input.SessionDuration
-		input.Config.SSOUseStdout = input.UseStdout
-		input.ShowHelpMessages = !a.Debug && input.Command == "" && isATerminal() && os.Getenv("AWS_VAULT_DISABLE_HELP_MESSAGE") != "1"
-
-		f, err := a.AwsConfigFile()
-		if err != nil {
-			return err
-		}
-		keyring, err := a.Keyring()
-		if err != nil {
-			return err
-		}
-
-		if input.ProfileName == "" {
-			// If no profile provided select from configured AWS profiles
-			ProfileName, err := pickAwsProfile(f.ProfileNames())
+				err = ExportCommand(exportCommandInput, f, keyring)
+			} else {
+				exitcode, err = ExecCommand(input, f, keyring)
+			}
 
 			if err != nil {
-				return fmt.Errorf("unable to select a 'profile'. Try --help: %w", err)
+				return err
 			}
 
-			input.ProfileName = ProfileName
-		}
+			// override exit code if not err
+			os.Exit(exitcode)
 
-		exitcode := 0
-		if input.JSONDeprecated {
-			exportCommandInput := ExportCommandInput{
-				ProfileName:     input.ProfileName,
-				Format:          "json",
-				Config:          input.Config,
-				SessionDuration: input.SessionDuration,
-				NoSession:       input.NoSession,
-			}
+			return nil
+		},
+	}
 
-			err = ExportCommand(exportCommandInput, f, keyring)
-		} else {
-			exitcode, err = ExecCommand(input, f, keyring)
-		}
+	cmd.Flags().DurationVarP(&input.SessionDuration, "duration", "d", time.Hour, "Duration of the temporary or assume-role session. Defaults to 1h")
+	cmd.Flags().BoolVarP(&input.NoSession, "no-session", "n", false, "Skip creating STS session with GetSessionToken")
+	cmd.Flags().StringVar(&input.Config.Region, "region", "", "The AWS region")
+	cmd.Flags().StringVarP(&input.Config.MfaToken, "mfa-token", "t", "", "The MFA token to use")
+	cmd.Flags().BoolVarP(&input.JSONDeprecated, "json", "j", false, "Output credentials in JSON that can be used by credential_process")
+	_ = cmd.Flags().MarkHidden("json")
+	cmd.Flags().BoolVarP(&input.StartEcsServer, "server", "s", false, "Alias for --ecs-server")
+	
+	// Prevent cobra from interpreting flags in the command arguments
+	cmd.Flags().SetInterspersed(false)
+	cmd.Flags().BoolVar(&input.StartEc2Server, "ec2-server", false, "Run a EC2 metadata server in the background for credentials")
+	cmd.Flags().BoolVar(&input.StartEcsServer, "ecs-server", false, "Run a ECS credential server in the background for credentials (the SDK or app must support AWS_CONTAINER_CREDENTIALS_FULL_URI)")
+	cmd.Flags().BoolVar(&input.Lazy, "lazy", false, "When using --ecs-server, lazily fetch credentials")
+	cmd.Flags().BoolVar(&input.UseStdout, "stdout", false, "Print the SSO link to the terminal without automatically opening the browser")
 
-		app.FatalIfError(err, "exec")
-
-		// override exit code if not err
-		os.Exit(exitcode)
-
-		return nil
+	cmd.RegisterFlagCompletionFunc("duration", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{"1h", "2h", "4h", "8h", "12h"}, cobra.ShellCompDirectiveNoFileComp
 	})
+	cmd.RegisterFlagCompletionFunc("region", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return AwsRegions(), cobra.ShellCompDirectiveNoFileComp
+	})
+	cmd.RegisterFlagCompletionFunc("mfa-token", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{}, cobra.ShellCompDirectiveNoFileComp
+	})
+
+	return cmd
 }
 
 func ExecCommand(input ExecCommandInput, f *vault.ConfigFile, keyring keyring.Keyring) (exitcode int, err error) {

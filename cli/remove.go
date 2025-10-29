@@ -5,9 +5,9 @@ import (
 	"strings"
 
 	"github.com/byteness/keyring"
-	"github.com/alecthomas/kingpin/v2"
 	"github.com/byteness/aws-vault/v7/prompt"
 	"github.com/byteness/aws-vault/v7/vault"
+	"github.com/spf13/cobra"
 )
 
 type RemoveCommandInput struct {
@@ -16,35 +16,36 @@ type RemoveCommandInput struct {
 	Force        bool
 }
 
-func ConfigureRemoveCommand(app *kingpin.Application, a *AwsVault) {
+func ConfigureRemoveCommand(a *AwsVault) *cobra.Command {
 	input := RemoveCommandInput{}
 
-	cmd := app.Command("remove", "Remove credentials from the secure keystore.")
-	cmd.Alias("rm")
+	cmd := &cobra.Command{
+		Use:     "remove [profile]",
+		Aliases: []string{"rm"},
+		Short:   "Remove credentials from the secure keystore",
+		Long:    "Remove credentials from the secure keystore",
+		Args:    cobra.ExactArgs(1),
+		ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+			if len(args) == 0 {
+				return a.CompleteProfileNames()(cmd, args, toComplete)
+			}
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			input.ProfileName = args[0]
+			keyring, err := a.Keyring()
+			if err != nil {
+				return err
+			}
+			return RemoveCommand(input, keyring)
+		},
+	}
 
-	cmd.Arg("profile", "Name of the profile").
-		Required().
-		HintAction(a.MustGetProfileNames).
-		StringVar(&input.ProfileName)
+	cmd.Flags().BoolVarP(&input.SessionsOnly, "sessions-only", "s", false, "Only remove sessions, leave credentials intact")
+	cmd.Flags().BoolVarP(&input.Force, "force", "f", false, "Force-remove the profile without a prompt")
+	_ = cmd.Flags().MarkHidden("sessions-only")
 
-	cmd.Flag("sessions-only", "Only remove sessions, leave credentials intact").
-		Short('s').
-		Hidden().
-		BoolVar(&input.SessionsOnly)
-
-	cmd.Flag("force", "Force-remove the profile without a prompt").
-		Short('f').
-		BoolVar(&input.Force)
-
-	cmd.Action(func(c *kingpin.ParseContext) error {
-		keyring, err := a.Keyring()
-		if err != nil {
-			return err
-		}
-		err = RemoveCommand(input, keyring)
-		app.FatalIfError(err, "remove")
-		return nil
-	})
+	return cmd
 }
 
 func RemoveCommand(input RemoveCommandInput, keyring keyring.Keyring) error {
