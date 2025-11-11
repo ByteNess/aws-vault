@@ -1,4 +1,6 @@
 on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
   push:
     tags:
       - 'v*'
@@ -16,7 +18,7 @@ permissions:
 name: Build & Release
 jobs:
   build:
-    if: startsWith(github.ref, 'refs/tags/v')
+    #if: startsWith(github.ref, 'refs/tags/v')
     name: Build
     strategy:
       matrix:
