@@ -50,6 +50,7 @@ jobs:
 
       - name: Build artefacts
         run: |
+          go get github.com/1password/onepassword-sdk-go@v0.4.0-beta.1
           go mod tidy
           echo "${VERSION} on ${{ matrix.os }}"
           make ${{ matrix.os }}
