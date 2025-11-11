@@ -12,7 +12,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sso v1.30.1
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.35.5
 	github.com/aws/aws-sdk-go-v2/service/sts v1.40.0
-	github.com/byteness/keyring v1.4.5
+	github.com/byteness/keyring v1.4.6
 	github.com/charmbracelet/huh v0.8.0
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/google/go-cmp v0.7.0
@@ -25,7 +25,7 @@ require (
 
 require (
 	github.com/1Password/connect-sdk-go v1.5.4-0.20250417152128-c154b387248b // indirect
-	github.com/1password/onepassword-sdk-go v0.3.2-0.20250818130116-54fb7ee8021b // indirect
+	github.com/1password/onepassword-sdk-go v0.4.0-beta.1 // indirect
 	github.com/alecthomas/units v0.0.0-20211218093645-b94a6e3cc137 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.13 // indirect
