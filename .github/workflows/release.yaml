@@ -40,7 +40,6 @@ jobs:
           go-version: 'stable'
           #go-version-file: 'go.mod'
           check-latest: true
-          cache: false
         id: go
 
       - name: Generate build tag
@@ -51,6 +50,7 @@ jobs:
 
       - name: Build artefacts
         run: |
+          go mod tidy
           echo "${VERSION} on ${{ matrix.os }}"
           make ${{ matrix.os }}
 
