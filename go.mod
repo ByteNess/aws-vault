@@ -23,6 +23,8 @@ require (
 	gopkg.in/ini.v1 v1.67.0
 )
 
+replace github.com/1password/onepassword-sdk-go => github.com/1password/onepassword-sdk-go v0.4.0-beta.1
+
 require (
 	github.com/1Password/connect-sdk-go v1.5.4-0.20250417152128-c154b387248b // indirect
 	github.com/1password/onepassword-sdk-go v0.4.0-beta.1 // indirect
