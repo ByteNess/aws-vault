@@ -52,8 +52,8 @@ github.com/byteness/go-keychain v0.0.0-20191008050251-8e49817e8af4 h1:HFl8GFmwK1
 github.com/byteness/go-keychain v0.0.0-20191008050251-8e49817e8af4/go.mod h1:9HlL8SWBRtCZE7sCNq+c3//H/oHywgSwtocmPTdOij8=
 github.com/byteness/go-libsecret v0.0.0-20250705200722-75549abfe79c h1:acX3x2Ka/6jQt3inHLNUuL1IKxb/j4dNMbuL6B/N324=
 github.com/byteness/go-libsecret v0.0.0-20250705200722-75549abfe79c/go.mod h1:eVg/Qgq8PRiBljsgvBLlVpMSrLecEY8pINiVRKQYYdc=
-github.com/byteness/keyring v1.4.6 h1:32v5Pplnz74E2gXNFZ8RzlyR46naqpERzEdXmT0l8Js=
-github.com/byteness/keyring v1.4.6/go.mod h1:DieXty0lASIOzja/6Z4/jv7ln0/25uhF2P193nmKSrE=
+github.com/byteness/keyring v1.4.7 h1:q6Nfq3bk1XSCV/4UIyEhZ9UsF7PVbu+Sa8ezlYUTFN4=
+github.com/byteness/keyring v1.4.7/go.mod h1:NPzSxP5RrV3Td+eTpA+Tn6dQ+rNyDPpWycey19+e1D8=
 github.com/byteness/percent v0.2.2 h1:vnIFh8WBR1xoC+U2etz0EMB1cgp+vsK6vynqTCeDziU=
 github.com/byteness/percent v0.2.2/go.mod h1:nwavge92FhIyfnldz4YWZD8uxPVvdh8NlzLRd1VYRDs=
 github.com/catppuccin/go v0.3.0 h1:d+0/YicIq+hSTo5oPuRi5kOpqkVA5tAsU6dNhvRu+aY=
