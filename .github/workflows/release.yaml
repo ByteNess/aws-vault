@@ -10,7 +10,7 @@ on:
 
 env:
   GOTELEMETRY: off
-  CGO_ENABLED: 0
+  CGO_ENABLED: 1
 
 permissions:
   contents: write
@@ -50,9 +50,6 @@ jobs:
 
       - name: Build artefacts
         run: |
-          go clean --modcache
-          go get github.com/1password/onepassword-sdk-go@v0.4.0-beta.1
-          go mod tidy
           echo "${VERSION} on ${{ matrix.os }}"
           make ${{ matrix.os }}
 
