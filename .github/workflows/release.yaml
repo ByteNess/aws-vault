@@ -22,7 +22,7 @@ jobs:
     name: Build
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, ubuntu-latest-arm64, macos-latest]
     runs-on: ${{ matrix.os }}
     #needs: [ test ]
     steps:
