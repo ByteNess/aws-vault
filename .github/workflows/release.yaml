@@ -51,6 +51,8 @@ jobs:
       - name: Build artefacts
         run: |
           echo "${VERSION} on ${{ matrix.os }}"
+          go mod tidy
+          go list -m all | grep onepassword-sdk-go
           make ${{ matrix.os }}
 
       - name: Upload artifacts
