@@ -9,7 +9,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.31.18
 	github.com/aws/aws-sdk-go-v2/credentials v1.18.22
 	github.com/aws/aws-sdk-go-v2/service/iam v1.50.0
-	github.com/aws/aws-sdk-go-v2/service/sso v1.30.1
+	github.com/aws/aws-sdk-go-v2/service/sso v1.30.3
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.35.5
 	github.com/aws/aws-sdk-go-v2/service/sts v1.40.0
 	github.com/byteness/keyring v1.4.6
