@@ -61,7 +61,7 @@ release: binaries SHA256SUMS
 
 #ubuntu-latest: aws-vault-linux-amd64 aws-vault-linux-arm64 aws-vault-linux-ppc64le aws-vault-windows-amd64.exe aws-vault-windows-arm64.exe aws-vault-freebsd-amd64
 
-ubuntu-latest: aws-vault-linux-amd64 aws-vault-linux-ppc64le aws-vault-windows-amd64.exe aws-vault-freebsd-amd64
+ubuntu-latest: aws-vault-linux-amd64 #aws-vault-linux-ppc64le aws-vault-windows-amd64.exe aws-vault-freebsd-amd64
 
 ubuntu-latest-arm64: aws-vault-linux-arm64 aws-vault-windows-arm64.exe
 
