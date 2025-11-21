@@ -6,10 +6,10 @@ import (
 	"os"
 
 	"github.com/byteness/keyring"
-	"github.com/alecthomas/kingpin/v2"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/byteness/aws-vault/v7/prompt"
 	"github.com/byteness/aws-vault/v7/vault"
+	"github.com/spf13/cobra"
 )
 
 type AddCommandInput struct {
@@ -18,35 +18,41 @@ type AddCommandInput struct {
 	AddConfig   bool
 }
 
-func ConfigureAddCommand(app *kingpin.Application, a *AwsVault) {
+func ConfigureAddCommand(a *AwsVault) *cobra.Command {
 	input := AddCommandInput{}
 
-	cmd := app.Command("add", "Add credentials to the secure keystore.")
+	cmd := &cobra.Command{
+		Use:   "add [profile]",
+		Short: "Add credentials to the secure keystore",
+		Long:  "Add credentials to the secure keystore",
+		Args:  cobra.ExactArgs(1),
+		ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+			if len(args) == 0 {
+				return a.CompleteProfileNames()(cmd, args, toComplete)
+			}
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			input.ProfileName = args[0]
+			keyring, err := a.Keyring()
+			if err != nil {
+				return err
+			}
+			awsConfigFile, err := a.AwsConfigFile()
+			if err != nil {
+				return err
+			}
+			return AddCommand(input, keyring, awsConfigFile)
+		},
+	}
 
-	cmd.Arg("profile", "Name of the profile").
-		Required().
-		StringVar(&input.ProfileName)
+	// --env flag to read credentials from environment variables
+	cmd.Flags().BoolVar(&input.FromEnv, "env", false, "Read the credentials from the environment (AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY)")
 
-	cmd.Flag("env", "Read the credentials from the environment (AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY)").
-		BoolVar(&input.FromEnv)
+	// --add-config flag (default is true)
+	cmd.Flags().BoolVar(&input.AddConfig, "add-config", true, "Add a profile to ~/.aws/config if one doesn't exist")
 
-	cmd.Flag("add-config", "Add a profile to ~/.aws/config if one doesn't exist").
-		Default("true").
-		BoolVar(&input.AddConfig)
-
-	cmd.Action(func(c *kingpin.ParseContext) error {
-		keyring, err := a.Keyring()
-		if err != nil {
-			return err
-		}
-		awsConfigFile, err := a.AwsConfigFile()
-		if err != nil {
-			return err
-		}
-		err = AddCommand(input, keyring, awsConfigFile)
-		app.FatalIfError(err, "add")
-		return nil
-	})
+	return cmd
 }
 
 func AddCommand(input AddCommandInput, keyring keyring.Keyring, awsConfigFile *vault.ConfigFile) error {
@@ -73,6 +79,7 @@ func AddCommand(input AddCommandInput, keyring keyring.Keyring, awsConfigFile *v
 		if secretKey, err = prompt.TerminalSecretPrompt("Enter Secret Access Key: "); err != nil {
 			return err
 		}
+		// PRESERVED: MFA serial prompt functionality
 		if mfaSerial, err = prompt.TerminalPrompt("Enter MFA Device ARN (If MFA is not enabled, leave this blank): "); err != nil {
 			return err
 		}
@@ -96,7 +103,7 @@ func AddCommand(input AddCommandInput, keyring keyring.Keyring, awsConfigFile *v
 		if input.AddConfig {
 			newProfileSection := vault.ProfileSection{
 				Name:      input.ProfileName,
-				MfaSerial: mfaSerial,
+				MfaSerial: mfaSerial, // PRESERVED: MFA serial saved to config
 			}
 			log.Printf("Adding profile %s to config at %s", input.ProfileName, awsConfigFile.Path)
 			if err := awsConfigFile.Add(newProfileSection); err != nil {
