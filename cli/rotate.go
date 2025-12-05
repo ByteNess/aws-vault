@@ -6,11 +6,11 @@ import (
 	"log"
 	"time"
 
-	"github.com/alecthomas/kingpin/v2"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 	"github.com/byteness/aws-vault/v7/vault"
 	"github.com/byteness/keyring"
+	"github.com/spf13/cobra"
 )
 
 type RotateCommandInput struct {
@@ -19,47 +19,54 @@ type RotateCommandInput struct {
 	Config      vault.ProfileConfig
 }
 
-func ConfigureRotateCommand(app *kingpin.Application, a *AwsVault) {
+func ConfigureRotateCommand(a *AwsVault) *cobra.Command {
 	input := RotateCommandInput{}
 
-	cmd := app.Command("rotate", "Rotate credentials.")
-
-	cmd.Flag("no-session", "Use master credentials, no session or role used").
-		Short('n').
-		BoolVar(&input.NoSession)
-
-	cmd.Arg("profile", "Name of the profile").
-		//Required().
-		HintAction(a.MustGetProfileNames).
-		StringVar(&input.ProfileName)
-
-	cmd.Action(func(c *kingpin.ParseContext) (err error) {
-		input.Config.MfaPromptMethod = a.PromptDriver(false)
-
-		f, err := a.AwsConfigFile()
-		if err != nil {
-			return err
-		}
-		keyring, err := a.Keyring()
-		if err != nil {
-			return err
-		}
-
-		if input.ProfileName == "" {
-			// If no profile provided select from configured AWS profiles
-			ProfileName, err := pickAwsProfile(f.ProfileNames())
-
-			if err != nil {
-				return fmt.Errorf("unable to select a 'profile'. Try --help: %w", err)
+	cmd := &cobra.Command{
+		Use:   "rotate [profile]",
+		Short: "Rotate credentials",
+		Long:  "Rotate credentials",
+		Args:  cobra.MaximumNArgs(1),
+		ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+			if len(args) == 0 {
+				return a.CompleteProfileNames()(cmd, args, toComplete)
+			}
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) > 0 {
+				input.ProfileName = args[0]
 			}
 
-			input.ProfileName = ProfileName
-		}
+			input.Config.MfaPromptMethod = a.PromptDriver(false)
 
-		err = RotateCommand(input, f, keyring)
-		app.FatalIfError(err, "rotate")
-		return nil
-	})
+			f, err := a.AwsConfigFile()
+			if err != nil {
+				return err
+			}
+			keyring, err := a.Keyring()
+			if err != nil {
+				return err
+			}
+
+			if input.ProfileName == "" {
+				// If no profile provided select from configured AWS profiles
+				ProfileName, err := pickAwsProfile(f.ProfileNames())
+
+				if err != nil {
+					return fmt.Errorf("unable to select a 'profile'. Try --help: %w", err)
+				}
+
+				input.ProfileName = ProfileName
+			}
+
+			return RotateCommand(input, f, keyring)
+		},
+	}
+
+	cmd.Flags().BoolVarP(&input.NoSession, "no-session", "n", false, "Use master credentials, no session or role used")
+
+	return cmd
 }
 
 func RotateCommand(input RotateCommandInput, f *vault.ConfigFile, keyring keyring.Keyring) error {

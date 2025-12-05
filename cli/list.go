@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/byteness/keyring"
-	"github.com/alecthomas/kingpin/v2"
 	"github.com/byteness/aws-vault/v7/vault"
+	"github.com/spf13/cobra"
 )
 
 type ListCommandInput struct {
@@ -18,34 +18,37 @@ type ListCommandInput struct {
 	OnlyCredentials bool
 }
 
-func ConfigureListCommand(app *kingpin.Application, a *AwsVault) {
+func ConfigureListCommand(a *AwsVault) *cobra.Command {
 	input := ListCommandInput{}
 
-	cmd := app.Command("list", "List profiles, along with their credentials and sessions.")
-	cmd.Alias("ls")
+	cmd := &cobra.Command{
+		Use:     "list",
+		Aliases: []string{"ls"},
+		Short:   "List profiles, along with their credentials and sessions",
+		Long:    "List profiles, along with their credentials and sessions",
+		Args:    cobra.NoArgs,
+		ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+			// list command takes no positional arguments, only flags
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			keyring, err := a.Keyring()
+			if err != nil {
+				return err
+			}
+			awsConfigFile, err := a.AwsConfigFile()
+			if err != nil {
+				return err
+			}
+			return ListCommand(input, awsConfigFile, keyring)
+		},
+	}
 
-	cmd.Flag("profiles", "Show only the profile names").
-		BoolVar(&input.OnlyProfiles)
+	cmd.Flags().BoolVar(&input.OnlyProfiles, "profiles", false, "Show only the profile names")
+	cmd.Flags().BoolVar(&input.OnlySessions, "sessions", false, "Show only the session names")
+	cmd.Flags().BoolVar(&input.OnlyCredentials, "credentials", false, "Show only the profiles with stored credential")
 
-	cmd.Flag("sessions", "Show only the session names").
-		BoolVar(&input.OnlySessions)
-
-	cmd.Flag("credentials", "Show only the profiles with stored credential").
-		BoolVar(&input.OnlyCredentials)
-
-	cmd.Action(func(c *kingpin.ParseContext) (err error) {
-		keyring, err := a.Keyring()
-		if err != nil {
-			return err
-		}
-		awsConfigFile, err := a.AwsConfigFile()
-		if err != nil {
-			return err
-		}
-		err = ListCommand(input, awsConfigFile, keyring)
-		app.FatalIfError(err, "list")
-		return nil
-	})
+	return cmd
 }
 
 type stringslice []string

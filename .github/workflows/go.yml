@@ -30,8 +30,24 @@ jobs:
           go-version: 'stable'
           #go-version-file: 'go.mod'
           check-latest: true
+      - name: Setup Test Keychain
+        if: runner.os == 'macOS'
+        run: |
+          security create-keychain -p test-password aws-vault-test.keychain
+          
+          security default-keychain -s aws-vault-test.keychain
+          
+          security unlock-keychain -p test-password aws-vault-test.keychain
+          
+          security set-keychain-settings -t 3600 -u aws-vault-test.keychain
+          
+          security list-keychains -d user -s aws-vault-test.keychain $(security list-keychains -d user | sed s/\"//g)
       - name: Run tests
         run: make test #go test -race ./...
+      - name: Cleanup Test Keychain
+        if: runner.os == 'macOS' && always()
+        run: |
+          security delete-keychain aws-vault-test.keychain || true
   lint:
     permissions:
       contents: read  # for actions/checkout to fetch code

@@ -4,37 +4,47 @@ import (
 	"fmt"
 
 	"github.com/byteness/keyring"
-	"github.com/alecthomas/kingpin/v2"
 	"github.com/byteness/aws-vault/v7/vault"
+	"github.com/spf13/cobra"
 )
 
 type ClearCommandInput struct {
 	ProfileName string
 }
 
-func ConfigureClearCommand(app *kingpin.Application, a *AwsVault) {
+func ConfigureClearCommand(a *AwsVault) *cobra.Command {
 	input := ClearCommandInput{}
 
-	cmd := app.Command("clear", "Clear temporary credentials from the secure keystore.")
+	cmd := &cobra.Command{
+		Use:   "clear [profile]",
+		Short: "Clear temporary credentials from the secure keystore",
+		Long:  "Clear temporary credentials from the secure keystore",
+		Args:  cobra.MaximumNArgs(1),
+		ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+			if len(args) == 0 {
+				return a.CompleteProfileNames()(cmd, args, toComplete)
+			}
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) > 0 {
+				input.ProfileName = args[0]
+			}
 
-	cmd.Arg("profile", "Name of the profile").
-		HintAction(a.MustGetProfileNames).
-		StringVar(&input.ProfileName)
+			keyring, err := a.Keyring()
+			if err != nil {
+				return err
+			}
+			awsConfigFile, err := a.AwsConfigFile()
+			if err != nil {
+				return err
+			}
 
-	cmd.Action(func(c *kingpin.ParseContext) (err error) {
-		keyring, err := a.Keyring()
-		if err != nil {
-			return err
-		}
-		awsConfigFile, err := a.AwsConfigFile()
-		if err != nil {
-			return err
-		}
+			return ClearCommand(input, awsConfigFile, keyring)
+		},
+	}
 
-		err = ClearCommand(input, awsConfigFile, keyring)
-		app.FatalIfError(err, "clear")
-		return nil
-	})
+	return cmd
 }
 
 func ClearCommand(input ClearCommandInput, awsConfigFile *vault.ConfigFile, keyring keyring.Keyring) error {
