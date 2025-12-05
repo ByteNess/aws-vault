@@ -1,21 +1,21 @@
 package cli
 
 import (
+	"github.com/alecthomas/kingpin/v2"
+
 	"github.com/byteness/keyring"
-	"github.com/spf13/cobra"
 )
 
 func ExampleListCommand() {
-	rootCmd := &cobra.Command{Use: "aws-vault"}
-	awsVault := ConfigureGlobals(rootCmd)
+	app := kingpin.New("aws-vault", "")
+	awsVault := ConfigureGlobals(app)
 	awsVault.keyringImpl = keyring.NewArrayKeyring([]keyring.Item{
 		{Key: "llamas", Data: []byte(`{"AccessKeyID":"ABC","SecretAccessKey":"XYZ"}`)},
 	})
-	rootCmd.AddCommand(ConfigureListCommand(awsVault))
-	rootCmd.SetArgs([]string{
+	ConfigureListCommand(app, awsVault)
+	kingpin.MustParse(app.Parse([]string{
 		"list", "--credentials",
-	})
-	_ = rootCmd.Execute()
+	}))
 
 	// Output:
 	// llamas

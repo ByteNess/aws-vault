@@ -4,7 +4,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/spf13/cobra"
+	"github.com/alecthomas/kingpin/v2"
 )
 
 func ExampleAddCommand() {
@@ -25,11 +25,9 @@ func ExampleAddCommand() {
 	defer os.Unsetenv("AWS_VAULT_BACKEND")
 	defer os.Unsetenv("AWS_VAULT_FILE_PASSPHRASE")
 
-	rootCmd := &cobra.Command{Use: "aws-vault"}
-	a := ConfigureGlobals(rootCmd)
-	rootCmd.AddCommand(ConfigureAddCommand(a))
-	rootCmd.SetArgs([]string{"add", "--debug", "--env", "foo"})
-	_ = rootCmd.Execute()
+	app := kingpin.New(`aws-vault`, ``)
+	ConfigureAddCommand(app, ConfigureGlobals(app))
+	kingpin.MustParse(app.Parse([]string{"add", "--debug", "--env", "foo"}))
 
 	// Output:
 	// Added credentials to profile "foo" in vault
