@@ -5,7 +5,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/byteness/aws-vault/v7/server"
+	"github.com/byteness/aws-vault/v8/server"
 	"github.com/spf13/cobra"
 )
 

@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/byteness/aws-vault/v7/iso8601"
-	"github.com/byteness/aws-vault/v7/vault"
+	"github.com/byteness/aws-vault/v8/iso8601"
+	"github.com/byteness/aws-vault/v8/vault"
 	"github.com/byteness/keyring"
 	"github.com/spf13/cobra"
 	ini "gopkg.in/ini.v1"

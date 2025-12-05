@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/byteness/keyring"
-	"github.com/byteness/aws-vault/v7/vault"
+	"github.com/byteness/aws-vault/v8/vault"
 )
 
 func TestUsageWebIdentityExample(t *testing.T) {

@@ -14,8 +14,8 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
-	"github.com/byteness/aws-vault/v7/iso8601"
-	"github.com/byteness/aws-vault/v7/vault"
+	"github.com/byteness/aws-vault/v8/iso8601"
+	"github.com/byteness/aws-vault/v8/vault"
 )
 
 func writeErrorMessage(w http.ResponseWriter, msg string, statusCode int) {

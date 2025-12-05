@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/byteness/aws-vault/v7/cli"
+	"github.com/byteness/aws-vault/v8/cli"
 	"github.com/spf13/cobra"
 )
 

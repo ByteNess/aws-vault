@@ -8,7 +8,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
-	"github.com/byteness/aws-vault/v7/vault"
+	"github.com/byteness/aws-vault/v8/vault"
 	"github.com/byteness/keyring"
 	"github.com/spf13/cobra"
 )

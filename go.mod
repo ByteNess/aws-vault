@@ -1,4 +1,4 @@
-module github.com/byteness/aws-vault/v7
+module github.com/byteness/aws-vault/v8
 
 go 1.25
 

@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	"github.com/AlecAivazis/survey/v2"
-	"github.com/byteness/aws-vault/v7/prompt"
-	"github.com/byteness/aws-vault/v7/vault"
+	"github.com/byteness/aws-vault/v8/prompt"
+	"github.com/byteness/aws-vault/v8/vault"
 	"github.com/byteness/keyring"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
