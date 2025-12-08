@@ -19,7 +19,7 @@ require (
 	github.com/mattn/go-isatty v0.0.20
 	github.com/mattn/go-tty v0.0.7
 	github.com/skratchdot/open-golang v0.0.0-20200116055534-eef842397966
-	golang.org/x/term v0.37.0
+	golang.org/x/term v0.38.0
 	gopkg.in/ini.v1 v1.67.0
 )
 
@@ -86,7 +86,7 @@ require (
 	go.uber.org/atomic v1.9.0 // indirect
 	golang.org/x/crypto v0.45.0 // indirect
 	golang.org/x/sync v0.18.0 // indirect
-	golang.org/x/sys v0.38.0 // indirect
+	golang.org/x/sys v0.39.0 // indirect
 	golang.org/x/text v0.31.0 // indirect
 	google.golang.org/protobuf v1.36.9 // indirect
 )
