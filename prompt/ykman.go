@@ -3,6 +3,7 @@ package prompt
 import (
 	"fmt"
 	"log"
+	"runtime"
 	"os"
 	"os/exec"
 	"strings"
@@ -33,20 +34,30 @@ func YkmanMfaProvider(mfaSerial string) (string, error) {
 		args = append(args, "oath", "accounts", "code", "--single", yubikeyOathCredName)
 	}
 
-	log.Printf("Fetching MFA code using `ykman %s`", strings.Join(args, " "))
-	cmd := exec.Command("ykman", args...)
+	ykman := "ykman"
+	if runtime.GOOS == "windows" {
+		ykman = "ykman.exe"
+	}
+
+	log.Printf("Fetching MFA code using `%s %s`", ykman, strings.Join(args, " "))
+	cmd := exec.Command(ykman, args...)
 	cmd.Stderr = os.Stderr
 
 	out, err := cmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("ykman: %w", err)
+		return "", fmt.Errorf("%s: %w", ykman, err)
 	}
 
 	return strings.TrimSpace(string(out)), nil
 }
 
 func init() {
-	if _, err := exec.LookPath("ykman"); err == nil {
+	ykman := "ykman"
+	if runtime.GOOS == "windows" {
+		ykman = "ykman.exe"
+	}
+
+	if _, err := exec.LookPath(ykman); err == nil {
 		Methods["ykman"] = YkmanMfaProvider
 	}
 }
