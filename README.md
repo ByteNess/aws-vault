@@ -5,7 +5,7 @@
 
 > [!NOTE]
 > This is a maintained fork of https://github.com/99designs/aws-vault which seems to be an abandoned project.
-> Contributions are welcome, but keep in mind this is a side project and maintained on best effort basis!
+> Contributions are welcome and preferably please open an [issue](https://github.com/ByteNess/aws-vault/issues) first.
 
 AWS Vault is a tool to securely store and access AWS credentials in a development environment.
 
