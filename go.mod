@@ -2,43 +2,43 @@ module github.com/byteness/aws-vault/v8
 
 go 1.25
 
-require (
-	github.com/AlecAivazis/survey/v2 v2.3.7
-	github.com/aws/aws-sdk-go-v2 v1.40.1
-	github.com/aws/aws-sdk-go-v2/config v1.32.3
-	github.com/aws/aws-sdk-go-v2/credentials v1.19.3
-	github.com/aws/aws-sdk-go-v2/service/iam v1.53.0
-	github.com/aws/aws-sdk-go-v2/service/sso v1.30.6
-	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.35.11
-	github.com/aws/aws-sdk-go-v2/service/sts v1.41.3
-	github.com/byteness/keyring v1.4.8
-	github.com/charmbracelet/huh v0.8.0
-	github.com/charmbracelet/lipgloss v1.1.0
-	github.com/google/go-cmp v0.7.0
-	github.com/mattn/go-isatty v0.0.20
-	github.com/mattn/go-tty v0.0.7
-	github.com/skratchdot/open-golang v0.0.0-20200116055534-eef842397966
-	github.com/spf13/cobra v1.10.1
-	golang.org/x/term v0.37.0
-	gopkg.in/ini.v1 v1.67.0
-)
-
 replace (
 	github.com/1Password/connect-sdk-go => github.com/1Password/connect-sdk-go v1.5.3
 	github.com/1password/onepassword-sdk-go => github.com/1password/onepassword-sdk-go v0.3.1
 )
 
 require (
+	github.com/AlecAivazis/survey/v2 v2.3.7
+	github.com/aws/aws-sdk-go-v2 v1.41.0
+	github.com/aws/aws-sdk-go-v2/config v1.32.5
+	github.com/aws/aws-sdk-go-v2/credentials v1.19.5
+	github.com/aws/aws-sdk-go-v2/service/iam v1.53.1
+	github.com/aws/aws-sdk-go-v2/service/sso v1.30.7
+	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.35.12
+	github.com/aws/aws-sdk-go-v2/service/sts v1.41.5
+	github.com/byteness/keyring v1.4.10
+	github.com/charmbracelet/huh v0.8.0
+	github.com/charmbracelet/lipgloss v1.1.0
+	github.com/google/go-cmp v0.7.0
+	github.com/mattn/go-isatty v0.0.20
+	github.com/mattn/go-tty v0.0.7
+	github.com/skratchdot/open-golang v0.0.0-20200116055534-eef842397966
+	github.com/spf13/cobra v1.10.2
+	golang.org/x/term v0.38.0
+	gopkg.in/ini.v1 v1.67.0
+)
+
+require (
 	github.com/1Password/connect-sdk-go v1.5.4-0.20250417152128-c154b387248b // indirect
-	github.com/1password/onepassword-sdk-go v0.4.0-beta.1 // indirect
+	github.com/1password/onepassword-sdk-go v0.3.2-0.20250818130116-54fb7ee8021b // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
-	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.15 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.15 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.7.15 // indirect
+	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.16 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.16 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.7.16 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/ini v1.8.4 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.4 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.13.15 // indirect
-	github.com/aws/aws-sdk-go-v2/service/signin v1.0.3 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.13.16 // indirect
+	github.com/aws/aws-sdk-go-v2/service/signin v1.0.4 // indirect
 	github.com/aws/smithy-go v1.24.0 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/byteness/go-keychain v0.0.0-20191008050251-8e49817e8af4 // indirect
@@ -84,9 +84,9 @@ require (
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	go.opentelemetry.io/proto/otlp v1.8.0 // indirect
 	go.uber.org/atomic v1.9.0 // indirect
-	golang.org/x/crypto v0.45.0 // indirect
-	golang.org/x/sync v0.18.0 // indirect
-	golang.org/x/sys v0.38.0 // indirect
-	golang.org/x/text v0.31.0 // indirect
+	golang.org/x/crypto v0.46.0 // indirect
+	golang.org/x/sync v0.19.0 // indirect
+	golang.org/x/sys v0.39.0 // indirect
+	golang.org/x/text v0.32.0 // indirect
 	google.golang.org/protobuf v1.36.9 // indirect
 )
