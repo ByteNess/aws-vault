@@ -254,22 +254,9 @@ func (t *TempCredentialsCreator) getSourceCredWithSession(config *ProfileConfig,
 		return nil, err
 	}
 
-	if hasStoredCredentials || !config.HasRole() {
-		if canUseGetSessionToken, reason := t.canUseGetSessionToken(config); !canUseGetSessionToken {
-			log.Printf("profile %s: skipping GetSessionToken because %s", config.ProfileName, reason)
-			if !config.HasRole() {
-				return sourcecredsProvider, nil
-			}
-		}
-		t.chainedMfa = config.MfaSerial
-		log.Printf("profile %s: using GetSessionToken %s", config.ProfileName, mfaDetails(false, config))
-		sourcecredsProvider, err = NewSessionTokenProvider(sourcecredsProvider, t.Keyring.Keyring, config, !t.DisableCache)
-		if !config.HasRole() || err != nil {
-			return sourcecredsProvider, err
-		}
-	}
+	isRoleChaining := config.ChainedFromProfile != nil && config.ChainedFromProfile.RoleARN != ""
 
-	if config.HasRole() {
+	if config.HasRole() && !isRoleChaining {
 		isMfaChained := config.MfaSerial != "" && config.MfaSerial == t.chainedMfa
 		if isMfaChained {
 			config.MfaSerial = ""
@@ -278,14 +265,15 @@ func (t *TempCredentialsCreator) getSourceCredWithSession(config *ProfileConfig,
 		return NewAssumeRoleProvider(sourcecredsProvider, t.Keyring.Keyring, config, !t.DisableCache)
 	}
 
-	if isMasterCredentialsProvider(sourcecredsProvider) {
+	if isMasterCredentialsProvider(sourcecredsProvider) || isRoleChaining {
 		canUseGetSessionToken, reason := t.canUseGetSessionToken(config)
-		if canUseGetSessionToken {
-			t.chainedMfa = config.MfaSerial
-			log.Printf("profile %s: using GetSessionToken %s", config.ProfileName, mfaDetails(false, config))
-			return NewSessionTokenProvider(sourcecredsProvider, t.Keyring.Keyring, config, !t.DisableCache)
+		if !canUseGetSessionToken {
+			log.Printf("profile %s: skipping GetSessionToken because %s", config.ProfileName, reason)
+			return sourcecredsProvider, nil
 		}
-		log.Printf("profile %s: skipping GetSessionToken because %s", config.ProfileName, reason)
+		t.chainedMfa = config.MfaSerial
+		log.Printf("profile %s: using GetSessionToken %s", config.ProfileName, mfaDetails(false, config))
+		return NewSessionTokenProvider(sourcecredsProvider, t.Keyring.Keyring, config, !t.DisableCache)
 	}
 
 	return sourcecredsProvider, nil
