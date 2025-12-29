@@ -196,7 +196,7 @@ func ExecCommand(input ExecCommandInput, f *vault.ConfigFile, keyring keyring.Ke
 		subshellHelp = fmt.Sprintf("Starting subshell %s, use `exit` to exit the subshell", input.Command)
 	}
 
-	cmdEnv := createEnv(input.ProfileName, config.Region)
+	cmdEnv := createEnv(input.ProfileName, config.Region, config.EndpointURL)
 
 	if input.StartEc2Server {
 		if server.IsProxyRunning() {
@@ -249,7 +249,7 @@ func printToStderr(helpMsg string) {
 	fmt.Fprint(os.Stderr, helpMsg, "\n")
 }
 
-func createEnv(profileName string, region string) environ {
+func createEnv(profileName string, region string, endpointURL string) environ {
 	env := environ(os.Environ())
 	env.Unset("AWS_ACCESS_KEY_ID")
 	env.Unset("AWS_SECRET_ACCESS_KEY")
@@ -268,6 +268,11 @@ func createEnv(profileName string, region string) environ {
 		log.Printf("Setting subprocess env: AWS_REGION=%s, AWS_DEFAULT_REGION=%s", region, region)
 		env.Set("AWS_REGION", region)
 		env.Set("AWS_DEFAULT_REGION", region)
+	}
+
+	if endpointURL != "" {
+		log.Printf("Setting subprocess env: AWS_ENDPOINT_URL=%s", endpointURL)
+		env.Set("AWS_ENDPOINT_URL", endpointURL)
 	}
 
 	return env
