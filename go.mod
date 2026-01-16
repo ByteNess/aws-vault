@@ -19,7 +19,7 @@ require (
 	github.com/mattn/go-isatty v0.0.20
 	github.com/mattn/go-tty v0.0.7
 	github.com/skratchdot/open-golang v0.0.0-20200116055534-eef842397966
-	golang.org/x/term v0.38.0
+	golang.org/x/term v0.39.0
 	gopkg.in/ini.v1 v1.67.1
 )
 
