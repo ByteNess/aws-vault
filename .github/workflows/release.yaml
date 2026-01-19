@@ -1,5 +1,7 @@
 on:
   push:
+    #branches-ignore:
+    #  - main
     tags:
       - 'v*'
     #tag-ignore:
@@ -8,21 +10,60 @@ on:
 
 env:
   GOTELEMETRY: off
-  CGO_ENABLED: 0
+  CGO_ENABLED: 1
 
 permissions:
   contents: write
 
 name: Build & Release
 jobs:
-  build:
-    if: startsWith(github.ref, 'refs/tags/v')
-    name: Build
+  build-linux:
+    runs-on: ubuntu-latest
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
-    #needs: [ test ]
+        include:
+          - goos: linux
+            goarch: amd64
+            out: aws-vault-linux-amd64
+            cgo: "1"
+            cc: gcc
+            pkg: build-essential
+
+          - goos: linux
+            goarch: arm64
+            out: aws-vault-linux-arm64
+            cgo: "1"
+            cc: aarch64-linux-gnu-gcc
+            pkg: gcc-aarch64-linux-gnu
+
+          - goos: linux
+            goarch: ppc64le
+            out: aws-vault-linux-ppc64le
+            cgo: "1"
+            cc: powerpc64le-linux-gnu-gcc
+            pkg: gcc-powerpc64le-linux-gnu
+
+          #- goos: freebsd
+          #  goarch: amd64
+          #  out: aws-vault-freebsd-amd64
+          #  cgo: "0"
+          #  cc: ""
+          #  pkg: ""
+
+          - goos: windows
+            goarch: amd64
+            out: aws-vault-windows-amd64.exe
+            cgo: "0"
+            cc: ""
+            pkg: ""
+
+          - goos: windows
+            goarch: arm64
+            out: aws-vault-windows-arm64.exe
+            cgo: "0"
+            cc: ""
+            pkg: ""
+
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -40,27 +81,105 @@ jobs:
           check-latest: true
         id: go
 
-      - name: Generate build tag
+      - name: Install toolchain
         run: |
-          VERSION=$(git describe --tags --always --dirty --match=v* 2> /dev/null || echo v0)
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-        shell: /bin/bash -e {0}
+          sudo apt-get update
+          sudo apt-get install -y build-essential ${{ matrix.pkg }}
 
-      - name: Build artefacts
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: ${{ matrix.cgo }}
+          CC: ${{ matrix.cc }}
         run: |
-          echo "${VERSION} on ${{ matrix.os }}"
-          make ${{ matrix.os }}
+          make ${{ matrix.out }}
 
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v4
         with:
-          name: aws-vault-${{ matrix.os }}
+          name: ${{ matrix.out }}
+          path: ${{ matrix.out }}
+
+  build-windows:
+    if: startsWith(github.ref, 'refs/tags/x')
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            goos: winows
+            goarch: amd64
+            out: aws-vault-windows-amd64.exe
+          - os: windows-11-arm
+            goos: winows
+            goarch: arm64
+            out: aws-vault-windows-arm64.exe
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0 # disable shallow clone - get all
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: 'stable'
+          #go-version-file: 'go.mod'
+          check-latest: true
+        id: go
+
+      - name: Build
+        env:
+          GOOS: windows
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 1
+        run: |
+          make ${{ matrix.out }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.out }}
+          path: ${{ matrix.out }}
           retention-days: 7
-          path: ./aws-vault-*
+
+  build-macos:
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        include:
+          - goarch: amd64
+            out: aws-vault-darwin-amd64
+          - goarch: arm64
+            out: aws-vault-darwin-arm64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0 # disable shallow clone - get all
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: 'stable'
+          #go-version-file: 'go.mod'
+          check-latest: true
+        id: go
+
+      - name: Build
+        env:
+          GOOS: darwin
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 1
+        run: |
+          make ${{ matrix.out }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.out }}
+          path: ${{ matrix.out }}
 
   release:
     name: Release
-    needs: build
+    needs: [build-linux, build-macos]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -88,6 +207,7 @@ jobs:
           cp aws-vault_sha256_checksums.txt dist/
 
       - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           # Identify if this is a pre release by checking if the tag name contains -rc, -b, -a
