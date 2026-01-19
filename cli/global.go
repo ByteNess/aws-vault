@@ -13,8 +13,9 @@ import (
 	"github.com/byteness/keyring"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/spf13/cobra"
 	isatty "github.com/mattn/go-isatty"
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"golang.org/x/term"
 )
 
@@ -113,10 +114,10 @@ func (a *AwsVault) CompleteProfileNames() func(*cobra.Command, []string, string)
 func AwsRegions() []string {
 	return []string{
 		// US Regions
-		"us-east-1",      // US East (N. Virginia)
-		"us-east-2",      // US East (Ohio)
-		"us-west-1",      // US West (N. California)
-		"us-west-2",      // US West (Oregon)
+		"us-east-1", // US East (N. Virginia)
+		"us-east-2", // US East (Ohio)
+		"us-west-1", // US West (N. California)
+		"us-west-2", // US West (Oregon)
 		// Africa
 		"af-south-1", // Africa (Cape Town)
 		// Asia Pacific
@@ -216,7 +217,7 @@ func ConfigureGlobals(cmd *cobra.Command) *AwsVault {
 		a.KeyringBackend = backendsAvailable[0]
 	}
 
-	cmd.PersistentFlags().BoolVar(&a.Debug, "debug", false, "Show debugging output")
+	cmd.PersistentFlags().BoolVarP(&a.Debug, "debug", "", false, "Show debugging output")
 	cmd.PersistentFlags().StringVar(&a.KeyringBackend, "backend", a.KeyringBackend, fmt.Sprintf("Secret backend to use %v", backendsAvailable))
 	cmd.PersistentFlags().StringVar(&a.promptDriver, "prompt", "", fmt.Sprintf("Prompt driver to use %v", promptsAvailable))
 	cmd.PersistentFlags().StringVar(&a.KeyringConfig.KeychainName, "keychain", "aws-vault", "Name of macOS keychain to use, if it doesn't exist it will be created")
@@ -231,6 +232,12 @@ func ConfigureGlobals(cmd *cobra.Command) *AwsVault {
 	cmd.PersistentFlags().StringVar(&a.KeyringConfig.OPItemTag, "op-item-tag", "aws-vault", "Tag to apply to 1Password items")
 	cmd.PersistentFlags().StringVar(&a.KeyringConfig.OPConnectHost, "op-connect-host", "", "1Password Connect server HTTP(S) URI")
 	cmd.PersistentFlags().BoolVar(&a.UseBiometrics, "biometrics", false, "Use biometric authentication if supported")
+
+	//viper.BindPFlag("debug", cmd.PersistentFlags().Lookup("debug"))
+
+	viper.SetEnvPrefix("aws-vault") // will be uppercased automatically
+	viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
+	viper.AutomaticEnv()
 
 	// Register flag completions - these trigger when completing flag values
 	cmd.RegisterFlagCompletionFunc("backend", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
@@ -279,6 +286,7 @@ func ConfigureGlobals(cmd *cobra.Command) *AwsVault {
 	}
 
 	cmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
+		log.Printf("Debug: %s", a.Debug)
 		if !a.Debug {
 			log.SetOutput(io.Discard)
 		}

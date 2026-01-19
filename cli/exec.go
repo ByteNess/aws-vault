@@ -86,7 +86,17 @@ func ConfigureExecCommand(a *AwsVault) *cobra.Command {
 			if len(args) > 0 {
 				input.ProfileName = args[0]
 			}
-			if len(args) > 1 {
+			/*if len(args) > 1 {
+				input.Command = args[1]
+				input.Args = args[2:]
+			}*/
+			after := cmd.Flags().Args()
+			if len(after) > 0 {
+				// User used --
+				input.Command = after[2]
+				input.Args = after[3:]
+			} else {
+				// User omitted --
 				input.Command = args[1]
 				input.Args = args[2:]
 			}
@@ -161,7 +171,7 @@ func ConfigureExecCommand(a *AwsVault) *cobra.Command {
 	cmd.Flags().BoolVarP(&input.JSONDeprecated, "json", "j", false, "Output credentials in JSON that can be used by credential_process")
 	_ = cmd.Flags().MarkHidden("json")
 	cmd.Flags().BoolVarP(&input.StartEcsServer, "server", "s", false, "Alias for --ecs-server")
-	
+
 	// Prevent cobra from interpreting flags in the command arguments
 	cmd.Flags().SetInterspersed(false)
 	cmd.Flags().BoolVar(&input.StartEc2Server, "ec2-server", false, "Run a EC2 metadata server in the background for credentials")
