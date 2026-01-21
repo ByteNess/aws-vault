@@ -34,6 +34,7 @@ The supported vaulting backends are:
 * Secret Service ([Gnome Keyring](https://wiki.gnome.org/Projects/GnomeKeyring), [KWallet](https://kde.org/applications/system/org.kde.kwalletmanager5))
 * [KWallet](https://kde.org/applications/system/org.kde.kwalletmanager5)
 * [Pass](https://www.passwordstore.org/)
+* [Passage](https://github.com/FiloSottile/passage)
 * Encrypted file
 * [1Password Connect](https://developer.1password.com/docs/connect/)
 * [1Password Service Accounts](https://developer.1password.com/docs/service-accounts)
