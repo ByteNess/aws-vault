@@ -95,7 +95,7 @@ jobs:
         run: |
           make ${{ matrix.out }}
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.out }}
           path: ${{ matrix.out }}
@@ -136,7 +136,7 @@ jobs:
           CGO_ENABLED: 1
         run: |
           make ${{ matrix.out }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.out }}
           path: ${{ matrix.out }}
@@ -172,7 +172,7 @@ jobs:
           CGO_ENABLED: 1
         run: |
           make ${{ matrix.out }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.out }}
           path: ${{ matrix.out }}
