@@ -2,8 +2,8 @@ on:
   push:
     #branches-ignore:
     #  - main
-    tags:
-      - 'v*'
+    #tags:
+    #  - 'v*'
     #tag-ignore:
     #  - 'v*'
   workflow_dispatch: {}
@@ -25,14 +25,14 @@ jobs:
           - goos: linux
             goarch: amd64
             out: aws-vault-linux-amd64
-            cgo: "1"
+            cgo: "0"
             cc: gcc
             pkg: build-essential
 
           - goos: linux
             goarch: arm64
             out: aws-vault-linux-arm64
-            cgo: "1"
+            cgo: "0"
             cc: aarch64-linux-gnu-gcc
             pkg: gcc-aarch64-linux-gnu
 
