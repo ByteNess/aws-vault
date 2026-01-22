@@ -238,6 +238,9 @@ func generateLoginURL(region string, path string) (string, string) {
 		case strings.HasPrefix(region, "us-gov-"):
 			loginURLPrefix = "https://signin.amazonaws-us-gov.com/federation"
 			destinationDomain = "console.amazonaws-us-gov.com"
+		case strings.HasPrefix(region, "eusc-"):
+			loginURLPrefix = "https://signin.amazonaws-eusc.eu/federation" // NOTE: not yet available for aws-eusc
+			destinationDomain = "console.amazonaws-eusc.eu"                // URL for console.aws.eu
 		}
 		if path != "" {
 			destination = fmt.Sprintf("https://%s.%s/%s?region=%s",
