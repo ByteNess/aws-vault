@@ -32,7 +32,7 @@ jobs:
           - goos: linux
             goarch: arm64
             out: aws-vault-linux-arm64
-            cgo: "0"
+            cgo: "1"
             cc: aarch64-linux-gnu-gcc
             pkg: gcc-aarch64-linux-gnu
 
