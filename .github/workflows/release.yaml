@@ -43,12 +43,12 @@ jobs:
             cc: powerpc64le-linux-gnu-gcc
             pkg: gcc-powerpc64le-linux-gnu
 
-          #- goos: freebsd
-          #  goarch: amd64
-          #  out: aws-vault-freebsd-amd64
-          #  cgo: "0"
-          #  cc: ""
-          #  pkg: ""
+          - goos: freebsd
+            goarch: amd64
+            out: aws-vault-freebsd-amd64
+            cgo: "0"
+            cc: ""
+            pkg: ""
 
           - goos: windows
             goarch: amd64
@@ -100,47 +100,48 @@ jobs:
           name: ${{ matrix.out }}
           path: ${{ matrix.out }}
 
-  build-windows:
-    if: startsWith(github.ref, 'refs/tags/x')
-    strategy:
-      matrix:
-        include:
-          - os: windows-latest
-            goos: winows
-            goarch: amd64
-            out: aws-vault-windows-amd64.exe
-          - os: windows-11-arm
-            goos: winows
-            goarch: arm64
-            out: aws-vault-windows-arm64.exe
+  # we can cross-compile on Linux
+  #build-windows:
+  #  if: startsWith(github.ref, 'refs/tags/x')
+  #  strategy:
+  #    matrix:
+  #      include:
+  #        - os: windows-latest
+  #          goos: winows
+  #          goarch: amd64
+  #          out: aws-vault-windows-amd64.exe
+  #        - os: windows-11-arm
+  #          goos: winows
+  #          goarch: arm64
+  #          out: aws-vault-windows-arm64.exe
 
-    runs-on: ${{ matrix.os }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0 # disable shallow clone - get all
+  #  runs-on: ${{ matrix.os }}
+  #  steps:
+  #    - name: Checkout
+  #      uses: actions/checkout@v6
+  #      with:
+  #        fetch-depth: 0 # disable shallow clone - get all
 
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version: 'stable'
-          #go-version-file: 'go.mod'
-          check-latest: true
-        id: go
+  #    - name: Set up Go
+  #      uses: actions/setup-go@v6
+  #      with:
+  #        go-version: 'stable'
+  #        #go-version-file: 'go.mod'
+  #        check-latest: true
+  #      id: go
 
-      - name: Build
-        env:
-          GOOS: windows
-          GOARCH: ${{ matrix.goarch }}
-          CGO_ENABLED: 1
-        run: |
-          make ${{ matrix.out }}
-      - uses: actions/upload-artifact@v6
-        with:
-          name: ${{ matrix.out }}
-          path: ${{ matrix.out }}
-          retention-days: 7
+  #    - name: Build
+  #      env:
+  #        GOOS: windows
+  #        GOARCH: ${{ matrix.goarch }}
+  #        CGO_ENABLED: 1
+  #      run: |
+  #        make ${{ matrix.out }}
+  #    - uses: actions/upload-artifact@v6
+  #      with:
+  #        name: ${{ matrix.out }}
+  #        path: ${{ matrix.out }}
+  #        retention-days: 7
 
   build-macos:
     runs-on: macos-latest
