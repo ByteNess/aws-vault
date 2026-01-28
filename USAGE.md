@@ -288,6 +288,7 @@ To configure the default flag values of `aws-vault` and its subcommands:
 * `AWS_VAULT_OP_CONNECT_HOST`: 1Password Connect server HTTP(S) URI (see the flag `--op-connect-host`)
 * `AWS_VAULT_OP_CONNECT_TOKEN`: 1Password Connect server access token
 * `AWS_VAULT_OP_SERVICE_ACCOUNT_TOKEN`: 1Password service account token
+* `AWS_VAULT_OP_DESKTOP_ACCOUNT_ID`: 1Password Desktop App account name or account UUID (see the flag `--op-desktop-account-id`)
 * `AWS_CONFIG_FILE`: The location of the AWS config file
 * `AWS_VAULT_STDOUT`: Print login URL to stdout instead of opening in default browser (see the flag `--stdout`)
 
