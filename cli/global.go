@@ -28,6 +28,7 @@ var keyringConfigDefaults = keyring.Config{
 	WinCredPrefix:            "aws-vault",
 	OPConnectTokenEnv:        "AWS_VAULT_OP_CONNECT_TOKEN",
 	OPTokenEnv:               "AWS_VAULT_OP_SERVICE_ACCOUNT_TOKEN",
+	OPDesktopAccountID:       "AWS_VAULT_OP_DESKTOP_ACCOUNT_ID",
 	OPTokenFunc:              keyringPassphrasePrompt,
 }
 
@@ -191,6 +192,10 @@ func ConfigureGlobals(app *kingpin.Application) *AwsVault {
 	app.Flag("op-connect-host", "1Password Connect server HTTP(S) URI").
 		Envar("AWS_VAULT_OP_CONNECT_HOST").
 		StringVar(&a.KeyringConfig.OPConnectHost)
+
+	app.Flag("op-desktop-account-id", "1Password Desktop App account name or account UUID").
+		Envar("AWS_VAULT_OP_DESKTOP_ACCOUNT_ID").
+		StringVar(&a.KeyringConfig.OPDesktopAccountID)
 
 	app.Flag("biometrics", "Use biometric authentication if supported").
 		Envar("AWS_VAULT_BIOMETRICS").

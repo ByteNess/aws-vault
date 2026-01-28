@@ -38,6 +38,7 @@ The supported vaulting backends are:
 * Encrypted file
 * [1Password Connect](https://developer.1password.com/docs/connect/)
 * [1Password Service Accounts](https://developer.1password.com/docs/service-accounts)
+* [1Password Desktop App](https://developer.1password.com/docs/sdks/desktop-app-integrations/)
 
 Use the `--backend` flag or `AWS_VAULT_BACKEND` environment variable to specify.
 
