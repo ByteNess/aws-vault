@@ -305,7 +305,11 @@ func (t *TempCredentialsCreator) GetProviderForProfile(config *ProfileConfig) (a
 
 	if config.HasSSOStartURL() {
 		log.Printf("profile %s: using SSO role credentials", config.ProfileName)
-		return NewSSORoleCredentialsProvider(t.Keyring.Keyring, config, !t.DisableCache)
+		provider, err := NewSSORoleCredentialsProvider(t.Keyring.Keyring, config, !t.DisableCache)
+		if err != nil {
+			return nil, err
+		}
+		return t.applyParallelSafety(provider), nil
 	}
 
 	if config.HasWebIdentity() {
@@ -319,6 +323,25 @@ func (t *TempCredentialsCreator) GetProviderForProfile(config *ProfileConfig) (a
 	}
 
 	return nil, fmt.Errorf("profile %s: credentials missing", config.ProfileName)
+}
+
+func (t *TempCredentialsCreator) applyParallelSafety(provider aws.CredentialsProvider) aws.CredentialsProvider {
+	if !t.ParallelSafe {
+		return provider
+	}
+
+	if cached, ok := provider.(*CachedSessionProvider); ok {
+		if ssoProvider, ok := cached.SessionProvider.(*SSORoleCredentialsProvider); ok {
+			ssoProvider.UseSSOTokenLock = true
+		}
+		return provider
+	}
+
+	if ssoProvider, ok := provider.(*SSORoleCredentialsProvider); ok {
+		ssoProvider.UseSSOTokenLock = true
+	}
+
+	return provider
 }
 
 // canUseGetSessionToken determines if GetSessionToken should be used, and if not returns a reason
