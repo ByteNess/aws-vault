@@ -255,17 +255,19 @@ func (t *TempCredentialsCreator) getSourceCredWithSession(config *ProfileConfig,
 	if err != nil {
 		return nil, err
 	}
+	sourcecredsProvider = t.applyParallelSafety(sourcecredsProvider)
 
 	if hasStoredCredentials || !config.HasRole() {
 		if canUseGetSessionToken, reason := t.canUseGetSessionToken(config); !canUseGetSessionToken {
 			log.Printf("profile %s: skipping GetSessionToken because %s", config.ProfileName, reason)
 			if !config.HasRole() {
-				return sourcecredsProvider, nil
+				return t.applyParallelSafety(sourcecredsProvider), nil
 			}
 		}
 		t.chainedMfa = config.MfaSerial
 		log.Printf("profile %s: using GetSessionToken %s", config.ProfileName, mfaDetails(false, config))
 		sourcecredsProvider, err = NewSessionTokenProvider(sourcecredsProvider, t.Keyring.Keyring, config, !t.DisableCache)
+		sourcecredsProvider = t.applyParallelSafety(sourcecredsProvider)
 		if !config.HasRole() || err != nil {
 			return sourcecredsProvider, err
 		}
@@ -277,7 +279,11 @@ func (t *TempCredentialsCreator) getSourceCredWithSession(config *ProfileConfig,
 			config.MfaSerial = ""
 		}
 		log.Printf("profile %s: using AssumeRole %s", config.ProfileName, mfaDetails(isMfaChained, config))
-		return NewAssumeRoleProvider(sourcecredsProvider, t.Keyring.Keyring, config, !t.DisableCache)
+		provider, err := NewAssumeRoleProvider(sourcecredsProvider, t.Keyring.Keyring, config, !t.DisableCache)
+		if err != nil {
+			return nil, err
+		}
+		return t.applyParallelSafety(provider), nil
 	}
 
 	if isMasterCredentialsProvider(sourcecredsProvider) {
@@ -285,12 +291,16 @@ func (t *TempCredentialsCreator) getSourceCredWithSession(config *ProfileConfig,
 		if canUseGetSessionToken {
 			t.chainedMfa = config.MfaSerial
 			log.Printf("profile %s: using GetSessionToken %s", config.ProfileName, mfaDetails(false, config))
-			return NewSessionTokenProvider(sourcecredsProvider, t.Keyring.Keyring, config, !t.DisableCache)
+			provider, err := NewSessionTokenProvider(sourcecredsProvider, t.Keyring.Keyring, config, !t.DisableCache)
+			if err != nil {
+				return nil, err
+			}
+			return t.applyParallelSafety(provider), nil
 		}
 		log.Printf("profile %s: skipping GetSessionToken because %s", config.ProfileName, reason)
 	}
 
-	return sourcecredsProvider, nil
+	return t.applyParallelSafety(sourcecredsProvider), nil
 }
 
 func (t *TempCredentialsCreator) GetProviderForProfile(config *ProfileConfig) (aws.CredentialsProvider, error) {
@@ -314,12 +324,20 @@ func (t *TempCredentialsCreator) GetProviderForProfile(config *ProfileConfig) (a
 
 	if config.HasWebIdentity() {
 		log.Printf("profile %s: using web identity", config.ProfileName)
-		return NewAssumeRoleWithWebIdentityProvider(t.Keyring.Keyring, config, !t.DisableCache)
+		provider, err := NewAssumeRoleWithWebIdentityProvider(t.Keyring.Keyring, config, !t.DisableCache)
+		if err != nil {
+			return nil, err
+		}
+		return t.applyParallelSafety(provider), nil
 	}
 
 	if config.HasCredentialProcess() {
 		log.Printf("profile %s: using credential process", config.ProfileName)
-		return NewCredentialProcessProvider(t.Keyring.Keyring, config, !t.DisableCache)
+		provider, err := NewCredentialProcessProvider(t.Keyring.Keyring, config, !t.DisableCache)
+		if err != nil {
+			return nil, err
+		}
+		return t.applyParallelSafety(provider), nil
 	}
 
 	return nil, fmt.Errorf("profile %s: credentials missing", config.ProfileName)
@@ -331,6 +349,7 @@ func (t *TempCredentialsCreator) applyParallelSafety(provider aws.CredentialsPro
 	}
 
 	if cached, ok := provider.(*CachedSessionProvider); ok {
+		cached.UseSessionLock = true
 		if ssoProvider, ok := cached.SessionProvider.(*SSORoleCredentialsProvider); ok {
 			ssoProvider.UseSSOTokenLock = true
 		}
