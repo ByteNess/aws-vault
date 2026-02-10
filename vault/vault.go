@@ -230,6 +230,8 @@ type TempCredentialsCreator struct {
 	DisableCache bool
 	// DisableSessionsForProfile is a profile for which sessions should not be used
 	DisableSessionsForProfile string
+	// ParallelSafe enables cross-process locking for cached credentials.
+	ParallelSafe bool
 
 	chainedMfa string
 }
@@ -359,12 +361,23 @@ func mfaDetails(mfaChained bool, config *ProfileConfig) string {
 	return ""
 }
 
-// NewTempCredentialsProvider creates a credential provider for the given config
+// TempCredentialsOptions controls how temporary credential providers are created.
+type TempCredentialsOptions struct {
+	ParallelSafe bool
+}
+
+// NewTempCredentialsProvider creates a credential provider for the given config.
 func NewTempCredentialsProvider(config *ProfileConfig, keyring *CredentialKeyring, disableSessions bool, disableCache bool) (aws.CredentialsProvider, error) {
+	return NewTempCredentialsProviderWithOptions(config, keyring, disableSessions, disableCache, TempCredentialsOptions{})
+}
+
+// NewTempCredentialsProviderWithOptions creates a credential provider for the given config with options.
+func NewTempCredentialsProviderWithOptions(config *ProfileConfig, keyring *CredentialKeyring, disableSessions bool, disableCache bool, options TempCredentialsOptions) (aws.CredentialsProvider, error) {
 	t := TempCredentialsCreator{
 		Keyring:         keyring,
 		DisableSessions: disableSessions,
 		DisableCache:    disableCache,
+		ParallelSafe:    options.ParallelSafe,
 	}
 	return t.GetProviderForProfile(config)
 }

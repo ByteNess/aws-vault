@@ -37,6 +37,7 @@ type AwsVault struct {
 	KeyringConfig  keyring.Config
 	KeyringBackend string
 	promptDriver   string
+	ParallelSafe   bool
 
 	keyringImpl   keyring.Keyring
 	awsConfigFile *vault.ConfigFile
@@ -200,6 +201,10 @@ func ConfigureGlobals(app *kingpin.Application) *AwsVault {
 	app.Flag("biometrics", "Use biometric authentication if supported").
 		Envar("AWS_VAULT_BIOMETRICS").
 		BoolVar(&a.UseBiometrics)
+
+	app.Flag("parallel-safe", "Enable cross-process locking for keychain and cached credentials").
+		Envar("AWS_VAULT_PARALLEL_SAFE").
+		BoolVar(&a.ParallelSafe)
 
 	app.PreAction(func(c *kingpin.ParseContext) error {
 		if !a.Debug {
