@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/byteness/keyring"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awshttp "github.com/aws/aws-sdk-go-v2/aws/transport/http"
 	"github.com/aws/aws-sdk-go-v2/service/sso"
@@ -19,7 +20,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssooidc"
 	ssooidctypes "github.com/aws/aws-sdk-go-v2/service/ssooidc/types"
 	ststypes "github.com/aws/aws-sdk-go-v2/service/sts/types"
-	"github.com/byteness/keyring"
 	"github.com/skratchdot/open-golang/open"
 )
 
@@ -57,11 +57,11 @@ const (
 	defaultSSOLockLogEvery  = 15 * time.Second
 	defaultSSOLockWarnAfter = 5 * time.Second
 	// 0 means retry indefinitely (caller is expected to use context cancellation).
-	ssoMaxAttempts         = 0
-	ssoRetryBase           = 200 * time.Millisecond
-	ssoRetryMax            = 5 * time.Second
-	ssoRetryAfterJitterMin = 1.1
-	ssoRetryAfterJitterMax = 1.3
+	ssoMaxAttempts          = 0
+	ssoRetryBase            = 200 * time.Millisecond
+	ssoRetryMax             = 5 * time.Second
+	ssoRetryAfterJitterMin  = 1.1
+	ssoRetryAfterJitterMax  = 1.3
 )
 
 func defaultSSOSleep(ctx context.Context, d time.Duration) error {
@@ -315,6 +315,7 @@ func (p *SSORoleCredentialsProvider) getOIDCTokenWithLock(ctx context.Context) (
 
 			return token, false, nil
 		}
+
 		if err = waiter.sleepAfterMiss(ctx); err != nil {
 			return nil, false, err
 		}
