@@ -78,6 +78,13 @@ func (a *AwsVault) Keyring() (keyring.Keyring, error) {
 		if err != nil {
 			return nil, err
 		}
+		if a.KeyringBackend == string(keyring.KeychainBackend) && a.ParallelSafe {
+			lockKey := a.KeyringConfig.KeychainName
+			if lockKey == "" {
+				lockKey = "aws-vault"
+			}
+			a.keyringImpl = vault.NewKeychainLockedKeyring(a.keyringImpl, lockKey)
+		}
 	}
 
 	return a.keyringImpl, nil
