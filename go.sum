@@ -54,8 +54,8 @@ github.com/byteness/go-keychain v0.0.0-20191008050251-8e49817e8af4 h1:HFl8GFmwK1
 github.com/byteness/go-keychain v0.0.0-20191008050251-8e49817e8af4/go.mod h1:9HlL8SWBRtCZE7sCNq+c3//H/oHywgSwtocmPTdOij8=
 github.com/byteness/go-libsecret v0.0.0-20260108215642-107379d3dee0 h1:j59wGsxaBk6aFBuuYofk2oznMGZYyzFovjDqavlJHM8=
 github.com/byteness/go-libsecret v0.0.0-20260108215642-107379d3dee0/go.mod h1:3FrDGTXj08zj6qtqlIvt0vS8eWNrrYpnXOEbcQgFmvM=
-github.com/byteness/keyring v1.7.3 h1:SE6QwmAMjSxWZ8WS9f3Pm9vdUlmPFPYTpaBmFSdWqzw=
-github.com/byteness/keyring v1.7.3/go.mod h1:EwlbBnBaK0FufhTBNy0vTnCuMHBDaY+EjYRcB6fux78=
+github.com/byteness/keyring v1.8.0 h1:/6T4AiccVUyzp1HPqSdGs3jrsSP+tOP3yYLpHtZqcuo=
+github.com/byteness/keyring v1.8.0/go.mod h1:Qik+CIvQsKiZvgL0TuchNxS2ifEXWdugAT8QXePFqzw=
 github.com/byteness/percent v0.2.2 h1:vnIFh8WBR1xoC+U2etz0EMB1cgp+vsK6vynqTCeDziU=
 github.com/byteness/percent v0.2.2/go.mod h1:nwavge92FhIyfnldz4YWZD8uxPVvdh8NlzLRd1VYRDs=
 github.com/catppuccin/go v0.3.0 h1:d+0/YicIq+hSTo5oPuRi5kOpqkVA5tAsU6dNhvRu+aY=
@@ -129,8 +129,6 @@ github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51/go.mod h1:C
 github.com/kr/pty v1.1.1/go.mod h1:pFQYn66WHrOpPYNljwOMqo10TkYh1fy3cYio2l3bCsQ=
 github.com/kr/text v0.1.0 h1:45sCR5RtlFHMR4UwH9sdQ5TC8v0qDQCHnXt+kaKSTVE=
 github.com/kr/text v0.1.0/go.mod h1:4Jbv+DJW3UT/LiOwJeYQe1efqtUx/iVham/4vfdArNI=
-github.com/lox/go-touchid v0.0.0-20170712105233-619cc8e578d0 h1:m81erW+1MD5vl3lKQ/+TYPHJ6Y9/C1COqxXPE51FkDk=
-github.com/lox/go-touchid v0.0.0-20170712105233-619cc8e578d0/go.mod h1:EHbIQzfC3kdWFI81pLOFjssnolF+ALfmVf8PUdWBxo4=
 github.com/lucasb-eyer/go-colorful v1.3.0 h1:2/yBRLdWBZKrf7gB40FoiKfAWYQ0lqNcbuQwVHXptag=
 github.com/lucasb-eyer/go-colorful v1.3.0/go.mod h1:R4dSotOR9KMtayYi1e77YzuveK+i7ruzyGqttikkLy0=
 github.com/mattn/go-colorable v0.1.2/go.mod h1:U0ppj6V5qS13XJ6of8GYAs25YV2eR4EVcfRqFIhoBtE=
@@ -158,6 +156,8 @@ github.com/muesli/termenv v0.16.0 h1:S5AlUN9dENB57rsbnkPyfdGuWIlkmzJjbFf0Tf5FWUc
 github.com/muesli/termenv v0.16.0/go.mod h1:ZRfOIKPFDYQoDFF4Olj7/QJbW60Ol/kL1pU3VfY/Cnk=
 github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e h1:fD57ERR4JtEqsWbfPhv4DMiApHyliiK5xCTNVSPiaAs=
 github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e/go.mod h1:zD1mROLANZcx1PVRCS0qkT7pwLkGfwJo4zjcN/Tysno=
+github.com/noamcohen97/touchid-go v0.2.1 h1:SobQDnwkoS+VWa6cjrV4D9ub8H7nlLoufj3VbWWWXjo=
+github.com/noamcohen97/touchid-go v0.2.1/go.mod h1:X9MRNIBGEmPqwpDm1G3fQOAQX7fwBlhzUbnkDTxuta0=
 github.com/opentracing/opentracing-go v1.2.0 h1:uEJPy/1a5RIPAJ0Ov+OIO8OxWu77jEv+1B0VhjKrZUs=
 github.com/opentracing/opentracing-go v1.2.0/go.mod h1:GxEUsuufX4nBwe+T+Wl9TAgYrxe9dPLANfrWvHYVTgc=
 github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=
