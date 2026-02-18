@@ -7,10 +7,10 @@ require (
 	github.com/alecthomas/kingpin/v2 v2.4.0
 	github.com/aws/aws-sdk-go-v2 v1.41.1
 	github.com/aws/aws-sdk-go-v2/config v1.32.7
-	github.com/aws/aws-sdk-go-v2/credentials v1.19.7
+	github.com/aws/aws-sdk-go-v2/credentials v1.19.8
 	github.com/aws/aws-sdk-go-v2/service/iam v1.53.2
 	github.com/aws/aws-sdk-go-v2/service/sso v1.30.9
-	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.35.13
+	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.35.14
 	github.com/aws/aws-sdk-go-v2/service/sts v1.41.6
 	github.com/byteness/keyring v1.7.3
 	github.com/charmbracelet/huh v0.8.0
