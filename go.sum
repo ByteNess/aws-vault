@@ -156,8 +156,8 @@ github.com/muesli/termenv v0.16.0 h1:S5AlUN9dENB57rsbnkPyfdGuWIlkmzJjbFf0Tf5FWUc
 github.com/muesli/termenv v0.16.0/go.mod h1:ZRfOIKPFDYQoDFF4Olj7/QJbW60Ol/kL1pU3VfY/Cnk=
 github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e h1:fD57ERR4JtEqsWbfPhv4DMiApHyliiK5xCTNVSPiaAs=
 github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e/go.mod h1:zD1mROLANZcx1PVRCS0qkT7pwLkGfwJo4zjcN/Tysno=
-github.com/noamcohen97/touchid-go v0.2.1 h1:SobQDnwkoS+VWa6cjrV4D9ub8H7nlLoufj3VbWWWXjo=
-github.com/noamcohen97/touchid-go v0.2.1/go.mod h1:X9MRNIBGEmPqwpDm1G3fQOAQX7fwBlhzUbnkDTxuta0=
+github.com/noamcohen97/touchid-go v0.3.0 h1:fcXxVCizysD7KHRR6hrURt3nyNIs5JBGSbOIidD/3wo=
+github.com/noamcohen97/touchid-go v0.3.0/go.mod h1:X9MRNIBGEmPqwpDm1G3fQOAQX7fwBlhzUbnkDTxuta0=
 github.com/opentracing/opentracing-go v1.2.0 h1:uEJPy/1a5RIPAJ0Ov+OIO8OxWu77jEv+1B0VhjKrZUs=
 github.com/opentracing/opentracing-go v1.2.0/go.mod h1:GxEUsuufX4nBwe+T+Wl9TAgYrxe9dPLANfrWvHYVTgc=
 github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=
