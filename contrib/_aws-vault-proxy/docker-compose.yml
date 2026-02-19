@@ -15,8 +15,6 @@ services:
     networks:
       aws-vault:
         ipv4_address: "169.254.170.2" # This special IP address is recognized by the AWS SDKs and AWS CLI
-    healthcheck:
-      test: pgrep aws-vault-proxy
   testapp:
     image: amazon/aws-cli
     entrypoint: ""
