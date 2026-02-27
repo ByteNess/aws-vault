@@ -19,7 +19,7 @@ web_identity_token_process = oidccli raw
 	if err != nil {
 		t.Fatal(err)
 	}
-	configLoader := &vault.ConfigLoader{File: configFile, ActiveProfile: "role2"}
+	configLoader := vault.NewConfigLoader(vault.ProfileConfig{}, configFile, "role2")
 	config, err := configLoader.GetProfileConfig("role2")
 	if err != nil {
 		t.Fatalf("Should have found a profile: %v", err)
@@ -55,7 +55,7 @@ role_arn=arn:aws:iam::12345678901:role/allow-view-only-access-from-other-account
 	if err != nil {
 		t.Fatal(err)
 	}
-	configLoader := &vault.ConfigLoader{File: configFile, ActiveProfile: "my-shared-base-profile"}
+	configLoader := vault.NewConfigLoader(vault.ProfileConfig{}, configFile, "my-shared-base-profile")
 	config, err := configLoader.GetProfileConfig("my-shared-base-profile")
 	if err != nil {
 		t.Fatalf("Should have found a profile: %v", err)
@@ -103,7 +103,7 @@ sso_registration_scopes=sso:account:access
 	if err != nil {
 		t.Fatal(err)
 	}
-	configLoader := &vault.ConfigLoader{File: configFile, ActiveProfile: "test"}
+	configLoader := vault.NewConfigLoader(vault.ProfileConfig{}, configFile, "test")
 	config, err := configLoader.GetProfileConfig("test")
 	if err != nil {
 		t.Fatalf("Should have found a profile: %v", err)
