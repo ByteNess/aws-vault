@@ -1,15 +1,19 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
 	osexec "os/exec"
 	"os/signal"
 	"runtime"
+	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -34,6 +38,7 @@ type ExecCommandInput struct {
 	NoSession        bool
 	UseStdout        bool
 	ShowHelpMessages bool
+	RedactSecrets    bool
 }
 
 func (input ExecCommandInput) validate() error {
@@ -108,6 +113,9 @@ func ConfigureExecCommand(app *kingpin.Application, a *AwsVault) {
 		OverrideDefaultFromEnvar("AWS_VAULT_STDOUT").
 		BoolVar(&input.UseStdout)
 
+	cmd.Flag("redact", "Redact AWS credentials from subprocess output").
+		BoolVar(&input.RedactSecrets)
+
 	cmd.Arg("profile", "Name of the profile").
 		//Required().
 		Default(os.Getenv("AWS_PROFILE")).
@@ -159,6 +167,10 @@ func ConfigureExecCommand(app *kingpin.Application, a *AwsVault) {
 
 			err = ExportCommand(exportCommandInput, f, keyring)
 		} else {
+			// Determine final redaction setting: CLI flag overrides config file
+			if input.RedactSecrets {
+				input.Config.RedactSecrets = true
+			}
 			exitcode, err = ExecCommand(input, f, keyring)
 		}
 
@@ -198,6 +210,16 @@ func ExecCommand(input ExecCommandInput, f *vault.ConfigFile, keyring keyring.Ke
 
 	cmdEnv := createEnv(input.ProfileName, config.Region, config.EndpointURL)
 
+	// Get credentials for redaction if needed
+	var credentials aws.Credentials
+	if config.RedactSecrets {
+		creds, err := credsProvider.Retrieve(context.TODO())
+		if err != nil {
+			return 0, fmt.Errorf("Failed to get credentials for redaction: %w", err)
+		}
+		credentials = creds
+	}
+
 	if input.StartEc2Server {
 		if server.IsProxyRunning() {
 			return 0, fmt.Errorf("Another process is already bound to 169.254.169.254:80")
@@ -225,14 +247,23 @@ func ExecCommand(input ExecCommandInput, f *vault.ConfigFile, keyring keyring.Ke
 		}
 		printHelpMessage(subshellHelp, input.ShowHelpMessages)
 
-		err = doExecSyscall(input.Command, input.Args, cmdEnv) // will not return if exec syscall succeeds
-		if err != nil {
-			log.Println("Error doing execve syscall:", err.Error())
-			log.Println("Falling back to running a subprocess")
+		if config.RedactSecrets {
+			// When redaction is enabled, we must use runSubProcess to wrap stdout/stderr
+			return runSubProcess(input.Command, input.Args, cmdEnv, config.RedactSecrets, credentials)
+		} else {
+			// When redaction is disabled, try doExecSyscall first for better performance
+			err = doExecSyscall(input.Command, input.Args, cmdEnv) // will not return if exec syscall succeeds
+			if err != nil {
+				log.Println("Error doing execve syscall:", err.Error())
+				log.Println("Falling back to running a subprocess")
+				return runSubProcess(input.Command, input.Args, cmdEnv, config.RedactSecrets, credentials)
+			}
+			// If doExecSyscall succeeded, we never reach here (it replaces the process)
 		}
 	}
 
-	return runSubProcess(input.Command, input.Args, cmdEnv)
+	// This should never be reached in the non-redaction case
+	return runSubProcess(input.Command, input.Args, cmdEnv, config.RedactSecrets, credentials)
 }
 
 func printHelpMessage(helpMsg string, showHelpMessages bool) {
@@ -351,38 +382,239 @@ func getDefaultShell() string {
 	return command
 }
 
-func runSubProcess(command string, args []string, env []string) (int, error) {
+func runSubProcess(command string, args []string, env []string, redactSecrets bool, credentials aws.Credentials) (int, error) {
 	log.Printf("Starting a subprocess: %s %s", command, strings.Join(args, " "))
 
 	cmd := osexec.Command(command, args...)
 	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
 	cmd.Env = env
 
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan)
+	if redactSecrets {
+		return runSubProcessWithRedaction(cmd, credentials)
+	} else {
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan)
 
-	if err := cmd.Start(); err != nil {
-		return 0, err
+		if err := cmd.Start(); err != nil {
+			return 0, err
+		}
+
+		// proxy signals to process
+		done := make(chan struct{})
+		go func() {
+			for {
+				select {
+				case sig := <-sigChan:
+					if cmd.Process != nil {
+						_ = cmd.Process.Signal(sig)
+					}
+				case <-done:
+					return
+				}
+			}
+		}()
+
+		if err := cmd.Wait(); err != nil {
+			_ = cmd.Process.Signal(os.Kill)
+			close(done)
+			signal.Stop(sigChan)
+			return 0, fmt.Errorf("subprocess exited with error: %w", err)
+		}
+
+		close(done)
+		signal.Stop(sigChan)
+		waitStatus := cmd.ProcessState.Sys().(syscall.WaitStatus)
+		return waitStatus.ExitStatus(), nil
+	}
+}
+
+func getStderrWindowSize(maxCredLen int) int {
+	const defaultSize = 256
+
+	if envVal := os.Getenv("AWS_VAULT_STDERR_WINDOW_SIZE"); envVal != "" {
+		if size, err := strconv.Atoi(envVal); err == nil {
+			if size < 0 {
+				log.Printf("Invalid AWS_VAULT_STDERR_WINDOW_SIZE: %d, using default %d", size, defaultSize)
+				return defaultSize
+			}
+			if size > maxCredLen {
+				// Cap at maxCredLen - no point going higher
+				return maxCredLen
+			}
+			return size
+		}
+		log.Printf("Invalid AWS_VAULT_STDERR_WINDOW_SIZE: %s, using default %d", envVal, defaultSize)
 	}
 
-	// proxy signals to process
+	// Ensure we don't exceed maxCredLen
+	if defaultSize > maxCredLen {
+		return maxCredLen
+	}
+
+	return defaultSize
+}
+
+func runSubProcessWithRedaction(cmd *osexec.Cmd, credentials aws.Credentials) (int, error) {
+	// Create pipes for stdout/stderr
+	stdoutPipe, err := cmd.StdoutPipe()
+	if err != nil {
+		return 0, fmt.Errorf("Failed to create stdout pipe: %w", err)
+	}
+	stderrPipe, err := cmd.StderrPipe()
+	if err != nil {
+		return 0, fmt.Errorf("Failed to create stderr pipe: %w", err)
+	}
+
+	// Start the process (fork + exec happens here)
+	if err := cmd.Start(); err != nil {
+		return 0, fmt.Errorf("Failed to start process: %w", err)
+	}
+
+	// Create WaitGroup to wait for output goroutines
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	// Calculate max credential length for sliding window
+	maxCredLen := maxCredentialLength(credentials)
+	stderrWindowSize := getStderrWindowSize(maxCredLen)
+
+	// Handle stdout redaction with sliding window
+	go func() {
+		defer wg.Done()
+		streamWithRedaction(stdoutPipe, os.Stdout, credentials, maxCredLen)
+	}()
+
+	// Handle stderr redaction with sliding window
+	go func() {
+		defer wg.Done()
+		streamWithRedaction(stderrPipe, os.Stderr, credentials, stderrWindowSize)
+	}()
+
+	// Set up signal forwarding
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGQUIT)
+	done := make(chan struct{})
 	go func() {
 		for {
-			sig := <-sigChan
-			_ = cmd.Process.Signal(sig)
+			select {
+			case sig := <-sigChan:
+				if cmd.Process != nil {
+					cmd.Process.Signal(sig)
+				}
+			case <-done:
+				return
+			}
 		}
 	}()
 
-	if err := cmd.Wait(); err != nil {
-		_ = cmd.Process.Signal(os.Kill)
-		return 0, fmt.Errorf("Failed to wait for command termination: %v", err)
+	// Wait for process to complete
+	err = cmd.Wait()
+	
+	// Clean up signal handler
+	close(done)
+	signal.Stop(sigChan)
+	
+	// Wait for output goroutines to finish
+	wg.Wait()
+
+	if err != nil {
+		if exitErr, ok := err.(*osexec.ExitError); ok {
+			return exitErr.ExitCode(), nil
+		}
+		return 0, fmt.Errorf("subprocess exited with error: %w", err)
 	}
+	
+	return 0, nil
+}
 
-	waitStatus := cmd.ProcessState.Sys().(syscall.WaitStatus)
+// maxCredentialLength returns the length of the longest credential
+func maxCredentialLength(credentials aws.Credentials) int {
+	maxLen := 0
+	if len(credentials.AccessKeyID) > maxLen {
+		maxLen = len(credentials.AccessKeyID)
+	}
+	if len(credentials.SecretAccessKey) > maxLen {
+		maxLen = len(credentials.SecretAccessKey)
+	}
+	if len(credentials.SessionToken) > maxLen {
+		maxLen = len(credentials.SessionToken)
+	}
+	
+	// Session tokens can be 1000+ chars, cap at reasonable limit
+	if maxLen > 2048 {
+		maxLen = 2048
+	}
+	
+	return maxLen + 100 // Add safety buffer
+}
 
-	return waitStatus.ExitStatus(), nil
+// streamWithRedaction reads from src, redacts credentials, and writes to dst
+// Uses a sliding window to handle credentials split across buffer boundaries
+func streamWithRedaction(src io.Reader, dst io.Writer, credentials aws.Credentials, maxCredLen int) {
+	const bufSize = 4096
+	buf := make([]byte, bufSize)
+	overlap := make([]byte, 0, maxCredLen)
+
+	for {
+		n, err := src.Read(buf)
+		if n > 0 {
+			// Combine overlap from previous iteration with new data
+			combined := append(overlap, buf[:n]...)
+			redacted := redactBytes(combined, credentials)
+
+			// Write everything except the last maxCredLen bytes (keep as overlap)
+			if len(redacted) > maxCredLen {
+				toWrite := redacted[:len(redacted)-maxCredLen]
+				if _, writeErr := dst.Write(toWrite); writeErr != nil {
+					log.Printf("Error writing output: %v", writeErr)
+				}
+				// Keep the last maxCredLen bytes as overlap for next iteration
+				overlap = redacted[len(redacted)-maxCredLen:]
+			} else {
+				// Not enough data yet, keep accumulating
+				overlap = redacted
+			}
+		}
+
+		if err != nil {
+			// Flush any remaining overlap
+			if len(overlap) > 0 {
+				if _, writeErr := dst.Write(overlap); writeErr != nil {
+					log.Printf("Error writing final output: %v", writeErr)
+				}
+			}
+
+			if err != io.EOF {
+				log.Printf("Error reading: %v", err)
+			}
+			break
+		}
+	}
+}
+
+// redactBytes redacts AWS credentials from byte data
+func redactBytes(data []byte, credentials aws.Credentials) []byte {
+	result := data
+	
+	// Redact access key ID (exact match)
+	if credentials.AccessKeyID != "" {
+		result = bytes.ReplaceAll(result, []byte(credentials.AccessKeyID), []byte("<REDACTED>"))
+	}
+	
+	// Redact secret access key (exact match)
+	if credentials.SecretAccessKey != "" {
+		result = bytes.ReplaceAll(result, []byte(credentials.SecretAccessKey), []byte("<REDACTED>"))
+	}
+	
+	// Redact session token (exact match)
+	if credentials.SessionToken != "" {
+		result = bytes.ReplaceAll(result, []byte(credentials.SessionToken), []byte("<REDACTED>"))
+	}
+	
+	return result
 }
 
 func doExecSyscall(command string, args []string, env []string) error {
