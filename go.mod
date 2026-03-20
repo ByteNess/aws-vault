@@ -14,6 +14,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sts v1.51.3
 	github.com/aws/smithy-go v1.28.4
 	github.com/byteness/keyring v1.13.2
+	github.com/gofrs/flock v0.13.0
 	github.com/google/go-cmp v0.7.0
 	github.com/mattn/go-isatty v0.0.24
 	github.com/mattn/go-tty v0.0.8
@@ -50,6 +51,7 @@ require (
 	github.com/noamcohen97/touchid-go v0.3.0 // indirect
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
+	github.com/rogpeppe/go-internal v1.16.0 // indirect
 	github.com/tetratelabs/wabin v0.0.0-20230304001439-f6f874872834 // indirect
 	github.com/tetratelabs/wazero v1.11.0 // indirect
 	github.com/uber/jaeger-client-go v2.30.0+incompatible // indirect
