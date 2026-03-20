@@ -66,7 +66,8 @@ func NewMasterCredentialsProvider(k *CredentialKeyring, credentialsName string) 
 }
 
 // NewSessionTokenProvider returns a provider of STS GetSessionToken sessions, cached in k if useSessionCache is set.
-func NewSessionTokenProvider(credsProvider aws.CredentialsProvider, k keyring.Keyring, config *ProfileConfig, useSessionCache bool) (aws.CredentialsProvider, error) {
+// With parallelSafe set, the cache write is serialised across processes.
+func NewSessionTokenProvider(credsProvider aws.CredentialsProvider, k keyring.Keyring, config *ProfileConfig, useSessionCache bool, parallelSafe bool) (aws.CredentialsProvider, error) {
 	cfg := NewAwsConfigWithCredsProvider(credsProvider, config.Region, config.STSRegionalEndpoints, config.EndpointURL)
 
 	sessionTokenProvider := &SessionTokenProvider{
@@ -76,23 +77,24 @@ func NewSessionTokenProvider(credsProvider aws.CredentialsProvider, k keyring.Ke
 	}
 
 	if useSessionCache {
-		return &CachedSessionProvider{
-			SessionKey: SessionMetadata{
+		return NewCachedSessionProvider(
+			SessionMetadata{
 				Type:        "sts.GetSessionToken",
 				ProfileName: config.ProfileName,
 				MfaSerial:   config.MfaSerial,
 			},
-			Keyring:         &SessionKeyring{Keyring: k},
-			ExpiryWindow:    defaultExpirationWindow,
-			SessionProvider: sessionTokenProvider,
-		}, nil
+			sessionTokenProvider,
+			&SessionKeyring{Keyring: k},
+			defaultExpirationWindow,
+			parallelSafe,
+		), nil
 	}
 
 	return sessionTokenProvider, nil
 }
 
 // NewAssumeRoleProvider returns a provider that generates credentials using AssumeRole
-func NewAssumeRoleProvider(credsProvider aws.CredentialsProvider, k keyring.Keyring, config *ProfileConfig, useSessionCache bool) (aws.CredentialsProvider, error) {
+func NewAssumeRoleProvider(credsProvider aws.CredentialsProvider, k keyring.Keyring, config *ProfileConfig, useSessionCache bool, parallelSafe bool) (aws.CredentialsProvider, error) {
 	cfg := NewAwsConfigWithCredsProvider(credsProvider, config.Region, config.STSRegionalEndpoints, config.EndpointURL)
 
 	p := &AssumeRoleProvider{
@@ -108,16 +110,17 @@ func NewAssumeRoleProvider(credsProvider aws.CredentialsProvider, k keyring.Keyr
 	}
 
 	if useSessionCache && config.MfaSerial != "" {
-		return &CachedSessionProvider{
-			SessionKey: SessionMetadata{
+		return NewCachedSessionProvider(
+			SessionMetadata{
 				Type:        "sts.AssumeRole",
 				ProfileName: config.ProfileName,
 				MfaSerial:   config.MfaSerial,
 			},
-			Keyring:         &SessionKeyring{Keyring: k},
-			ExpiryWindow:    defaultExpirationWindow,
-			SessionProvider: p,
-		}, nil
+			p,
+			&SessionKeyring{Keyring: k},
+			defaultExpirationWindow,
+			parallelSafe,
+		), nil
 	}
 
 	return p, nil
@@ -125,7 +128,7 @@ func NewAssumeRoleProvider(credsProvider aws.CredentialsProvider, k keyring.Keyr
 
 // NewAssumeRoleWithWebIdentityProvider returns a provider that generates
 // credentials using AssumeRoleWithWebIdentity
-func NewAssumeRoleWithWebIdentityProvider(k keyring.Keyring, config *ProfileConfig, useSessionCache bool) (aws.CredentialsProvider, error) {
+func NewAssumeRoleWithWebIdentityProvider(k keyring.Keyring, config *ProfileConfig, useSessionCache bool, parallelSafe bool) (aws.CredentialsProvider, error) {
 	cfg := NewAwsConfig(config.Region, config.STSRegionalEndpoints, config.EndpointURL)
 
 	p := &AssumeRoleWithWebIdentityProvider{
@@ -138,15 +141,16 @@ func NewAssumeRoleWithWebIdentityProvider(k keyring.Keyring, config *ProfileConf
 	}
 
 	if useSessionCache {
-		return &CachedSessionProvider{
-			SessionKey: SessionMetadata{
+		return NewCachedSessionProvider(
+			SessionMetadata{
 				Type:        "sts.AssumeRoleWithWebIdentity",
 				ProfileName: config.ProfileName,
 			},
-			Keyring:         &SessionKeyring{Keyring: k},
-			ExpiryWindow:    defaultExpirationWindow,
-			SessionProvider: p,
-		}, nil
+			p,
+			&SessionKeyring{Keyring: k},
+			defaultExpirationWindow,
+			parallelSafe,
+		), nil
 	}
 
 	return p, nil
@@ -154,7 +158,7 @@ func NewAssumeRoleWithWebIdentityProvider(k keyring.Keyring, config *ProfileConf
 
 // NewSSORoleCredentialsProvider creates a provider for SSO credentials using
 // separate OIDC and session keyrings.
-func NewSSORoleCredentialsProvider(oidcKeyring, sessionKeyring keyring.Keyring, config *ProfileConfig, useSessionCache bool) (aws.CredentialsProvider, error) {
+func NewSSORoleCredentialsProvider(oidcKeyring, sessionKeyring keyring.Keyring, config *ProfileConfig, useSessionCache bool, parallelSafe bool) (aws.CredentialsProvider, error) {
 	cfg := NewAwsConfig(config.SSORegion, config.STSRegionalEndpoints, config.EndpointURL)
 
 	ssoRoleCredentialsProvider := &SSORoleCredentialsProvider{
@@ -169,19 +173,24 @@ func NewSSORoleCredentialsProvider(oidcKeyring, sessionKeyring keyring.Keyring, 
 
 		RegistrationScopes: ParseSSORegistrationScopes(config.SSORegistrationScopes),
 	}
+	ssoRoleCredentialsProvider.initSSODefaults()
+	if parallelSafe {
+		ssoRoleCredentialsProvider.EnableSSOTokenLock()
+	}
 
 	if useSessionCache {
 		ssoRoleCredentialsProvider.OIDCTokenCache = OIDCTokenKeyring{Keyring: oidcKeyring}
-		return &CachedSessionProvider{
-			SessionKey: SessionMetadata{
+		return NewCachedSessionProvider(
+			SessionMetadata{
 				Type:        "sso.GetRoleCredentials",
 				ProfileName: config.ProfileName,
 				MfaSerial:   config.SSOStartURL,
 			},
-			Keyring:         &SessionKeyring{Keyring: sessionKeyring},
-			ExpiryWindow:    defaultExpirationWindow,
-			SessionProvider: ssoRoleCredentialsProvider,
-		}, nil
+			ssoRoleCredentialsProvider,
+			&SessionKeyring{Keyring: sessionKeyring},
+			defaultExpirationWindow,
+			parallelSafe,
+		), nil
 	}
 
 	return ssoRoleCredentialsProvider, nil
@@ -327,21 +336,22 @@ func writeFileAtomic(filename string, data []byte, perm os.FileMode) (err error)
 
 // NewCredentialProcessProvider creates a provider to retrieve credentials from an external
 // executable as described in https://docs.aws.amazon.com/cli/latest/topic/config-vars.html#sourcing-credentials-from-external-processes
-func NewCredentialProcessProvider(k keyring.Keyring, config *ProfileConfig, useSessionCache bool) (aws.CredentialsProvider, error) {
+func NewCredentialProcessProvider(k keyring.Keyring, config *ProfileConfig, useSessionCache bool, parallelSafe bool) (aws.CredentialsProvider, error) {
 	credentialProcessProvider := &CredentialProcessProvider{
 		CredentialProcess: config.CredentialProcess,
 	}
 
 	if useSessionCache {
-		return &CachedSessionProvider{
-			SessionKey: SessionMetadata{
+		return NewCachedSessionProvider(
+			SessionMetadata{
 				Type:        "credential_process",
 				ProfileName: config.ProfileName,
 			},
-			Keyring:         &SessionKeyring{Keyring: k},
-			ExpiryWindow:    defaultExpirationWindow,
-			SessionProvider: credentialProcessProvider,
-		}, nil
+			credentialProcessProvider,
+			&SessionKeyring{Keyring: k},
+			defaultExpirationWindow,
+			parallelSafe,
+		), nil
 	}
 
 	return credentialProcessProvider, nil
@@ -395,6 +405,8 @@ type TempCredentialsCreator struct {
 	DisableCache bool
 	// DisableSessionsForProfile is a profile for which sessions should not be used
 	DisableSessionsForProfile string
+	// ParallelSafe enables cross-process locking for cached credentials.
+	ParallelSafe bool
 
 	chainedMfa string
 }
@@ -463,7 +475,7 @@ func (t *TempCredentialsCreator) primeWithGetSessionToken(config *ProfileConfig,
 
 	t.chainedMfa = config.MfaSerial
 	log.Printf("profile %s: using GetSessionToken %s", config.ProfileName, mfaDetails(false, config))
-	sourcecredsProvider, err := NewSessionTokenProvider(sourcecredsProvider, t.SessionKeyring, config, !t.DisableCache)
+	sourcecredsProvider, err := NewSessionTokenProvider(sourcecredsProvider, t.SessionKeyring, config, !t.DisableCache, t.ParallelSafe)
 	if err != nil {
 		return sourcecredsProvider, false, err
 	}
@@ -522,7 +534,7 @@ func (t *TempCredentialsCreator) getSourceCredWithSession(config *ProfileConfig,
 		config.MfaSerial = ""
 	}
 	log.Printf("profile %s: using AssumeRole %s", config.ProfileName, mfaDetails(isMfaChained, config))
-	return NewAssumeRoleProvider(sourcecredsProvider, t.SessionKeyring, config, !t.DisableCache)
+	return NewAssumeRoleProvider(sourcecredsProvider, t.SessionKeyring, config, !t.DisableCache, t.ParallelSafe)
 }
 
 // GetProviderForProfile returns a credentials provider for config, based on how the profile gets its credentials.
@@ -542,17 +554,17 @@ func (t *TempCredentialsCreator) GetProviderForProfile(config *ProfileConfig) (a
 
 	if config.HasSSOStartURL() {
 		log.Printf("profile %s: using SSO role credentials", config.ProfileName)
-		return NewSSORoleCredentialsProvider(t.Keyring.Keyring, t.SessionKeyring, config, !t.DisableCache)
+		return NewSSORoleCredentialsProvider(t.Keyring.Keyring, t.SessionKeyring, config, !t.DisableCache, t.ParallelSafe)
 	}
 
 	if config.HasWebIdentity() {
 		log.Printf("profile %s: using web identity", config.ProfileName)
-		return NewAssumeRoleWithWebIdentityProvider(t.SessionKeyring, config, !t.DisableCache)
+		return NewAssumeRoleWithWebIdentityProvider(t.SessionKeyring, config, !t.DisableCache, t.ParallelSafe)
 	}
 
 	if config.HasCredentialProcess() {
 		log.Printf("profile %s: using credential process", config.ProfileName)
-		return NewCredentialProcessProvider(t.SessionKeyring, config, !t.DisableCache)
+		return NewCredentialProcessProvider(t.SessionKeyring, config, !t.DisableCache, t.ParallelSafe)
 	}
 
 	return nil, fmt.Errorf("profile %s: credentials missing", config.ProfileName)
@@ -640,14 +652,25 @@ func mfaDetails(mfaChained bool, config *ProfileConfig) string {
 	return ""
 }
 
+// TempCredentialsOptions controls how temporary credential providers are created.
+type TempCredentialsOptions struct {
+	ParallelSafe bool
+}
+
 // NewTempCredentialsProvider creates a credential provider for the given config
 // using a separate keyring for cached sessions.
 func NewTempCredentialsProvider(config *ProfileConfig, credentialsKeyring *CredentialKeyring, sessionKeyring keyring.Keyring, disableSessions bool, disableCache bool) (aws.CredentialsProvider, error) {
+	return NewTempCredentialsProviderWithOptions(config, credentialsKeyring, sessionKeyring, disableSessions, disableCache, TempCredentialsOptions{})
+}
+
+// NewTempCredentialsProviderWithOptions creates a credential provider for the given config with options.
+func NewTempCredentialsProviderWithOptions(config *ProfileConfig, credentialsKeyring *CredentialKeyring, sessionKeyring keyring.Keyring, disableSessions bool, disableCache bool, options TempCredentialsOptions) (aws.CredentialsProvider, error) {
 	t := TempCredentialsCreator{
 		Keyring:         credentialsKeyring,
 		SessionKeyring:  sessionKeyring,
 		DisableSessions: disableSessions,
 		DisableCache:    disableCache,
+		ParallelSafe:    options.ParallelSafe,
 	}
 	return t.GetProviderForProfile(config)
 }
