@@ -1,6 +1,6 @@
 ---
 title: Shell completion
-weight: 12
+weight: 13
 ---
 
 You can generate shell completions for
