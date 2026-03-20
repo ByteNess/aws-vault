@@ -12,9 +12,11 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sso v1.30.16
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.35.20
 	github.com/aws/aws-sdk-go-v2/service/sts v1.42.0
+	github.com/aws/smithy-go v1.25.0
 	github.com/byteness/keyring v1.9.1
 	github.com/charmbracelet/huh v1.0.0
 	github.com/charmbracelet/lipgloss v1.1.0
+	github.com/gofrs/flock v0.13.0
 	github.com/google/go-cmp v0.7.0
 	github.com/mattn/go-isatty v0.0.21
 	github.com/mattn/go-tty v0.0.8
@@ -35,7 +37,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.8 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.13.22 // indirect
 	github.com/aws/aws-sdk-go-v2/service/signin v1.0.10 // indirect
-	github.com/aws/smithy-go v1.25.0 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/byteness/go-keychain v0.0.0-20191008050251-8e49817e8af4 // indirect
 	github.com/byteness/go-libsecret v0.0.0-20260108215642-107379d3dee0 // indirect
@@ -74,6 +75,7 @@ require (
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
+	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/tetratelabs/wabin v0.0.0-20230304001439-f6f874872834 // indirect
 	github.com/tetratelabs/wazero v1.11.0 // indirect
 	github.com/uber/jaeger-client-go v2.30.0+incompatible // indirect
