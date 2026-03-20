@@ -1,10 +1,12 @@
 package vault
 
 import (
+	"context"
 	"crypto/sha256"
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/gofrs/flock"
 )
@@ -44,4 +46,23 @@ func defaultLockPath(filename string) string {
 func hashedLockFilename(prefix, key string) string {
 	sum := sha256.Sum256([]byte(key))
 	return fmt.Sprintf("%s.%x.lock", prefix, sum)
+}
+
+// NewDefaultLock creates a ProcessLock in the system temp directory.
+// The lock file name is derived from the prefix and a SHA-256 hash of key.
+func NewDefaultLock(prefix, key string) ProcessLock {
+	return NewFileLock(defaultLockPath(hashedLockFilename(prefix, key)))
+}
+
+// defaultContextSleep sleeps for d, respecting ctx cancellation.
+// Shared by all lock-wait loops.
+func defaultContextSleep(ctx context.Context, d time.Duration) error {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }
