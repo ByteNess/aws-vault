@@ -1,6 +1,6 @@
 ---
 title: Docker
-weight: 14
+weight: 15
 ---
 
 It's possible for Docker containers to retrieve credentials from aws-vault running on the host.
