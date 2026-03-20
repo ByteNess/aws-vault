@@ -37,9 +37,11 @@ type AwsVault struct {
 	KeyringConfig  keyring.Config
 	KeyringBackend string
 	promptDriver   string
+	ParallelSafe   bool
 
-	keyringImpl   keyring.Keyring
-	awsConfigFile *vault.ConfigFile
+	rawKeyringImpl keyring.Keyring
+	keyringImpl    keyring.Keyring
+	awsConfigFile  *vault.ConfigFile
 	UseBiometrics bool
 }
 
@@ -68,18 +70,88 @@ func (a *AwsVault) PromptDriver(avoidTerminalPrompt bool) string {
 }
 
 func (a *AwsVault) Keyring() (keyring.Keyring, error) {
-	if a.keyringImpl == nil {
+	raw, err := a.rawKeyring()
+	if err != nil {
+		return nil, err
+	}
+	if a.ParallelSafe {
+		if a.keyringImpl == nil {
+			lockKey := a.keyringLockKey()
+			a.keyringImpl = vault.NewLockedKeyring(raw, lockKey)
+		}
+		return a.keyringImpl, nil
+	}
+	return raw, nil
+}
+
+// RawKeyring returns the keyring without the parallel-safe lock wrapper.
+// Used by commands like login that are excluded from --parallel-safe.
+func (a *AwsVault) RawKeyring() (keyring.Keyring, error) {
+	return a.rawKeyring()
+}
+
+func (a *AwsVault) rawKeyring() (keyring.Keyring, error) {
+	if a.rawKeyringImpl == nil {
 		if a.KeyringBackend != "" {
 			a.KeyringConfig.AllowedBackends = []keyring.BackendType{keyring.BackendType(a.KeyringBackend)}
 		}
 		var err error
-		a.keyringImpl, err = keyring.Open(a.KeyringConfig)
+		a.rawKeyringImpl, err = keyring.Open(a.KeyringConfig)
 		if err != nil {
 			return nil, err
 		}
 	}
+	return a.rawKeyringImpl, nil
+}
 
-	return a.keyringImpl, nil
+// keyringLockKey returns a backend-specific key for the cross-process keyring
+// lock. Different backends (and different configurations of the same backend)
+// produce different keys so they don't contend on the same lock file.
+func (a *AwsVault) keyringLockKey() string {
+	backend := a.KeyringBackend
+	switch keyring.BackendType(backend) {
+	case keyring.KeychainBackend:
+		if a.KeyringConfig.KeychainName != "" {
+			return backend + ":" + a.KeyringConfig.KeychainName
+		}
+	case keyring.FileBackend:
+		if a.KeyringConfig.FileDir != "" {
+			return backend + ":" + a.KeyringConfig.FileDir
+		}
+	case keyring.PassBackend:
+		key := backend
+		if a.KeyringConfig.PassDir != "" {
+			key += ":" + a.KeyringConfig.PassDir
+		}
+		if a.KeyringConfig.PassPrefix != "" {
+			key += ":" + a.KeyringConfig.PassPrefix
+		}
+		return key
+	case keyring.SecretServiceBackend:
+		if a.KeyringConfig.LibSecretCollectionName != "" {
+			return backend + ":" + a.KeyringConfig.LibSecretCollectionName
+		}
+	case keyring.KWalletBackend:
+		if a.KeyringConfig.KWalletFolder != "" {
+			return backend + ":" + a.KeyringConfig.KWalletFolder
+		}
+	case keyring.WinCredBackend:
+		if a.KeyringConfig.WinCredPrefix != "" {
+			return backend + ":" + a.KeyringConfig.WinCredPrefix
+		}
+	case keyring.OPBackend, keyring.OPConnectBackend, keyring.OPDesktopBackend:
+		if a.KeyringConfig.OPVaultID != "" {
+			return backend + ":" + a.KeyringConfig.OPVaultID
+		}
+	}
+	// Fall back to backend name alone. When backend is empty (auto-selected),
+	// all configs share the "aws-vault" lock key. This is overly conservative
+	// (more contention) but safe — we can't know which backend the keyring
+	// library will pick, so we can't incorporate backend-specific config.
+	if backend != "" {
+		return backend
+	}
+	return "aws-vault"
 }
 
 func (a *AwsVault) AwsConfigFile() (*vault.ConfigFile, error) {
@@ -200,6 +272,10 @@ func ConfigureGlobals(app *kingpin.Application) *AwsVault {
 	app.Flag("biometrics", "Use biometric authentication if supported").
 		Envar("AWS_VAULT_BIOMETRICS").
 		BoolVar(&a.UseBiometrics)
+
+	app.Flag("parallel-safe", "Enable cross-process locking for keyring operations, session caching, and SSO browser flows").
+		Envar("AWS_VAULT_PARALLEL_SAFE").
+		BoolVar(&a.ParallelSafe)
 
 	app.PreAction(func(c *kingpin.ParseContext) error {
 		if !a.Debug {
