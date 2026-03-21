@@ -46,6 +46,17 @@ func isMasterCredentialsProvider(credsProvider aws.CredentialsProvider) bool {
 	return ok
 }
 
+func isTemporaryCredentialsProvider(credsProvider aws.CredentialsProvider) bool {
+	switch p := credsProvider.(type) {
+	case *SessionTokenProvider, *AssumeRoleProvider, *SSORoleCredentialsProvider, *AssumeRoleWithWebIdentityProvider:
+		return true
+	case *CachedSessionProvider:
+		return isTemporaryCredentialsProvider(p.SessionProvider)
+	default:
+		return false
+	}
+}
+
 // NewMasterCredentialsProvider creates a provider for the master credentials
 func NewMasterCredentialsProvider(k *CredentialKeyring, credentialsName string) *KeyringProvider {
 	return &KeyringProvider{k, credentialsName}
@@ -276,6 +287,16 @@ func (t *TempCredentialsCreator) getSourceCredWithSession(config *ProfileConfig,
 	}
 
 	if config.HasRole() {
+		if isTemporaryCredentialsProvider(sourcecredsProvider) && config.AssumeRoleDuration > roleChainingMaximumDuration {
+			log.Printf(
+				"profile %s: capping AssumeRole duration from %s to AWS maximum %s for role chaining",
+				config.ProfileName,
+				config.AssumeRoleDuration,
+				roleChainingMaximumDuration,
+			)
+			config.AssumeRoleDuration = roleChainingMaximumDuration
+		}
+
 		isMfaChained := config.MfaSerial != "" && config.MfaSerial == t.chainedMfa
 		if isMfaChained {
 			config.MfaSerial = ""
@@ -337,9 +358,6 @@ func (t *TempCredentialsCreator) canUseGetSessionToken(c *ProfileConfig) (bool, 
 			return false, fmt.Sprintf("MFA serial doesn't match profile '%s'", c.ChainedFromProfile.ProfileName)
 		}
 
-		if c.ChainedFromProfile.AssumeRoleDuration > roleChainingMaximumDuration {
-			return false, fmt.Sprintf("duration %s in profile '%s' is greater than the AWS maximum %s for chaining MFA", c.ChainedFromProfile.AssumeRoleDuration, c.ChainedFromProfile.ProfileName, roleChainingMaximumDuration)
-		}
 	}
 
 	return true, ""
