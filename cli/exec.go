@@ -121,6 +121,7 @@ func ConfigureExecCommand(app *kingpin.Application, a *AwsVault) {
 	cmd.Action(func(c *kingpin.ParseContext) (err error) {
 		input.Config.MfaPromptMethod = a.PromptDriver(hasBackgroundServer(input))
 		input.Config.NonChainedGetSessionTokenDuration = input.SessionDuration
+		input.Config.ChainedGetSessionTokenDuration = input.SessionDuration
 		input.Config.AssumeRoleDuration = input.SessionDuration
 		input.Config.SSOUseStdout = input.UseStdout
 		input.ShowHelpMessages = !a.Debug && input.Command == "" && isATerminal() && os.Getenv("AWS_VAULT_DISABLE_HELP_MESSAGE") != "1"
