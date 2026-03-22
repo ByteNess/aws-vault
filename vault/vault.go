@@ -46,6 +46,17 @@ func isMasterCredentialsProvider(credsProvider aws.CredentialsProvider) bool {
 	return ok
 }
 
+func isTemporaryCredentialsProvider(credsProvider aws.CredentialsProvider) bool {
+	switch p := credsProvider.(type) {
+	case *SessionTokenProvider, *AssumeRoleProvider, *SSORoleCredentialsProvider, *AssumeRoleWithWebIdentityProvider:
+		return true
+	case *CachedSessionProvider:
+		return isTemporaryCredentialsProvider(p.SessionProvider)
+	default:
+		return false
+	}
+}
+
 // NewMasterCredentialsProvider creates a provider for the master credentials
 func NewMasterCredentialsProvider(k *CredentialKeyring, credentialsName string) *KeyringProvider {
 	return &KeyringProvider{k, credentialsName}
@@ -254,38 +265,44 @@ func (t *TempCredentialsCreator) getSourceCredWithSession(config *ProfileConfig,
 		return nil, err
 	}
 
-	if hasStoredCredentials || !config.HasRole() {
-		if canUseGetSessionToken, reason := t.canUseGetSessionToken(config); !canUseGetSessionToken {
-			log.Printf("profile %s: skipping GetSessionToken because %s", config.ProfileName, reason)
-			if !config.HasRole() {
-				return sourcecredsProvider, nil
+	isSourceForRoleProfile := config.ChainedFromProfile != nil && config.ChainedFromProfile.HasRole()
+
+	if !config.HasRole() || isSourceForRoleProfile {
+		if isMasterCredentialsProvider(sourcecredsProvider) || isSourceForRoleProfile {
+			canUseGetSessionToken, reason := t.canUseGetSessionToken(config)
+			if !canUseGetSessionToken {
+				log.Printf("profile %s: skipping GetSessionToken because %s", config.ProfileName, reason)
+				if !config.HasRole() {
+					return sourcecredsProvider, nil
+				}
+			} else {
+				t.chainedMfa = config.MfaSerial
+				log.Printf("profile %s: using GetSessionToken %s", config.ProfileName, mfaDetails(false, config))
+				sourcecredsProvider, err = NewSessionTokenProvider(sourcecredsProvider, t.Keyring.Keyring, config, !t.DisableCache)
+				if !config.HasRole() || err != nil {
+					return sourcecredsProvider, err
+				}
 			}
-		}
-		t.chainedMfa = config.MfaSerial
-		log.Printf("profile %s: using GetSessionToken %s", config.ProfileName, mfaDetails(false, config))
-		sourcecredsProvider, err = NewSessionTokenProvider(sourcecredsProvider, t.Keyring.Keyring, config, !t.DisableCache)
-		if !config.HasRole() || err != nil {
-			return sourcecredsProvider, err
 		}
 	}
 
 	if config.HasRole() {
+		if isTemporaryCredentialsProvider(sourcecredsProvider) && config.AssumeRoleDuration > roleChainingMaximumDuration {
+			log.Printf(
+				"profile %s: capping AssumeRole duration from %s to AWS maximum %s for role chaining",
+				config.ProfileName,
+				config.AssumeRoleDuration,
+				roleChainingMaximumDuration,
+			)
+			config.AssumeRoleDuration = roleChainingMaximumDuration
+		}
+
 		isMfaChained := config.MfaSerial != "" && config.MfaSerial == t.chainedMfa
 		if isMfaChained {
 			config.MfaSerial = ""
 		}
 		log.Printf("profile %s: using AssumeRole %s", config.ProfileName, mfaDetails(isMfaChained, config))
 		return NewAssumeRoleProvider(sourcecredsProvider, t.Keyring.Keyring, config, !t.DisableCache)
-	}
-
-	if isMasterCredentialsProvider(sourcecredsProvider) {
-		canUseGetSessionToken, reason := t.canUseGetSessionToken(config)
-		if canUseGetSessionToken {
-			t.chainedMfa = config.MfaSerial
-			log.Printf("profile %s: using GetSessionToken %s", config.ProfileName, mfaDetails(false, config))
-			return NewSessionTokenProvider(sourcecredsProvider, t.Keyring.Keyring, config, !t.DisableCache)
-		}
-		log.Printf("profile %s: skipping GetSessionToken because %s", config.ProfileName, reason)
 	}
 
 	return sourcecredsProvider, nil
@@ -341,9 +358,6 @@ func (t *TempCredentialsCreator) canUseGetSessionToken(c *ProfileConfig) (bool, 
 			return false, fmt.Sprintf("MFA serial doesn't match profile '%s'", c.ChainedFromProfile.ProfileName)
 		}
 
-		if c.ChainedFromProfile.AssumeRoleDuration > roleChainingMaximumDuration {
-			return false, fmt.Sprintf("duration %s in profile '%s' is greater than the AWS maximum %s for chaining MFA", c.ChainedFromProfile.AssumeRoleDuration, c.ChainedFromProfile.ProfileName, roleChainingMaximumDuration)
-		}
 	}
 
 	return true, ""
