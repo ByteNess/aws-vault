@@ -71,7 +71,7 @@ func TestJitterDelayRange(t *testing.T) {
 
 	for i := 0; i < 10; i++ {
 		delay := jitterDelay(base)
-		if delay < min || delay > max {
+		if delay < min || max < delay {
 			t.Fatalf("expected delay in range %s-%s, got %s", min, max, delay)
 		}
 	}

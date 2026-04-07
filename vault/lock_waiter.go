@@ -70,13 +70,13 @@ func (w *lockWaiter) sleepAfterMiss(ctx context.Context) error {
 	if w.waitStart.IsZero() {
 		w.waitStart = now
 	}
-	if !w.warned && now.Sub(w.waitStart) >= w.warnAfter {
+	if !w.warned && w.warnAfter <= now.Sub(w.waitStart) {
 		if w.warnf != nil {
 			w.warnf(w.warnMsg, w.lock.Path())
 		}
 		w.warned = true
 	}
-	if w.logf != nil && (w.lastLog.IsZero() || now.Sub(w.lastLog) >= w.logEvery) {
+	if w.logf != nil && (w.lastLog.IsZero() || w.logEvery <= now.Sub(w.lastLog)) {
 		w.logf(w.logMsg, w.lock.Path())
 		w.lastLog = now
 	}

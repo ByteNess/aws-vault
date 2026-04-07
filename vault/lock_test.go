@@ -56,7 +56,7 @@ func (c *testClock) Now() time.Time {
 func (c *testClock) Sleep(ctx context.Context, d time.Duration) error {
 	c.sleepCalls++
 	c.now = c.now.Add(d)
-	if c.cancel != nil && c.cancelAfter > 0 && c.sleepCalls >= c.cancelAfter {
+	if c.cancel != nil && 0 < c.cancelAfter && c.cancelAfter <= c.sleepCalls {
 		c.cancel()
 	}
 	if ctx.Err() != nil {
