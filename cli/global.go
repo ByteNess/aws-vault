@@ -79,15 +79,59 @@ func (a *AwsVault) Keyring() (keyring.Keyring, error) {
 			return nil, err
 		}
 		if a.ParallelSafe {
-			lockKey := a.KeyringConfig.KeychainName
-			if lockKey == "" {
-				lockKey = "aws-vault"
-			}
+			lockKey := a.keyringLockKey()
 			a.keyringImpl = vault.NewLockedKeyring(a.keyringImpl, lockKey)
 		}
 	}
 
 	return a.keyringImpl, nil
+}
+
+// keyringLockKey returns a backend-specific key for the cross-process keyring
+// lock. Different backends (and different configurations of the same backend)
+// produce different keys so they don't contend on the same lock file.
+func (a *AwsVault) keyringLockKey() string {
+	backend := a.KeyringBackend
+	switch keyring.BackendType(backend) {
+	case keyring.KeychainBackend:
+		if a.KeyringConfig.KeychainName != "" {
+			return backend + ":" + a.KeyringConfig.KeychainName
+		}
+	case keyring.FileBackend:
+		if a.KeyringConfig.FileDir != "" {
+			return backend + ":" + a.KeyringConfig.FileDir
+		}
+	case keyring.PassBackend:
+		key := backend
+		if a.KeyringConfig.PassDir != "" {
+			key += ":" + a.KeyringConfig.PassDir
+		}
+		if a.KeyringConfig.PassPrefix != "" {
+			key += ":" + a.KeyringConfig.PassPrefix
+		}
+		return key
+	case keyring.SecretServiceBackend:
+		if a.KeyringConfig.LibSecretCollectionName != "" {
+			return backend + ":" + a.KeyringConfig.LibSecretCollectionName
+		}
+	case keyring.KWalletBackend:
+		if a.KeyringConfig.KWalletFolder != "" {
+			return backend + ":" + a.KeyringConfig.KWalletFolder
+		}
+	case keyring.WinCredBackend:
+		if a.KeyringConfig.WinCredPrefix != "" {
+			return backend + ":" + a.KeyringConfig.WinCredPrefix
+		}
+	case keyring.OPBackend, keyring.OPConnectBackend, keyring.OPDesktopBackend:
+		if a.KeyringConfig.OPVaultID != "" {
+			return backend + ":" + a.KeyringConfig.OPVaultID
+		}
+	}
+	// Fall back to backend name, which is always set (defaults to first available).
+	if backend != "" {
+		return backend
+	}
+	return "aws-vault"
 }
 
 func (a *AwsVault) AwsConfigFile() (*vault.ConfigFile, error) {
@@ -209,7 +253,7 @@ func ConfigureGlobals(app *kingpin.Application) *AwsVault {
 		Envar("AWS_VAULT_BIOMETRICS").
 		BoolVar(&a.UseBiometrics)
 
-	app.Flag("parallel-safe", "Enable cross-process locking for keychain and cached credentials").
+	app.Flag("parallel-safe", "Enable cross-process locking for keychain and cached credentials (applies to exec, export, rotate; not login)").
 		Envar("AWS_VAULT_PARALLEL_SAFE").
 		BoolVar(&a.ParallelSafe)
 
