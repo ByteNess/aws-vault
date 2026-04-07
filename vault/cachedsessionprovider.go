@@ -34,8 +34,19 @@ type CachedSessionProvider struct {
 }
 
 const (
+	// defaultSessionLockWaitDelay is the polling interval between lock attempts.
+	// 100ms keeps latency low for the typical case where the lock holder
+	// finishes quickly (STS call + cache write).
 	defaultSessionLockWaitDelay = 100 * time.Millisecond
-	defaultSessionLockLogEvery  = 15 * time.Second
+
+	// defaultSessionLockLogEvery controls how often we emit a debug log while
+	// waiting for the lock. 15s avoids log spam while still showing progress.
+	defaultSessionLockLogEvery = 15 * time.Second
+
+	// defaultSessionLockWarnAfter is the delay before printing a user-visible
+	// "waiting for lock" message to stderr. 5s is long enough to avoid
+	// flashing the message on normal lock contention, short enough to
+	// reassure the user that the process isn't hung.
 	defaultSessionLockWarnAfter = 5 * time.Second
 )
 
@@ -51,24 +62,21 @@ func defaultSessionSleep(ctx context.Context, d time.Duration) error {
 	}
 }
 
-func (p *CachedSessionProvider) ensureSessionDependencies() {
-	if p.sessionLock == nil {
-		p.sessionLock = NewDefaultSessionCacheLock(p.SessionKey.StringForMatching())
-	}
-	if p.sessionLockWait == 0 {
-		p.sessionLockWait = defaultSessionLockWaitDelay
-	}
-	if p.sessionLockLog == 0 {
-		p.sessionLockLog = defaultSessionLockLogEvery
-	}
-	if p.sessionNow == nil {
-		p.sessionNow = time.Now
-	}
-	if p.sessionSleep == nil {
-		p.sessionSleep = defaultSessionSleep
-	}
-	if p.sessionLogf == nil {
-		p.sessionLogf = log.Printf
+// NewCachedSessionProvider creates a CachedSessionProvider with production
+// defaults for all internal dependencies. Tests can override unexported fields
+// (sessionLock, sessionNow, etc.) after construction to inject mocks.
+func NewCachedSessionProvider(key SessionMetadata, provider StsSessionProvider, keyring *SessionKeyring, expiryWindow time.Duration) *CachedSessionProvider {
+	return &CachedSessionProvider{
+		SessionKey:      key,
+		SessionProvider: provider,
+		Keyring:         keyring,
+		ExpiryWindow:    expiryWindow,
+		sessionLock:     NewDefaultSessionCacheLock(key.StringForMatching()),
+		sessionLockWait: defaultSessionLockWaitDelay,
+		sessionLockLog:  defaultSessionLockLogEvery,
+		sessionNow:      time.Now,
+		sessionSleep:    defaultSessionSleep,
+		sessionLogf:     log.Printf,
 	}
 }
 
@@ -81,8 +89,6 @@ func (p *CachedSessionProvider) RetrieveStsCredentials(ctx context.Context) (*st
 	if !p.UseSessionLock {
 		return p.getSessionWithoutLock(ctx)
 	}
-
-	p.ensureSessionDependencies()
 
 	return p.getSessionWithLock(ctx)
 }
@@ -131,8 +137,8 @@ func (p *CachedSessionProvider) getSessionWithLock(ctx context.Context) (*ststyp
 		if locked {
 			return p.doLockedSessionWork(ctx)
 		}
-		if err = waiter.sleepAfterMiss(ctx); err != nil {
-			return nil, err
+		if sleepErr := waiter.sleepAfterMiss(ctx); sleepErr != nil {
+			return nil, sleepErr
 		}
 	}
 }

@@ -75,14 +75,9 @@ func TestCachedSession_CacheHit_NoLock(t *testing.T) {
 		onRetrieve: func() { t.Fatal("RetrieveStsCredentials should not be called on cache hit") },
 	}
 
-	p := &CachedSessionProvider{
-		SessionKey:      key,
-		SessionProvider: provider,
-		Keyring:         sk,
-		ExpiryWindow:    0,
-		UseSessionLock:  true,
-		sessionLock:     lock,
-	}
+	p := NewCachedSessionProvider(key, provider, sk, 0)
+	p.UseSessionLock = true
+	p.sessionLock = lock
 
 	got, err := p.RetrieveStsCredentials(context.Background())
 	if err != nil {
@@ -107,14 +102,9 @@ func TestCachedSession_LockDisabled_SkipsLock(t *testing.T) {
 	lock := &testLock{tryResults: []bool{true}}
 	provider := &testSessionProvider{creds: creds}
 
-	p := &CachedSessionProvider{
-		SessionKey:      key,
-		SessionProvider: provider,
-		Keyring:         sk,
-		ExpiryWindow:    0,
-		UseSessionLock:  false,
-		sessionLock:     lock,
-	}
+	p := NewCachedSessionProvider(key, provider, sk, 0)
+	p.UseSessionLock = false
+	p.sessionLock = lock
 
 	got, err := p.RetrieveStsCredentials(context.Background())
 	if err != nil {
@@ -145,15 +135,10 @@ func TestCachedSession_LockMiss_ThenCacheHit_NoRefresh(t *testing.T) {
 		onRetrieve: func() { t.Fatal("RetrieveStsCredentials should not be called when cache fills while waiting") },
 	}
 
-	p := &CachedSessionProvider{
-		SessionKey:      key,
-		SessionProvider: provider,
-		Keyring:         sk,
-		ExpiryWindow:    0,
-		UseSessionLock:  true,
-		sessionLock:     lock,
-		sessionLockWait: 5 * time.Second,
-	}
+	p := NewCachedSessionProvider(key, provider, sk, 0)
+	p.UseSessionLock = true
+	p.sessionLock = lock
+	p.sessionLockWait = 5 * time.Second
 	p.sessionSleep = func(ctx context.Context, d time.Duration) error {
 		return sk.Set(key, creds)
 	}
@@ -189,14 +174,9 @@ func TestCachedSession_LockAcquired_RecheckCache(t *testing.T) {
 		onRetrieve: func() { t.Fatal("RetrieveStsCredentials should not be called when cache fills after lock") },
 	}
 
-	p := &CachedSessionProvider{
-		SessionKey:      key,
-		SessionProvider: provider,
-		Keyring:         sk,
-		ExpiryWindow:    0,
-		UseSessionLock:  true,
-		sessionLock:     lock,
-	}
+	p := NewCachedSessionProvider(key, provider, sk, 0)
+	p.UseSessionLock = true
+	p.sessionLock = lock
 
 	got, err := p.RetrieveStsCredentials(context.Background())
 	if err != nil {
@@ -224,14 +204,9 @@ func TestCachedSession_LockHeldThroughCacheSet(t *testing.T) {
 	sk := &SessionKeyring{Keyring: wrappedKeyring}
 	provider := &testSessionProvider{creds: creds}
 
-	p := &CachedSessionProvider{
-		SessionKey:      key,
-		SessionProvider: provider,
-		Keyring:         sk,
-		ExpiryWindow:    0,
-		UseSessionLock:  true,
-		sessionLock:     lock,
-	}
+	p := NewCachedSessionProvider(key, provider, sk, 0)
+	p.UseSessionLock = true
+	p.sessionLock = lock
 
 	_, err := p.RetrieveStsCredentials(context.Background())
 	if err != nil {
@@ -259,17 +234,12 @@ func TestCachedSession_LockWaitLogs(t *testing.T) {
 	clock := &testClock{now: time.Unix(0, 0), cancel: cancel, cancelAfter: 4}
 	var logTimes []time.Time
 
-	p := &CachedSessionProvider{
-		SessionKey:      key,
-		SessionProvider: provider,
-		Keyring:         sk,
-		ExpiryWindow:    0,
-		UseSessionLock:  true,
-		sessionLock:     lock,
-		sessionLockWait: 5 * time.Second,
-		sessionLockLog:  15 * time.Second,
-		sessionNow:      clock.Now,
-	}
+	p := NewCachedSessionProvider(key, provider, sk, 0)
+	p.UseSessionLock = true
+	p.sessionLock = lock
+	p.sessionLockWait = 5 * time.Second
+	p.sessionLockLog = 15 * time.Second
+	p.sessionNow = clock.Now
 	p.sessionSleep = clock.Sleep
 	p.sessionLogf = func(string, ...any) {
 		logTimes = append(logTimes, clock.Now())

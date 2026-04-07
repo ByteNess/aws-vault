@@ -27,62 +27,57 @@ type lockedKeyring struct {
 }
 
 const (
+	// defaultKeyringLockWaitDelay is the polling interval between lock attempts.
+	// 100ms keeps latency low for the typical case where the lock holder
+	// finishes a single keyring read/write quickly.
 	defaultKeyringLockWaitDelay = 100 * time.Millisecond
-	defaultKeyringLockLogEvery  = 15 * time.Second
+
+	// defaultKeyringLockLogEvery controls how often we emit a debug log while
+	// waiting for the lock. 15s avoids log spam while still showing progress.
+	defaultKeyringLockLogEvery = 15 * time.Second
+
+	// defaultKeyringLockWarnAfter is the delay before printing a user-visible
+	// "waiting for lock" message to stderr. 5s is long enough to avoid
+	// flashing the message on normal lock contention, short enough to
+	// reassure the user that the process isn't hung.
 	defaultKeyringLockWarnAfter = 5 * time.Second
-	defaultKeyringLockTimeout   = 2 * time.Minute
+
+	// defaultKeyringLockTimeout is a safety net: the keyring.Keyring interface
+	// is not context-aware, so if the lock holder is hung (e.g. a stuck gpg
+	// subprocess in the pass backend), waiters give up after this duration
+	// rather than blocking indefinitely. 2 minutes is generous enough for any
+	// reasonable keyring operation.
+	defaultKeyringLockTimeout = 2 * time.Minute
 )
 
 // NewLockedKeyring wraps the provided keyring with a cross-process lock
 // to serialize keyring operations.
 func NewLockedKeyring(kr keyring.Keyring, lockKey string) keyring.Keyring {
 	return &lockedKeyring{
-		inner:   kr,
-		lock:    NewDefaultKeyringLock(lockKey),
-		lockKey: lockKey,
+		inner:     kr,
+		lock:      NewDefaultKeyringLock(lockKey),
+		lockKey:   lockKey,
+		lockWait:  defaultKeyringLockWaitDelay,
+		lockLog:   defaultKeyringLockLogEvery,
+		warnAfter: defaultKeyringLockWarnAfter,
+		lockNow:   time.Now,
+		lockSleep: defaultLockedKeyringSleep,
+		lockLogf:  log.Printf,
 	}
 }
 
-func (k *lockedKeyring) ensureLockDependencies() {
-	if k.lock == nil {
-		lockKey := k.lockKey
-		if lockKey == "" {
-			lockKey = "aws-vault"
-		}
-		k.lock = NewDefaultKeyringLock(lockKey)
-	}
-	if k.lockWait == 0 {
-		k.lockWait = defaultKeyringLockWaitDelay
-	}
-	if k.lockLog == 0 {
-		k.lockLog = defaultKeyringLockLogEvery
-	}
-	if k.warnAfter == 0 {
-		k.warnAfter = defaultKeyringLockWarnAfter
-	}
-	if k.lockNow == nil {
-		k.lockNow = time.Now
-	}
-	if k.lockSleep == nil {
-		k.lockSleep = func(ctx context.Context, d time.Duration) error {
-			timer := time.NewTimer(d)
-			defer timer.Stop()
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-timer.C:
-				return nil
-			}
-		}
-	}
-	if k.lockLogf == nil {
-		k.lockLogf = log.Printf
+func defaultLockedKeyringSleep(ctx context.Context, d time.Duration) error {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
 	}
 }
 
 func (k *lockedKeyring) withLock(fn func() error) error {
-	k.ensureLockDependencies()
-
 	k.mu.Lock()
 	defer k.mu.Unlock()
 

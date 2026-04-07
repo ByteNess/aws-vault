@@ -61,16 +61,16 @@ func NewSessionTokenProvider(credsProvider aws.CredentialsProvider, k keyring.Ke
 	}
 
 	if useSessionCache {
-		return &CachedSessionProvider{
-			SessionKey: SessionMetadata{
+		return NewCachedSessionProvider(
+			SessionMetadata{
 				Type:        "sts.GetSessionToken",
 				ProfileName: config.ProfileName,
 				MfaSerial:   config.MfaSerial,
 			},
-			Keyring:         &SessionKeyring{Keyring: k},
-			ExpiryWindow:    defaultExpirationWindow,
-			SessionProvider: sessionTokenProvider,
-		}, nil
+			sessionTokenProvider,
+			&SessionKeyring{Keyring: k},
+			defaultExpirationWindow,
+		), nil
 	}
 
 	return sessionTokenProvider, nil
@@ -93,16 +93,16 @@ func NewAssumeRoleProvider(credsProvider aws.CredentialsProvider, k keyring.Keyr
 	}
 
 	if useSessionCache && config.MfaSerial != "" {
-		return &CachedSessionProvider{
-			SessionKey: SessionMetadata{
+		return NewCachedSessionProvider(
+			SessionMetadata{
 				Type:        "sts.AssumeRole",
 				ProfileName: config.ProfileName,
 				MfaSerial:   config.MfaSerial,
 			},
-			Keyring:         &SessionKeyring{Keyring: k},
-			ExpiryWindow:    defaultExpirationWindow,
-			SessionProvider: p,
-		}, nil
+			p,
+			&SessionKeyring{Keyring: k},
+			defaultExpirationWindow,
+		), nil
 	}
 
 	return p, nil
@@ -123,15 +123,15 @@ func NewAssumeRoleWithWebIdentityProvider(k keyring.Keyring, config *ProfileConf
 	}
 
 	if useSessionCache {
-		return &CachedSessionProvider{
-			SessionKey: SessionMetadata{
+		return NewCachedSessionProvider(
+			SessionMetadata{
 				Type:        "sts.AssumeRoleWithWebIdentity",
 				ProfileName: config.ProfileName,
 			},
-			Keyring:         &SessionKeyring{Keyring: k},
-			ExpiryWindow:    defaultExpirationWindow,
-			SessionProvider: p,
-		}, nil
+			p,
+			&SessionKeyring{Keyring: k},
+			defaultExpirationWindow,
+		), nil
 	}
 
 	return p, nil
@@ -149,19 +149,20 @@ func NewSSORoleCredentialsProvider(k keyring.Keyring, config *ProfileConfig, use
 		RoleName:   config.SSORoleName,
 		UseStdout:  config.SSOUseStdout,
 	}
+	ssoRoleCredentialsProvider.initSSODefaults()
 
 	if useSessionCache {
 		ssoRoleCredentialsProvider.OIDCTokenCache = OIDCTokenKeyring{Keyring: k}
-		return &CachedSessionProvider{
-			SessionKey: SessionMetadata{
+		return NewCachedSessionProvider(
+			SessionMetadata{
 				Type:        "sso.GetRoleCredentials",
 				ProfileName: config.ProfileName,
 				MfaSerial:   config.SSOStartURL,
 			},
-			Keyring:         &SessionKeyring{Keyring: k},
-			ExpiryWindow:    defaultExpirationWindow,
-			SessionProvider: ssoRoleCredentialsProvider,
-		}, nil
+			ssoRoleCredentialsProvider,
+			&SessionKeyring{Keyring: k},
+			defaultExpirationWindow,
+		), nil
 	}
 
 	return ssoRoleCredentialsProvider, nil
@@ -175,15 +176,15 @@ func NewCredentialProcessProvider(k keyring.Keyring, config *ProfileConfig, useS
 	}
 
 	if useSessionCache {
-		return &CachedSessionProvider{
-			SessionKey: SessionMetadata{
+		return NewCachedSessionProvider(
+			SessionMetadata{
 				Type:        "credential_process",
 				ProfileName: config.ProfileName,
 			},
-			Keyring:         &SessionKeyring{Keyring: k},
-			ExpiryWindow:    defaultExpirationWindow,
-			SessionProvider: credentialProcessProvider,
-		}, nil
+			credentialProcessProvider,
+			&SessionKeyring{Keyring: k},
+			defaultExpirationWindow,
+		), nil
 	}
 
 	return credentialProcessProvider, nil
@@ -351,13 +352,13 @@ func (t *TempCredentialsCreator) applyParallelSafety(provider aws.CredentialsPro
 	if cached, ok := provider.(*CachedSessionProvider); ok {
 		cached.UseSessionLock = true
 		if ssoProvider, ok := cached.SessionProvider.(*SSORoleCredentialsProvider); ok {
-			ssoProvider.UseSSOTokenLock = true
+			ssoProvider.EnableSSOTokenLock()
 		}
 		return provider
 	}
 
 	if ssoProvider, ok := provider.(*SSORoleCredentialsProvider); ok {
-		ssoProvider.UseSSOTokenLock = true
+		ssoProvider.EnableSSOTokenLock()
 	}
 
 	return provider

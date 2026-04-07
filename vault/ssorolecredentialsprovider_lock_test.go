@@ -39,24 +39,27 @@ func (c *testTokenCache) Remove(string) error {
 	return nil
 }
 
+func newTestSSORoleProvider() *SSORoleCredentialsProvider {
+	p := &SSORoleCredentialsProvider{
+		StartURL: "https://sso.example",
+	}
+	p.initSSODefaults()
+	return p
+}
+
 func TestGetOIDCToken_CacheHit_NoLock(t *testing.T) {
 	cachedToken := &ssooidc.CreateTokenOutput{AccessToken: aws.String("cached")}
 	cache := &testTokenCache{token: cachedToken}
 	lock := &testLock{}
 
-	p := &SSORoleCredentialsProvider{
-		OIDCTokenCache:  cache,
-		StartURL:        "https://sso.example",
-		ssoTokenLock:    lock,
-		UseStdout:       false,
-		UseSSOTokenLock: true,
-	}
+	p := newTestSSORoleProvider()
+	p.OIDCTokenCache = cache
+	p.ssoTokenLock = lock
+	p.UseSSOTokenLock = true
 	p.newOIDCTokenFn = func(context.Context) (*ssooidc.CreateTokenOutput, error) {
 		t.Fatal("newOIDCToken should not be called on cache hit")
 		return nil, nil
 	}
-	p.ssoLogf = func(string, ...any) {}
-	p.ssoSleep = func(context.Context, time.Duration) error { return nil }
 
 	token, cached, err := p.getOIDCToken(context.Background())
 	if err != nil {
@@ -78,18 +81,13 @@ func TestGetOIDCToken_LockDisabled_SkipsLock(t *testing.T) {
 	cache := &testTokenCache{}
 	lock := &testLock{tryResults: []bool{true}}
 
-	p := &SSORoleCredentialsProvider{
-		OIDCTokenCache:  cache,
-		StartURL:        "https://sso.example",
-		ssoTokenLock:    lock,
-		UseStdout:       false,
-		UseSSOTokenLock: false,
-	}
+	p := newTestSSORoleProvider()
+	p.OIDCTokenCache = cache
+	p.ssoTokenLock = lock
+	p.UseSSOTokenLock = false
 	p.newOIDCTokenFn = func(context.Context) (*ssooidc.CreateTokenOutput, error) {
 		return freshToken, nil
 	}
-	p.ssoLogf = func(string, ...any) {}
-	p.ssoSleep = func(context.Context, time.Duration) error { return nil }
 
 	token, cached, err := p.getOIDCToken(context.Background())
 	if err != nil {
@@ -115,20 +113,16 @@ func TestGetOIDCToken_LockMiss_ThenCacheHit_NoLock(t *testing.T) {
 	lock := &testLock{tryResults: []bool{false}}
 	clock := &testClock{now: time.Unix(0, 0)}
 
-	p := &SSORoleCredentialsProvider{
-		OIDCTokenCache:  cache,
-		StartURL:        "https://sso.example",
-		ssoTokenLock:    lock,
-		UseStdout:       false,
-		UseSSOTokenLock: true,
-		ssoLockWait:     5 * time.Second,
-		ssoNow:          clock.Now,
-	}
+	p := newTestSSORoleProvider()
+	p.OIDCTokenCache = cache
+	p.ssoTokenLock = lock
+	p.UseSSOTokenLock = true
+	p.ssoLockWait = 5 * time.Second
+	p.ssoNow = clock.Now
 	p.newOIDCTokenFn = func(context.Context) (*ssooidc.CreateTokenOutput, error) {
 		t.Fatal("newOIDCToken should not be called when cache fills while waiting")
 		return nil, nil
 	}
-	p.ssoLogf = func(string, ...any) {}
 	p.ssoSleep = func(ctx context.Context, d time.Duration) error {
 		clock.now = clock.now.Add(d)
 		cache.token = cachedToken
@@ -163,19 +157,14 @@ func TestGetOIDCToken_LockAcquired_RecheckCache(t *testing.T) {
 		}
 	}
 
-	p := &SSORoleCredentialsProvider{
-		OIDCTokenCache:  cache,
-		StartURL:        "https://sso.example",
-		ssoTokenLock:    lock,
-		UseStdout:       false,
-		UseSSOTokenLock: true,
-	}
+	p := newTestSSORoleProvider()
+	p.OIDCTokenCache = cache
+	p.ssoTokenLock = lock
+	p.UseSSOTokenLock = true
 	p.newOIDCTokenFn = func(context.Context) (*ssooidc.CreateTokenOutput, error) {
 		t.Fatal("newOIDCToken should not be called when cache is filled after lock")
 		return nil, nil
 	}
-	p.ssoLogf = func(string, ...any) {}
-	p.ssoSleep = func(context.Context, time.Duration) error { return nil }
 
 	token, cached, err := p.getOIDCToken(context.Background())
 	if err != nil {
@@ -197,18 +186,13 @@ func TestGetOIDCToken_LockHeldThroughCacheSet(t *testing.T) {
 	lock := &testLock{tryResults: []bool{true}}
 	cache := &testTokenCache{setLock: lock}
 
-	p := &SSORoleCredentialsProvider{
-		OIDCTokenCache:  cache,
-		StartURL:        "https://sso.example",
-		ssoTokenLock:    lock,
-		UseStdout:       false,
-		UseSSOTokenLock: true,
-	}
+	p := newTestSSORoleProvider()
+	p.OIDCTokenCache = cache
+	p.ssoTokenLock = lock
+	p.UseSSOTokenLock = true
 	p.newOIDCTokenFn = func(context.Context) (*ssooidc.CreateTokenOutput, error) {
 		return freshToken, nil
 	}
-	p.ssoLogf = func(string, ...any) {}
-	p.ssoSleep = func(context.Context, time.Duration) error { return nil }
 
 	token, cached, err := p.getOIDCToken(context.Background())
 	if err != nil {
@@ -233,18 +217,14 @@ func TestGetOIDCToken_UseStdout_SkipsLock(t *testing.T) {
 	lock := &testLock{tryResults: []bool{true}}
 	cache := &testTokenCache{}
 
-	p := &SSORoleCredentialsProvider{
-		OIDCTokenCache:  cache,
-		StartURL:        "https://sso.example",
-		ssoTokenLock:    lock,
-		UseStdout:       true,
-		UseSSOTokenLock: true,
-	}
+	p := newTestSSORoleProvider()
+	p.OIDCTokenCache = cache
+	p.ssoTokenLock = lock
+	p.UseStdout = true
+	p.UseSSOTokenLock = true
 	p.newOIDCTokenFn = func(context.Context) (*ssooidc.CreateTokenOutput, error) {
 		return freshToken, nil
 	}
-	p.ssoLogf = func(string, ...any) {}
-	p.ssoSleep = func(context.Context, time.Duration) error { return nil }
 
 	token, cached, err := p.getOIDCToken(context.Background())
 	if err != nil {
@@ -268,23 +248,20 @@ func TestGetOIDCToken_LockWaitLogs(t *testing.T) {
 	clock := &testClock{now: time.Unix(0, 0), cancel: cancel, cancelAfter: 4}
 	var logTimes []time.Time
 
-	p := &SSORoleCredentialsProvider{
-		OIDCTokenCache:  cache,
-		StartURL:        "https://sso.example",
-		ssoTokenLock:    lock,
-		UseStdout:       false,
-		UseSSOTokenLock: true,
-		ssoLockWait:     5 * time.Second,
-		ssoLockLog:      15 * time.Second,
-		ssoNow:          clock.Now,
+	p := newTestSSORoleProvider()
+	p.OIDCTokenCache = cache
+	p.ssoTokenLock = lock
+	p.UseSSOTokenLock = true
+	p.ssoLockWait = 5 * time.Second
+	p.ssoLockLog = 15 * time.Second
+	p.ssoNow = clock.Now
+	p.ssoSleep = clock.Sleep
+	p.ssoLogf = func(string, ...any) {
+		logTimes = append(logTimes, clock.Now())
 	}
 	p.newOIDCTokenFn = func(context.Context) (*ssooidc.CreateTokenOutput, error) {
 		t.Fatal("newOIDCToken should not be called when lock never acquired")
 		return nil, nil
-	}
-	p.ssoSleep = clock.Sleep
-	p.ssoLogf = func(string, ...any) {
-		logTimes = append(logTimes, clock.Now())
 	}
 
 	_, _, err := p.getOIDCToken(ctx)

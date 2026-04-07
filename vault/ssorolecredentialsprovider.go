@@ -53,14 +53,40 @@ func millisecondsTimeValue(v int64) time.Time {
 }
 
 const (
+	// defaultSSOLockWaitDelay is the polling interval between lock attempts.
+	// 100ms keeps latency low for the typical case where the lock holder
+	// finishes quickly (browser auth + token cache write).
 	defaultSSOLockWaitDelay = 100 * time.Millisecond
-	defaultSSOLockLogEvery  = 15 * time.Second
+
+	// defaultSSOLockLogEvery controls how often we emit a debug log while
+	// waiting for the lock. 15s avoids log spam while still showing progress
+	// during long waits (e.g. slow browser auth).
+	defaultSSOLockLogEvery = 15 * time.Second
+
+	// defaultSSOLockWarnAfter is the delay before printing a user-visible
+	// "waiting for lock" message to stderr. 5s is long enough to avoid
+	// flashing the message on normal lock contention, short enough to
+	// reassure the user that the process isn't hung.
 	defaultSSOLockWarnAfter = 5 * time.Second
+
 	// ssoRetryTimeout is a pathological safety net: if GetRoleCredentials is still
 	// returning 429s after this duration, give up and surface the error to the user.
-	ssoRetryTimeout        = 5 * time.Minute
-	ssoRetryBase           = 200 * time.Millisecond
-	ssoRetryMax            = 5 * time.Second
+	// 5 minutes is generous but accommodates burst-heavy credential_process workloads
+	// (e.g. Terraform with hundreds of parallel invocations).
+	ssoRetryTimeout = 5 * time.Minute
+
+	// ssoRetryBase is the initial backoff delay before the first retry.
+	// 200ms is short enough to avoid unnecessary latency on transient 429s
+	// while still giving the SSO service breathing room.
+	ssoRetryBase = 200 * time.Millisecond
+
+	// ssoRetryMax caps the exponential backoff so that individual waits
+	// don't grow unreasonably large between attempts.
+	ssoRetryMax = 5 * time.Second
+
+	// ssoRetryAfterJitterMin and ssoRetryAfterJitterMax add ±10-30% jitter
+	// to Retry-After values to decorrelate concurrent processes that all
+	// received the same Retry-After header from the SSO service.
 	ssoRetryAfterJitterMin = 1.1
 	ssoRetryAfterJitterMax = 1.3
 )
@@ -77,27 +103,23 @@ func defaultSSOSleep(ctx context.Context, d time.Duration) error {
 	}
 }
 
-func (p *SSORoleCredentialsProvider) ensureSSODependencies() {
-	if p.ssoTokenLock == nil && !p.UseStdout && p.UseSSOTokenLock {
+// initSSODefaults sets production defaults for all internal dependencies.
+// Called by the constructor; tests can override unexported fields afterward.
+func (p *SSORoleCredentialsProvider) initSSODefaults() {
+	p.ssoLockWait = defaultSSOLockWaitDelay
+	p.ssoLockLog = defaultSSOLockLogEvery
+	p.ssoNow = time.Now
+	p.ssoSleep = defaultSSOSleep
+	p.ssoLogf = log.Printf
+	p.newOIDCTokenFn = p.newOIDCToken
+}
+
+// EnableSSOTokenLock creates the SSO token lock for cross-process coordination.
+// Called by applyParallelSafety after setting UseSSOTokenLock.
+func (p *SSORoleCredentialsProvider) EnableSSOTokenLock() {
+	p.UseSSOTokenLock = true
+	if !p.UseStdout && p.ssoTokenLock == nil {
 		p.ssoTokenLock = NewDefaultSSOTokenLock(p.StartURL)
-	}
-	if p.ssoLockWait == 0 {
-		p.ssoLockWait = defaultSSOLockWaitDelay
-	}
-	if p.ssoLockLog == 0 {
-		p.ssoLockLog = defaultSSOLockLogEvery
-	}
-	if p.ssoNow == nil {
-		p.ssoNow = time.Now
-	}
-	if p.ssoSleep == nil {
-		p.ssoSleep = defaultSSOSleep
-	}
-	if p.ssoLogf == nil {
-		p.ssoLogf = log.Printf
-	}
-	if p.newOIDCTokenFn == nil {
-		p.newOIDCTokenFn = p.newOIDCToken
 	}
 }
 
@@ -118,8 +140,6 @@ func (p *SSORoleCredentialsProvider) Retrieve(ctx context.Context) (aws.Credenti
 }
 
 func (p *SSORoleCredentialsProvider) getRoleCredentials(ctx context.Context) (*ssotypes.RoleCredentials, error) {
-	p.ensureSSODependencies()
-
 	token, cached, err := p.getOIDCToken(ctx)
 	if err != nil {
 		return nil, err
@@ -208,8 +228,6 @@ func (p *SSORoleCredentialsProvider) getRoleCredentialsAsStsCredemtials(ctx cont
 }
 
 func (p *SSORoleCredentialsProvider) getOIDCToken(ctx context.Context) (token *ssooidc.CreateTokenOutput, cached bool, err error) {
-	p.ensureSSODependencies()
-
 	token, cached, err = p.getCachedOIDCToken()
 	if err != nil || token != nil {
 		return token, cached, err
