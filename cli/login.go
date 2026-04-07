@@ -79,7 +79,10 @@ func ConfigureLoginCommand(app *kingpin.Application, a *AwsVault) {
 		input.Config.NonChainedGetSessionTokenDuration = input.SessionDuration
 		input.Config.AssumeRoleDuration = input.SessionDuration
 		input.Config.GetFederationTokenDuration = input.SessionDuration
-		keyring, err := a.Keyring()
+		// Login uses the raw keyring without the parallel-safe lock wrapper.
+		// Console login is inherently single-use — there's no concurrent-access
+		// problem for --parallel-safe to solve here.
+		keyring, err := a.RawKeyring()
 		if err != nil {
 			return err
 		}

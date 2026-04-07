@@ -39,8 +39,9 @@ type AwsVault struct {
 	promptDriver   string
 	ParallelSafe   bool
 
-	keyringImpl   keyring.Keyring
-	awsConfigFile *vault.ConfigFile
+	rawKeyringImpl keyring.Keyring
+	keyringImpl    keyring.Keyring
+	awsConfigFile  *vault.ConfigFile
 	UseBiometrics bool
 }
 
@@ -69,22 +70,38 @@ func (a *AwsVault) PromptDriver(avoidTerminalPrompt bool) string {
 }
 
 func (a *AwsVault) Keyring() (keyring.Keyring, error) {
-	if a.keyringImpl == nil {
+	raw, err := a.rawKeyring()
+	if err != nil {
+		return nil, err
+	}
+	if a.ParallelSafe {
+		if a.keyringImpl == nil {
+			lockKey := a.keyringLockKey()
+			a.keyringImpl = vault.NewLockedKeyring(raw, lockKey)
+		}
+		return a.keyringImpl, nil
+	}
+	return raw, nil
+}
+
+// RawKeyring returns the keyring without the parallel-safe lock wrapper.
+// Used by commands like login that are excluded from --parallel-safe.
+func (a *AwsVault) RawKeyring() (keyring.Keyring, error) {
+	return a.rawKeyring()
+}
+
+func (a *AwsVault) rawKeyring() (keyring.Keyring, error) {
+	if a.rawKeyringImpl == nil {
 		if a.KeyringBackend != "" {
 			a.KeyringConfig.AllowedBackends = []keyring.BackendType{keyring.BackendType(a.KeyringBackend)}
 		}
 		var err error
-		a.keyringImpl, err = keyring.Open(a.KeyringConfig)
+		a.rawKeyringImpl, err = keyring.Open(a.KeyringConfig)
 		if err != nil {
 			return nil, err
 		}
-		if a.ParallelSafe {
-			lockKey := a.keyringLockKey()
-			a.keyringImpl = vault.NewLockedKeyring(a.keyringImpl, lockKey)
-		}
 	}
-
-	return a.keyringImpl, nil
+	return a.rawKeyringImpl, nil
 }
 
 // keyringLockKey returns a backend-specific key for the cross-process keyring
