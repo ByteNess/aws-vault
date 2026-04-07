@@ -112,7 +112,7 @@ func (p *SSORoleCredentialsProvider) initSSODefaults() {
 }
 
 // EnableSSOTokenLock creates the SSO token lock for cross-process coordination.
-// Called by applyParallelSafety after setting UseSSOTokenLock.
+// Called at construction time when parallelSafe is true.
 func (p *SSORoleCredentialsProvider) EnableSSOTokenLock() {
 	p.UseSSOTokenLock = true
 	if !p.UseStdout && p.ssoTokenLock == nil {

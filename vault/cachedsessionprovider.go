@@ -58,12 +58,13 @@ const (
 // NewCachedSessionProvider creates a CachedSessionProvider with production
 // defaults for all internal dependencies. Tests can override unexported fields
 // (sessionLock, sessionNow, etc.) after construction to inject mocks.
-func NewCachedSessionProvider(key SessionMetadata, provider StsSessionProvider, keyring *SessionKeyring, expiryWindow time.Duration) *CachedSessionProvider {
+func NewCachedSessionProvider(key SessionMetadata, provider StsSessionProvider, keyring *SessionKeyring, expiryWindow time.Duration, useSessionLock bool) *CachedSessionProvider {
 	return &CachedSessionProvider{
 		SessionKey:      key,
 		SessionProvider: provider,
 		Keyring:         keyring,
 		ExpiryWindow:    expiryWindow,
+		UseSessionLock:  useSessionLock,
 		sessionLock:     NewDefaultLock("aws-vault.session", key.StringForMatching()),
 		sessionLockWait: defaultSessionLockWaitDelay,
 		sessionLockLog:  defaultSessionLockLogEvery,
