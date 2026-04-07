@@ -2,7 +2,6 @@ package vault
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -103,7 +102,7 @@ func (p *CachedSessionProvider) getSessionWithLock(ctx context.Context) (*ststyp
 	ctx, cancel := context.WithTimeout(ctx, defaultSessionLockTimeout)
 	defer cancel()
 
-	waiter := newLockWaiter(lockWaiterOpts{
+	return withProcessLock(ctx, p.sessionLock, lockWaiterOpts{
 		Lock:      p.sessionLock,
 		WarnMsg:   "Waiting for session lock at %s\n",
 		LogMsg:    "Waiting for session lock at %s",
@@ -116,51 +115,28 @@ func (p *CachedSessionProvider) getSessionWithLock(ctx context.Context) (*ststyp
 		Warnf: func(format string, args ...any) {
 			fmt.Fprintf(os.Stderr, format, args...)
 		},
-	})
-
-	for {
+	}, "session", func() (processLockResult[*ststypes.Credentials], error) {
 		creds, cached, err := p.getCachedSession()
 		if err == nil && cached {
+			return processLockResult[*ststypes.Credentials]{value: creds, ok: true}, nil
+		}
+		return processLockResult[*ststypes.Credentials]{}, nil
+	}, func(ctx context.Context) (*ststypes.Credentials, error) {
+		// Recheck cache after acquiring lock — another process may have filled it.
+		creds, cached, cacheErr := p.getCachedSession()
+		if cacheErr == nil && cached {
 			return creds, nil
 		}
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
-		}
 
-		locked, err := p.sessionLock.TryLock()
+		creds, err := p.SessionProvider.RetrieveStsCredentials(ctx)
 		if err != nil {
 			return nil, err
 		}
-		if locked {
-			return p.doLockedSessionWork(ctx)
+		if err = p.Keyring.Set(p.SessionKey, creds); err != nil {
+			return nil, err
 		}
-		if sleepErr := waiter.sleepAfterMiss(ctx); sleepErr != nil {
-			return nil, sleepErr
-		}
-	}
-}
-
-func (p *CachedSessionProvider) doLockedSessionWork(ctx context.Context) (creds *ststypes.Credentials, err error) {
-	defer func() {
-		if unlockErr := p.sessionLock.Unlock(); unlockErr != nil {
-			err = errors.Join(err, fmt.Errorf("unlock session lock: %w", unlockErr))
-		}
-	}()
-
-	creds, cached, cacheErr := p.getCachedSession()
-	if cacheErr == nil && cached {
 		return creds, nil
-	}
-
-	creds, err = p.SessionProvider.RetrieveStsCredentials(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if err = p.Keyring.Set(p.SessionKey, creds); err != nil {
-		return nil, err
-	}
-
-	return creds, nil
+	})
 }
 
 func (p *CachedSessionProvider) getSessionWithoutLock(ctx context.Context) (*ststypes.Credentials, error) {

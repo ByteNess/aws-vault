@@ -2,7 +2,6 @@ package vault
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -74,7 +73,14 @@ func (k *lockedKeyring) withLock(fn func() error) error {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 
-	waiter := newLockWaiter(lockWaiterOpts{
+	// The keyring.Keyring interface is not context-aware, so we cannot cancel
+	// in-flight keyring operations. This timeout is a safety net for the lock-wait
+	// loop: if the lock holder is hung (e.g. a stuck gpg subprocess in the pass
+	// backend), waiters will eventually give up rather than blocking indefinitely.
+	ctx, cancel := context.WithTimeout(context.Background(), defaultKeyringLockTimeout)
+	defer cancel()
+
+	_, err := withProcessLock(ctx, k.lock, lockWaiterOpts{
 		Lock:      k.lock,
 		WarnMsg:   "Waiting for keyring lock at %s\n",
 		LogMsg:    "Waiting for keyring lock at %s",
@@ -87,32 +93,10 @@ func (k *lockedKeyring) withLock(fn func() error) error {
 		Warnf: func(format string, args ...any) {
 			fmt.Fprintf(os.Stderr, format, args...)
 		},
+	}, "keyring", nil, func(ctx context.Context) (struct{}, error) {
+		return struct{}{}, fn()
 	})
-
-	// The keyring.Keyring interface is not context-aware, so we cannot cancel
-	// in-flight keyring operations. This timeout is a safety net for the lock-wait
-	// loop: if the lock holder is hung (e.g. a stuck gpg subprocess in the pass
-	// backend), waiters will eventually give up rather than blocking indefinitely.
-	ctx, cancel := context.WithTimeout(context.Background(), defaultKeyringLockTimeout)
-	defer cancel()
-
-	for {
-		locked, err := k.lock.TryLock()
-		if err != nil {
-			return err
-		}
-		if locked {
-			fnErr := fn()
-			if unlockErr := k.lock.Unlock(); unlockErr != nil {
-				return errors.Join(fnErr, fmt.Errorf("unlock keyring lock: %w", unlockErr))
-			}
-			return fnErr
-		}
-
-		if err = waiter.sleepAfterMiss(ctx); err != nil {
-			return err
-		}
-	}
+	return err
 }
 
 func (k *lockedKeyring) Get(key string) (keyring.Item, error) {

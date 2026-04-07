@@ -178,7 +178,7 @@ func (p *SSORoleCredentialsProvider) getRoleCredentials(ctx context.Context) (*s
 
 		if isSSORateLimitError(err) {
 			rateLimitCount++
-			remaining := time.Until(deadline)
+			remaining := deadline.Sub(p.ssoNow())
 			if 0 < remaining {
 				var delay time.Duration
 				if retryAfter, ok := retryAfterFromError(err); ok {
@@ -272,11 +272,16 @@ func (p *SSORoleCredentialsProvider) createAndCacheOIDCToken(ctx context.Context
 	return token, false, nil
 }
 
+type oidcTokenResult struct {
+	token  *ssooidc.CreateTokenOutput
+	cached bool
+}
+
 func (p *SSORoleCredentialsProvider) getOIDCTokenWithLock(ctx context.Context) (token *ssooidc.CreateTokenOutput, cached bool, err error) {
 	ctx, cancel := context.WithTimeout(ctx, defaultSSOLockTimeout)
 	defer cancel()
 
-	waiter := newLockWaiter(lockWaiterOpts{
+	result, err := withProcessLock(ctx, p.ssoTokenLock, lockWaiterOpts{
 		Lock:      p.ssoTokenLock,
 		WarnMsg:   "Waiting for SSO lock at %s\n",
 		LogMsg:    "Waiting for SSO lock at %s",
@@ -289,55 +294,39 @@ func (p *SSORoleCredentialsProvider) getOIDCTokenWithLock(ctx context.Context) (
 		Warnf: func(format string, args ...any) {
 			fmt.Fprintf(os.Stderr, format, args...)
 		},
-	})
-
-	for {
-		token, cached, err = p.getCachedOIDCToken()
-		if err != nil || token != nil {
-			return token, cached, err
-		}
-		if ctx.Err() != nil {
-			return nil, false, ctx.Err()
-		}
-
-		locked, err := p.ssoTokenLock.TryLock()
+	}, "SSO token", func() (processLockResult[oidcTokenResult], error) {
+		token, cached, err := p.getCachedOIDCToken()
 		if err != nil {
-			return nil, false, err
+			return processLockResult[oidcTokenResult]{}, err
 		}
-		if locked {
-			return p.doLockedOIDCTokenWork(ctx)
+		if token != nil {
+			return processLockResult[oidcTokenResult]{value: oidcTokenResult{token, cached}, ok: true}, nil
+		}
+		return processLockResult[oidcTokenResult]{}, nil
+	}, func(ctx context.Context) (oidcTokenResult, error) {
+		// Recheck cache after acquiring lock — another process may have filled it.
+		token, cached, err := p.getCachedOIDCToken()
+		if err != nil {
+			return oidcTokenResult{}, err
+		}
+		if token != nil {
+			return oidcTokenResult{token, cached}, nil
 		}
 
-		if err = waiter.sleepAfterMiss(ctx); err != nil {
-			return nil, false, err
+		token, err = p.newOIDCTokenFn(ctx)
+		if err != nil {
+			return oidcTokenResult{}, err
 		}
-	}
-}
 
-func (p *SSORoleCredentialsProvider) doLockedOIDCTokenWork(ctx context.Context) (token *ssooidc.CreateTokenOutput, cached bool, err error) {
-	defer func() {
-		if unlockErr := p.ssoTokenLock.Unlock(); unlockErr != nil {
-			err = errors.Join(err, fmt.Errorf("unlock SSO token lock: %w", unlockErr))
+		if p.OIDCTokenCache != nil {
+			if err = p.OIDCTokenCache.Set(p.StartURL, token); err != nil {
+				return oidcTokenResult{}, err
+			}
 		}
-	}()
 
-	token, cached, err = p.getCachedOIDCToken()
-	if err != nil || token != nil {
-		return token, cached, err
-	}
-
-	token, err = p.newOIDCTokenFn(ctx)
-	if err != nil {
-		return nil, false, err
-	}
-
-	if p.OIDCTokenCache != nil {
-		if err = p.OIDCTokenCache.Set(p.StartURL, token); err != nil {
-			return nil, false, err
-		}
-	}
-
-	return token, false, nil
+		return oidcTokenResult{token, false}, nil
+	})
+	return result.token, result.cached, err
 }
 
 func (p *SSORoleCredentialsProvider) newOIDCToken(ctx context.Context) (*ssooidc.CreateTokenOutput, error) {
