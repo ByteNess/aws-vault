@@ -125,23 +125,10 @@ sso_registration_scopes=sso:account:access
 }
 
 func TestTempCredentialsProviderParallelSafeGetSessionToken(t *testing.T) {
-	f := newConfigFile(t, []byte(`
-[profile creds]
-region = us-east-1
-`))
-	defer os.Remove(f)
-	configFile, err := vault.LoadConfig(f)
-	if err != nil {
-		t.Fatal(err)
-	}
-	configLoader := &vault.ConfigLoader{
-		File:          configFile,
-		ActiveProfile: "creds",
-		BaseConfig:    vault.ProfileConfig{MfaPromptMethod: "terminal"},
-	}
-	config, err := configLoader.GetProfileConfig("creds")
-	if err != nil {
-		t.Fatalf("Should have found a profile: %v", err)
+	config := &vault.ProfileConfig{
+		ProfileName: "creds",
+		Region:      "us-east-1",
+		MfaToken:    "123456", // provide token to avoid interactive prompt
 	}
 
 	ckr := &vault.CredentialKeyring{Keyring: keyring.NewArrayKeyring([]keyring.Item{
@@ -172,27 +159,18 @@ region = us-east-1
 }
 
 func TestTempCredentialsProviderParallelSafeAssumeRole(t *testing.T) {
-	f := newConfigFile(t, []byte(`
-[profile source]
-region = us-east-1
-
-[profile role]
-source_profile = source
-role_arn = arn:aws:iam::222222222222:role/role
-mfa_serial = arn:aws:iam::111111111111:mfa/user
-region = us-east-1
-`))
-	defer os.Remove(f)
-	configFile, err := vault.LoadConfig(f)
-	if err != nil {
-		t.Fatal(err)
+	config := &vault.ProfileConfig{
+		ProfileName:       "role",
+		Region:            "us-east-1",
+		RoleARN:           "arn:aws:iam::222222222222:role/role",
+		MfaSerial:         "arn:aws:iam::111111111111:mfa/user",
+		MfaToken:          "123456", // provide token to avoid interactive prompt
+		SourceProfileName: "source",
+		SourceProfile: &vault.ProfileConfig{
+			ProfileName: "source",
+			Region:      "us-east-1",
+		},
 	}
-	configLoader := &vault.ConfigLoader{File: configFile, ActiveProfile: "role"}
-	config, err := configLoader.GetProfileConfig("role")
-	if err != nil {
-		t.Fatalf("Should have found a profile: %v", err)
-	}
-	config.MfaToken = "123456" // avoid interactive MFA prompt
 
 	ckr := &vault.CredentialKeyring{Keyring: keyring.NewArrayKeyring([]keyring.Item{
 		{Key: "source", Data: []byte(`{"AccessKeyID":"AKIAIOSFODNN7EXAMPLE","SecretAccessKey":"secret"}`)},
