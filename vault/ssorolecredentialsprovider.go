@@ -84,11 +84,13 @@ const (
 	// don't grow unreasonably large between attempts.
 	ssoRetryMax = 5 * time.Second
 
-	// ssoRetryAfterJitterMin and ssoRetryAfterJitterMax add ±10-30% jitter
-	// to Retry-After values to decorrelate concurrent processes that all
-	// received the same Retry-After header from the SSO service.
-	ssoRetryAfterJitterMin = 1.1
-	ssoRetryAfterJitterMax = 1.3
+	// ssoRetryAfterJitterMin and ssoRetryAfterJitterMax define the full-jitter
+	// range as a multiplier of the base delay. 0.5x-1.5x ensures retries
+	// spread across a wide window — some fire earlier than the base delay,
+	// some later — which decorrelates concurrent processes that all received
+	// the same Retry-After header from the SSO service.
+	ssoRetryAfterJitterMin = 0.5
+	ssoRetryAfterJitterMax = 1.5
 )
 
 
