@@ -74,20 +74,20 @@ func (k *lockedKeyring) withLock(fn func() error) error {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 
-	waiter := newLockWaiter(
-		k.lock,
-		"Waiting for keyring lock at %s\n",
-		"Waiting for keyring lock at %s",
-		k.lockWait,
-		k.lockLog,
-		k.warnAfter,
-		k.lockNow,
-		k.lockSleep,
-		k.lockLogf,
-		func(format string, args ...any) {
+	waiter := newLockWaiter(lockWaiterOpts{
+		Lock:      k.lock,
+		WarnMsg:   "Waiting for keyring lock at %s\n",
+		LogMsg:    "Waiting for keyring lock at %s",
+		WaitDelay: k.lockWait,
+		LogEvery:  k.lockLog,
+		WarnAfter: k.warnAfter,
+		Now:       k.lockNow,
+		Sleep:     k.lockSleep,
+		Logf:      k.lockLogf,
+		Warnf: func(format string, args ...any) {
 			fmt.Fprintf(os.Stderr, format, args...)
 		},
-	)
+	})
 
 	// The keyring.Keyring interface is not context-aware, so we cannot cancel
 	// in-flight keyring operations. This timeout is a safety net for the lock-wait

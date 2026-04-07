@@ -7,79 +7,54 @@ import (
 
 type lockLogger func(string, ...any)
 
+// lockWaiterOpts configures a lockWaiter. All fields are required except
+// Now, Sleep, and Warnf which have sensible defaults.
+type lockWaiterOpts struct {
+	Lock      ProcessLock
+	WarnMsg   string
+	LogMsg    string
+	WaitDelay time.Duration
+	LogEvery  time.Duration
+	WarnAfter time.Duration
+	Now       func() time.Time
+	Sleep     func(context.Context, time.Duration) error
+	Logf      lockLogger
+	Warnf     lockLogger
+}
+
 type lockWaiter struct {
-	lock      ProcessLock
-	waitDelay time.Duration
-	logEvery  time.Duration
-	warnAfter time.Duration
-	now       func() time.Time
-	sleep     func(context.Context, time.Duration) error
-	logf      lockLogger
-	warnf     lockLogger
-	warnMsg   string
-	logMsg    string
+	opts lockWaiterOpts
 
 	lastLog   time.Time
 	waitStart time.Time
 	warned    bool
 }
 
-func newLockWaiter(
-	lock ProcessLock,
-	warnMsg string,
-	logMsg string,
-	waitDelay time.Duration,
-	logEvery time.Duration,
-	warnAfter time.Duration,
-	now func() time.Time,
-	sleep func(context.Context, time.Duration) error,
-	logf lockLogger,
-	warnf lockLogger,
-) *lockWaiter {
-	if now == nil {
-		now = time.Now
+func newLockWaiter(opts lockWaiterOpts) *lockWaiter {
+	if opts.Now == nil {
+		opts.Now = time.Now
 	}
-	if sleep == nil {
-		sleep = func(ctx context.Context, d time.Duration) error {
-			timer := time.NewTimer(d)
-			defer timer.Stop()
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-timer.C:
-				return nil
-			}
-		}
+	if opts.Sleep == nil {
+		opts.Sleep = defaultContextSleep
 	}
-	return &lockWaiter{
-		lock:      lock,
-		waitDelay: waitDelay,
-		logEvery:  logEvery,
-		warnAfter: warnAfter,
-		now:       now,
-		sleep:     sleep,
-		logf:      logf,
-		warnf:     warnf,
-		warnMsg:   warnMsg,
-		logMsg:    logMsg,
-	}
+	return &lockWaiter{opts: opts}
 }
 
 func (w *lockWaiter) sleepAfterMiss(ctx context.Context) error {
-	now := w.now()
+	now := w.opts.Now()
 	if w.waitStart.IsZero() {
 		w.waitStart = now
 	}
-	if !w.warned && w.warnAfter <= now.Sub(w.waitStart) {
-		if w.warnf != nil {
-			w.warnf(w.warnMsg, w.lock.Path())
+	if !w.warned && w.opts.WarnAfter <= now.Sub(w.waitStart) {
+		if w.opts.Warnf != nil {
+			w.opts.Warnf(w.opts.WarnMsg, w.opts.Lock.Path())
 		}
 		w.warned = true
 	}
-	if w.logf != nil && (w.lastLog.IsZero() || w.logEvery <= now.Sub(w.lastLog)) {
-		w.logf(w.logMsg, w.lock.Path())
+	if w.opts.Logf != nil && (w.lastLog.IsZero() || w.opts.LogEvery <= now.Sub(w.lastLog)) {
+		w.opts.Logf(w.opts.LogMsg, w.opts.Lock.Path())
 		w.lastLog = now
 	}
 
-	return w.sleep(ctx, w.waitDelay)
+	return w.opts.Sleep(ctx, w.opts.WaitDelay)
 }

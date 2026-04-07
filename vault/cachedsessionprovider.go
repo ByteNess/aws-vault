@@ -95,20 +95,20 @@ func (p *CachedSessionProvider) getCachedSession() (creds *ststypes.Credentials,
 }
 
 func (p *CachedSessionProvider) getSessionWithLock(ctx context.Context) (*ststypes.Credentials, error) {
-	waiter := newLockWaiter(
-		p.sessionLock,
-		"Waiting for session lock at %s\n",
-		"Waiting for session lock at %s",
-		p.sessionLockWait,
-		p.sessionLockLog,
-		defaultSessionLockWarnAfter,
-		p.sessionNow,
-		p.sessionSleep,
-		p.sessionLogf,
-		func(format string, args ...any) {
+	waiter := newLockWaiter(lockWaiterOpts{
+		Lock:      p.sessionLock,
+		WarnMsg:   "Waiting for session lock at %s\n",
+		LogMsg:    "Waiting for session lock at %s",
+		WaitDelay: p.sessionLockWait,
+		LogEvery:  p.sessionLockLog,
+		WarnAfter: defaultSessionLockWarnAfter,
+		Now:       p.sessionNow,
+		Sleep:     p.sessionSleep,
+		Logf:      p.sessionLogf,
+		Warnf: func(format string, args ...any) {
 			fmt.Fprintf(os.Stderr, format, args...)
 		},
-	)
+	})
 
 	for {
 		creds, cached, err := p.getCachedSession()

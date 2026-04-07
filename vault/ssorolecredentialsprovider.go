@@ -265,20 +265,20 @@ func (p *SSORoleCredentialsProvider) createAndCacheOIDCToken(ctx context.Context
 }
 
 func (p *SSORoleCredentialsProvider) getOIDCTokenWithLock(ctx context.Context) (token *ssooidc.CreateTokenOutput, cached bool, err error) {
-	waiter := newLockWaiter(
-		p.ssoTokenLock,
-		"Waiting for SSO lock at %s\n",
-		"Waiting for SSO lock at %s",
-		p.ssoLockWait,
-		p.ssoLockLog,
-		defaultSSOLockWarnAfter,
-		p.ssoNow,
-		p.ssoSleep,
-		p.ssoLogf,
-		func(format string, args ...any) {
+	waiter := newLockWaiter(lockWaiterOpts{
+		Lock:      p.ssoTokenLock,
+		WarnMsg:   "Waiting for SSO lock at %s\n",
+		LogMsg:    "Waiting for SSO lock at %s",
+		WaitDelay: p.ssoLockWait,
+		LogEvery:  p.ssoLockLog,
+		WarnAfter: defaultSSOLockWarnAfter,
+		Now:       p.ssoNow,
+		Sleep:     p.ssoSleep,
+		Logf:      p.ssoLogf,
+		Warnf: func(format string, args ...any) {
 			fmt.Fprintf(os.Stderr, format, args...)
 		},
-	)
+	})
 
 	for {
 		token, cached, err = p.getCachedOIDCToken()
