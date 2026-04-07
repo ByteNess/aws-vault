@@ -25,7 +25,7 @@ type CachedSessionProvider struct {
 	Keyring         *SessionKeyring
 	ExpiryWindow    time.Duration
 	UseSessionLock  bool
-	sessionLock     SessionCacheLock
+	sessionLock     ProcessLock
 	sessionLockWait time.Duration
 	sessionLockLog  time.Duration
 	sessionNow      func() time.Time
@@ -60,7 +60,7 @@ func NewCachedSessionProvider(key SessionMetadata, provider StsSessionProvider, 
 		SessionProvider: provider,
 		Keyring:         keyring,
 		ExpiryWindow:    expiryWindow,
-		sessionLock:     NewDefaultSessionCacheLock(key.StringForMatching()),
+		sessionLock:     NewDefaultLock("aws-vault.session", key.StringForMatching()),
 		sessionLockWait: defaultSessionLockWaitDelay,
 		sessionLockLog:  defaultSessionLockLogEvery,
 		sessionNow:      time.Now,

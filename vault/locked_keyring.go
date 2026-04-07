@@ -14,7 +14,7 @@ import (
 
 type lockedKeyring struct {
 	inner keyring.Keyring
-	lock  KeyringLock
+	lock  ProcessLock
 	// mu serializes in-process access. The flock only coordinates across
 	// processes; without this mutex, concurrent goroutines in the same
 	// process could race on the try-lock loop.
@@ -58,7 +58,7 @@ const (
 func NewLockedKeyring(kr keyring.Keyring, lockKey string) keyring.Keyring {
 	return &lockedKeyring{
 		inner:     kr,
-		lock:      NewDefaultKeyringLock(lockKey),
+		lock:      NewDefaultLock("aws-vault.keyring", lockKey),
 		lockKey:   lockKey,
 		lockWait:  defaultKeyringLockWaitDelay,
 		lockLog:   defaultKeyringLockLogEvery,

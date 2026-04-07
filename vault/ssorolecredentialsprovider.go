@@ -39,7 +39,7 @@ type SSORoleCredentialsProvider struct {
 	RoleName        string
 	UseStdout       bool
 	UseSSOTokenLock bool
-	ssoTokenLock    SSOTokenLock
+	ssoTokenLock    ProcessLock
 	ssoLockWait     time.Duration
 	ssoLockLog      time.Duration
 	ssoNow          func() time.Time
@@ -108,7 +108,7 @@ func (p *SSORoleCredentialsProvider) initSSODefaults() {
 func (p *SSORoleCredentialsProvider) EnableSSOTokenLock() {
 	p.UseSSOTokenLock = true
 	if !p.UseStdout && p.ssoTokenLock == nil {
-		p.ssoTokenLock = NewDefaultSSOTokenLock(p.StartURL)
+		p.ssoTokenLock = NewDefaultLock("aws-vault.sso", p.StartURL)
 	}
 }
 
