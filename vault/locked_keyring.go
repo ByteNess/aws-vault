@@ -15,7 +15,10 @@ import (
 type lockedKeyring struct {
 	inner keyring.Keyring
 	lock  KeyringLock
-	mu    sync.Mutex
+	// mu serializes in-process access. The flock only coordinates across
+	// processes; without this mutex, concurrent goroutines in the same
+	// process could race on the try-lock loop.
+	mu sync.Mutex
 
 	lockKey   string
 	lockWait  time.Duration
@@ -23,7 +26,7 @@ type lockedKeyring struct {
 	warnAfter time.Duration
 	lockNow   func() time.Time
 	lockSleep func(context.Context, time.Duration) error
-	lockLogf  func(string, ...any)
+	lockLogf  lockLogger
 }
 
 const (
@@ -61,21 +64,11 @@ func NewLockedKeyring(kr keyring.Keyring, lockKey string) keyring.Keyring {
 		lockLog:   defaultKeyringLockLogEvery,
 		warnAfter: defaultKeyringLockWarnAfter,
 		lockNow:   time.Now,
-		lockSleep: defaultLockedKeyringSleep,
+		lockSleep: defaultContextSleep,
 		lockLogf:  log.Printf,
 	}
 }
 
-func defaultLockedKeyringSleep(ctx context.Context, d time.Duration) error {
-	timer := time.NewTimer(d)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-timer.C:
-		return nil
-	}
-}
 
 func (k *lockedKeyring) withLock(fn func() error) error {
 	k.mu.Lock()

@@ -30,7 +30,7 @@ type CachedSessionProvider struct {
 	sessionLockLog  time.Duration
 	sessionNow      func() time.Time
 	sessionSleep    func(context.Context, time.Duration) error
-	sessionLogf     func(string, ...any)
+	sessionLogf     lockLogger
 }
 
 const (
@@ -50,17 +50,6 @@ const (
 	defaultSessionLockWarnAfter = 5 * time.Second
 )
 
-func defaultSessionSleep(ctx context.Context, d time.Duration) error {
-	timer := time.NewTimer(d)
-	defer timer.Stop()
-
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-timer.C:
-		return nil
-	}
-}
 
 // NewCachedSessionProvider creates a CachedSessionProvider with production
 // defaults for all internal dependencies. Tests can override unexported fields
@@ -75,7 +64,7 @@ func NewCachedSessionProvider(key SessionMetadata, provider StsSessionProvider, 
 		sessionLockWait: defaultSessionLockWaitDelay,
 		sessionLockLog:  defaultSessionLockLogEvery,
 		sessionNow:      time.Now,
-		sessionSleep:    defaultSessionSleep,
+		sessionSleep:    defaultContextSleep,
 		sessionLogf:     log.Printf,
 	}
 }
