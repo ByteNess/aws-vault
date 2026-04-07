@@ -19,13 +19,14 @@ type lockedKeyring struct {
 	// process could race on the try-lock loop.
 	mu sync.Mutex
 
-	lockKey   string
-	lockWait  time.Duration
-	lockLog   time.Duration
-	warnAfter time.Duration
-	lockNow   func() time.Time
-	lockSleep func(context.Context, time.Duration) error
-	lockLogf  lockLogger
+	lockKey     string
+	lockTimeout time.Duration
+	lockWait    time.Duration
+	lockLog     time.Duration
+	warnAfter   time.Duration
+	lockNow     func() time.Time
+	lockSleep   func(context.Context, time.Duration) error
+	lockLogf    lockLogger
 }
 
 const (
@@ -56,15 +57,16 @@ const (
 // to serialize keyring operations.
 func NewLockedKeyring(kr keyring.Keyring, lockKey string) keyring.Keyring {
 	return &lockedKeyring{
-		inner:     kr,
-		lock:      NewDefaultLock("aws-vault.keyring", lockKey),
-		lockKey:   lockKey,
-		lockWait:  defaultKeyringLockWaitDelay,
-		lockLog:   defaultKeyringLockLogEvery,
-		warnAfter: defaultKeyringLockWarnAfter,
-		lockNow:   time.Now,
-		lockSleep: defaultContextSleep,
-		lockLogf:  log.Printf,
+		inner:       kr,
+		lock:        NewDefaultLock("aws-vault.keyring", lockKey),
+		lockKey:     lockKey,
+		lockTimeout: defaultKeyringLockTimeout,
+		lockWait:    defaultKeyringLockWaitDelay,
+		lockLog:     defaultKeyringLockLogEvery,
+		warnAfter:   defaultKeyringLockWarnAfter,
+		lockNow:     time.Now,
+		lockSleep:   defaultContextSleep,
+		lockLogf:    log.Printf,
 	}
 }
 
@@ -77,7 +79,7 @@ func (k *lockedKeyring) withLock(fn func() error) error {
 	// in-flight keyring operations. This timeout is a safety net for the lock-wait
 	// loop: if the lock holder is hung (e.g. a stuck gpg subprocess in the pass
 	// backend), waiters will eventually give up rather than blocking indefinitely.
-	ctx, cancel := context.WithTimeout(context.Background(), defaultKeyringLockTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), k.lockTimeout)
 	defer cancel()
 
 	_, err := withProcessLock(ctx, k.lock, lockWaiterOpts{
