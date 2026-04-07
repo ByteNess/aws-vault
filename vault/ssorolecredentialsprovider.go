@@ -69,6 +69,12 @@ const (
 	// reassure the user that the process isn't hung.
 	defaultSSOLockWarnAfter = 5 * time.Second
 
+	// defaultSSOLockTimeout is a safety net: if the lock holder is hung
+	// (e.g. a browser auth that was abandoned), waiters give up after this
+	// duration rather than blocking indefinitely. 2 minutes matches the
+	// keyring lock timeout.
+	defaultSSOLockTimeout = 2 * time.Minute
+
 	// ssoRetryTimeout is a pathological safety net: if GetRoleCredentials is still
 	// returning 429s after this duration, give up and surface the error to the user.
 	// 5 minutes is generous but accommodates burst-heavy credential_process workloads
@@ -267,6 +273,9 @@ func (p *SSORoleCredentialsProvider) createAndCacheOIDCToken(ctx context.Context
 }
 
 func (p *SSORoleCredentialsProvider) getOIDCTokenWithLock(ctx context.Context) (token *ssooidc.CreateTokenOutput, cached bool, err error) {
+	ctx, cancel := context.WithTimeout(ctx, defaultSSOLockTimeout)
+	defer cancel()
+
 	waiter := newLockWaiter(lockWaiterOpts{
 		Lock:      p.ssoTokenLock,
 		WarnMsg:   "Waiting for SSO lock at %s\n",

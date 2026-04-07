@@ -48,6 +48,11 @@ const (
 	// flashing the message on normal lock contention, short enough to
 	// reassure the user that the process isn't hung.
 	defaultSessionLockWarnAfter = 5 * time.Second
+
+	// defaultSessionLockTimeout is a safety net: if the lock holder is hung,
+	// waiters give up after this duration rather than blocking indefinitely.
+	// 2 minutes matches the keyring lock timeout.
+	defaultSessionLockTimeout = 2 * time.Minute
 )
 
 
@@ -95,6 +100,9 @@ func (p *CachedSessionProvider) getCachedSession() (creds *ststypes.Credentials,
 }
 
 func (p *CachedSessionProvider) getSessionWithLock(ctx context.Context) (*ststypes.Credentials, error) {
+	ctx, cancel := context.WithTimeout(ctx, defaultSessionLockTimeout)
+	defer cancel()
+
 	waiter := newLockWaiter(lockWaiterOpts{
 		Lock:      p.sessionLock,
 		WarnMsg:   "Waiting for session lock at %s\n",
