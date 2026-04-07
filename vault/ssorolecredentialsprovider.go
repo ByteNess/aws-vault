@@ -44,7 +44,7 @@ type SSORoleCredentialsProvider struct {
 	ssoLockLog      time.Duration
 	ssoNow          func() time.Time
 	ssoSleep        func(context.Context, time.Duration) error
-	ssoLogf         func(string, ...any)
+	ssoLogf         lockLogger
 	newOIDCTokenFn  func(context.Context) (*ssooidc.CreateTokenOutput, error)
 }
 
@@ -91,17 +91,6 @@ const (
 	ssoRetryAfterJitterMax = 1.3
 )
 
-func defaultSSOSleep(ctx context.Context, d time.Duration) error {
-	timer := time.NewTimer(d)
-	defer timer.Stop()
-
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-timer.C:
-		return nil
-	}
-}
 
 // initSSODefaults sets production defaults for all internal dependencies.
 // Called by the constructor; tests can override unexported fields afterward.
@@ -109,7 +98,7 @@ func (p *SSORoleCredentialsProvider) initSSODefaults() {
 	p.ssoLockWait = defaultSSOLockWaitDelay
 	p.ssoLockLog = defaultSSOLockLogEvery
 	p.ssoNow = time.Now
-	p.ssoSleep = defaultSSOSleep
+	p.ssoSleep = defaultContextSleep
 	p.ssoLogf = log.Printf
 	p.newOIDCTokenFn = p.newOIDCToken
 }
@@ -209,11 +198,11 @@ func (p *SSORoleCredentialsProvider) getRoleCredentials(ctx context.Context) (*s
 }
 
 func (p *SSORoleCredentialsProvider) RetrieveStsCredentials(ctx context.Context) (*ststypes.Credentials, error) {
-	return p.getRoleCredentialsAsStsCredemtials(ctx)
+	return p.getRoleCredentialsAsStsCredentials(ctx)
 }
 
-// getRoleCredentialsAsStsCredemtials returns getRoleCredentials as sts.Credentials because sessions.Store expects it
-func (p *SSORoleCredentialsProvider) getRoleCredentialsAsStsCredemtials(ctx context.Context) (*ststypes.Credentials, error) {
+// getRoleCredentialsAsStsCredentials returns getRoleCredentials as sts.Credentials because sessions.Store expects it
+func (p *SSORoleCredentialsProvider) getRoleCredentialsAsStsCredentials(ctx context.Context) (*ststypes.Credentials, error) {
 	creds, err := p.getRoleCredentials(ctx)
 	if err != nil {
 		return nil, err
@@ -463,7 +452,7 @@ func jitteredBackoff(base, max time.Duration, attempt int) time.Duration {
 		attempt = 1
 	}
 	capDelay := base << uint(attempt-1)
-	if capDelay > max {
+	if max < capDelay {
 		capDelay = max
 	}
 	if capDelay < base {
