@@ -17,6 +17,13 @@ type lockedKeyring struct {
 	// mu serializes in-process access. The flock only coordinates across
 	// processes; without this mutex, concurrent goroutines in the same
 	// process could race on the try-lock loop.
+	//
+	// NOTE: mu.Lock() blocks without a timeout. The 2-minute timeout
+	// (lockTimeout) only applies to the flock wait loop inside withLock.
+	// If a keyring operation hangs while holding mu (e.g. a stuck gpg
+	// subprocess), other goroutines in the same process will block
+	// indefinitely. The keyring.Keyring interface is not context-aware,
+	// so there is no clean way to cancel in-flight operations.
 	mu sync.Mutex
 
 	lockKey     string
