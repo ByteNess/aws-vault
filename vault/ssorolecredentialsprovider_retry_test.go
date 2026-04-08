@@ -111,16 +111,19 @@ func TestJitteredBackoffRespectsMax(t *testing.T) {
 	base := 200 * time.Millisecond
 	max := 5 * time.Second
 
-	// At high attempt numbers the cap should be max, not overflow
+	// At high attempt numbers the cap should be max, not overflow.
+	// This includes attempts 37+ where base<<(attempt-1) overflows int64;
+	// the delay must stay clamped to max, not collapse to base.
+	minDelay := time.Duration(float64(max) * ssoRetryAfterJitterMin)
 	maxDelay := time.Duration(float64(max) * ssoRetryAfterJitterMax)
-	for attempt := 20; attempt <= 30; attempt++ {
+	for attempt := 20; attempt <= 60; attempt++ {
 		for i := 0; i < 10; i++ {
 			delay := jitteredBackoff(base, max, attempt)
 			if maxDelay < delay {
 				t.Fatalf("attempt %d: delay %s exceeds max jittered cap %s", attempt, delay, maxDelay)
 			}
-			if delay < 0 {
-				t.Fatalf("attempt %d: negative delay %s", attempt, delay)
+			if delay < minDelay {
+				t.Fatalf("attempt %d: delay %s below min jittered cap %s (overflow regression)", attempt, delay, minDelay)
 			}
 		}
 	}

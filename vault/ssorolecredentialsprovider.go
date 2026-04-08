@@ -456,7 +456,9 @@ func jitteredBackoff(base, max time.Duration, attempt int) time.Duration {
 		capDelay = max
 	}
 	if capDelay < base {
-		capDelay = base
+		// Overflow: large shift wrapped negative; clamp to max, not base,
+		// so late retries stay backed off instead of becoming aggressive.
+		capDelay = max
 	}
 	return jitterDelay(capDelay)
 }
