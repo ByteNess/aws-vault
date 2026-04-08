@@ -270,7 +270,7 @@ func ConfigureGlobals(app *kingpin.Application) *AwsVault {
 		Envar("AWS_VAULT_BIOMETRICS").
 		BoolVar(&a.UseBiometrics)
 
-	app.Flag("parallel-safe", "Enable cross-process locking for keychain and cached credentials (applies to exec, export, rotate; not login)").
+	app.Flag("parallel-safe", "Enable cross-process locking for keyring operations, session caching, and SSO browser flows").
 		Envar("AWS_VAULT_PARALLEL_SAFE").
 		BoolVar(&a.ParallelSafe)
 
