@@ -253,3 +253,51 @@ func TestCachedSession_LockWaitLogs(t *testing.T) {
 		t.Fatalf("unexpected second log time: %s", logTimes[1])
 	}
 }
+
+// ctxAwareSessionProvider is a test StsSessionProvider that respects context
+// cancellation, used to verify the work context is not the lock-wait timeout.
+type ctxAwareSessionProvider struct {
+	creds *types.Credentials
+	delay time.Duration
+}
+
+func (p *ctxAwareSessionProvider) RetrieveStsCredentials(ctx context.Context) (*types.Credentials, error) {
+	select {
+	case <-time.After(p.delay):
+		return p.creds, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+func (p *ctxAwareSessionProvider) Retrieve(context.Context) (aws.Credentials, error) {
+	return aws.Credentials{}, nil
+}
+
+func TestCachedSession_WorkNotCancelledByLockTimeout(t *testing.T) {
+	// The lock-wait timeout should only bound how long we wait for the
+	// lock, not how long the work takes. Simulate a provider that takes
+	// longer than the lock-wait timeout and verify it completes.
+	key := newTestSessionKey()
+	creds := newTestCreds(time.Now().Add(time.Hour))
+	kr := keyring.NewArrayKeyring(nil)
+	sk := &SessionKeyring{Keyring: kr}
+	lock := &testLock{tryResults: []bool{true}}
+
+	provider := &ctxAwareSessionProvider{creds: creds, delay: 50 * time.Millisecond}
+
+	p := NewCachedSessionProvider(key, provider, sk, 0, true)
+	p.sessionLock = lock
+	p.sessionLockTimeout = 10 * time.Millisecond
+
+	got, err := p.RetrieveStsCredentials(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error (work cancelled by lock-wait timeout?): %v", err)
+	}
+	if aws.ToString(got.AccessKeyId) != aws.ToString(creds.AccessKeyId) {
+		t.Fatalf("unexpected credentials returned")
+	}
+	if lock.unlockCalls != 1 {
+		t.Fatalf("expected 1 unlock, got %d", lock.unlockCalls)
+	}
+}

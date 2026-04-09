@@ -90,7 +90,7 @@ func (k *lockedKeyring) withLock(fn func() error) error {
 	defer cancel()
 
 	_, err := withProcessLock(ctx, k.lock, lockWaiterOpts{
-		Lock:      k.lock,
+		LockPath:  k.lock.Path(),
 		WarnMsg:   "Waiting for keyring lock at %s\n",
 		LogMsg:    "Waiting for keyring lock at %s",
 		WaitDelay: k.lockWait,
@@ -102,7 +102,7 @@ func (k *lockedKeyring) withLock(fn func() error) error {
 		Warnf: func(format string, args ...any) {
 			fmt.Fprintf(os.Stderr, format, args...)
 		},
-	}, "keyring", nil, func(ctx context.Context) (struct{}, error) {
+	}, "keyring", nil, func(_ context.Context) (struct{}, error) {
 		return struct{}{}, fn()
 	})
 	return err

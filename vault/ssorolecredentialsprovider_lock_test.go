@@ -278,3 +278,42 @@ func TestGetOIDCToken_LockWaitLogs(t *testing.T) {
 		t.Fatalf("unexpected second log time: %s", logTimes[1])
 	}
 }
+
+func TestGetOIDCToken_WorkNotCancelledByLockTimeout(t *testing.T) {
+	// The lock-wait timeout should only bound how long we wait for the
+	// lock, not how long the work takes. Simulate work that takes longer
+	// than the lock-wait timeout and verify it completes.
+	freshToken := &ssooidc.CreateTokenOutput{AccessToken: aws.String("fresh")}
+	lock := &testLock{tryResults: []bool{true}}
+	cache := &testTokenCache{setLock: lock}
+
+	p := newTestSSORoleProvider()
+	p.OIDCTokenCache = cache
+	p.ssoTokenLock = lock
+	p.UseSSOTokenLock = true
+	p.ssoLockTimeout = 10 * time.Millisecond
+	p.newOIDCTokenFn = func(ctx context.Context) (*ssooidc.CreateTokenOutput, error) {
+		// Work takes longer than the lock-wait timeout.
+		// If the timeout incorrectly cancels work, ctx.Err() fires.
+		select {
+		case <-time.After(50 * time.Millisecond):
+			return freshToken, nil
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+
+	token, cached, err := p.getOIDCToken(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error (work cancelled by lock-wait timeout?): %v", err)
+	}
+	if cached {
+		t.Fatalf("expected non-cached token")
+	}
+	if token != freshToken {
+		t.Fatalf("unexpected token returned")
+	}
+	if lock.unlockCalls != 1 {
+		t.Fatalf("expected 1 unlock, got %d", lock.unlockCalls)
+	}
+}

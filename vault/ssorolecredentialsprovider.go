@@ -42,6 +42,7 @@ type SSORoleCredentialsProvider struct {
 	ssoTokenLock    ProcessLock
 	ssoLockWait     time.Duration
 	ssoLockLog      time.Duration
+	ssoLockTimeout  time.Duration
 	ssoNow          func() time.Time
 	ssoSleep        func(context.Context, time.Duration) error
 	ssoLogf         lockLogger
@@ -105,6 +106,7 @@ const (
 func (p *SSORoleCredentialsProvider) initSSODefaults() {
 	p.ssoLockWait = defaultSSOLockWaitDelay
 	p.ssoLockLog = defaultSSOLockLogEvery
+	p.ssoLockTimeout = defaultSSOLockTimeout
 	p.ssoNow = time.Now
 	p.ssoSleep = defaultContextSleep
 	p.ssoLogf = log.Printf
@@ -278,11 +280,11 @@ type oidcTokenResult struct {
 }
 
 func (p *SSORoleCredentialsProvider) getOIDCTokenWithLock(ctx context.Context) (token *ssooidc.CreateTokenOutput, cached bool, err error) {
-	ctx, cancel := context.WithTimeout(ctx, defaultSSOLockTimeout)
+	waitCtx, cancel := context.WithTimeout(ctx, p.ssoLockTimeout)
 	defer cancel()
 
-	result, err := withProcessLock(ctx, p.ssoTokenLock, lockWaiterOpts{
-		Lock:      p.ssoTokenLock,
+	result, err := withProcessLock(waitCtx, p.ssoTokenLock, lockWaiterOpts{
+		LockPath:  p.ssoTokenLock.Path(),
 		WarnMsg:   "Waiting for SSO lock at %s\n",
 		LogMsg:    "Waiting for SSO lock at %s",
 		WaitDelay: p.ssoLockWait,
@@ -303,7 +305,11 @@ func (p *SSORoleCredentialsProvider) getOIDCTokenWithLock(ctx context.Context) (
 			return processLockResult[oidcTokenResult]{value: oidcTokenResult{token, cached}, ok: true}, nil
 		}
 		return processLockResult[oidcTokenResult]{}, nil
-	}, func(ctx context.Context) (oidcTokenResult, error) {
+	}, func(_ context.Context) (oidcTokenResult, error) {
+		// Use the caller's ctx (not the lock-wait timeout ctx) for actual
+		// work. The lock-wait timeout bounds how long we wait for the lock,
+		// not how long the work takes once we hold it.
+
 		// Recheck cache after acquiring lock — another process may have filled it.
 		token, cached, err := p.getCachedOIDCToken()
 		if err != nil {

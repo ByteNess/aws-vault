@@ -24,10 +24,11 @@ type CachedSessionProvider struct {
 	Keyring         *SessionKeyring
 	ExpiryWindow    time.Duration
 	UseSessionLock  bool
-	sessionLock     ProcessLock
-	sessionLockWait time.Duration
-	sessionLockLog  time.Duration
-	sessionNow      func() time.Time
+	sessionLock        ProcessLock
+	sessionLockWait    time.Duration
+	sessionLockLog     time.Duration
+	sessionLockTimeout time.Duration
+	sessionNow         func() time.Time
 	sessionSleep    func(context.Context, time.Duration) error
 	sessionLogf     lockLogger
 }
@@ -65,10 +66,11 @@ func NewCachedSessionProvider(key SessionMetadata, provider StsSessionProvider, 
 		Keyring:         keyring,
 		ExpiryWindow:    expiryWindow,
 		UseSessionLock:  useSessionLock,
-		sessionLock:     NewDefaultLock("aws-vault.session", key.StringForMatching()),
-		sessionLockWait: defaultSessionLockWaitDelay,
-		sessionLockLog:  defaultSessionLockLogEvery,
-		sessionNow:      time.Now,
+		sessionLock:        NewDefaultLock("aws-vault.session", key.StringForMatching()),
+		sessionLockWait:    defaultSessionLockWaitDelay,
+		sessionLockLog:     defaultSessionLockLogEvery,
+		sessionLockTimeout: defaultSessionLockTimeout,
+		sessionNow:         time.Now,
 		sessionSleep:    defaultContextSleep,
 		sessionLogf:     log.Printf,
 	}
@@ -100,11 +102,11 @@ func (p *CachedSessionProvider) getCachedSession() (creds *ststypes.Credentials,
 }
 
 func (p *CachedSessionProvider) getSessionWithLock(ctx context.Context) (*ststypes.Credentials, error) {
-	ctx, cancel := context.WithTimeout(ctx, defaultSessionLockTimeout)
+	waitCtx, cancel := context.WithTimeout(ctx, p.sessionLockTimeout)
 	defer cancel()
 
-	return withProcessLock(ctx, p.sessionLock, lockWaiterOpts{
-		Lock:      p.sessionLock,
+	return withProcessLock(waitCtx, p.sessionLock, lockWaiterOpts{
+		LockPath:  p.sessionLock.Path(),
 		WarnMsg:   "Waiting for session lock at %s\n",
 		LogMsg:    "Waiting for session lock at %s",
 		WaitDelay: p.sessionLockWait,
@@ -122,7 +124,11 @@ func (p *CachedSessionProvider) getSessionWithLock(ctx context.Context) (*ststyp
 			return processLockResult[*ststypes.Credentials]{value: creds, ok: true}, nil
 		}
 		return processLockResult[*ststypes.Credentials]{}, nil
-	}, func(ctx context.Context) (*ststypes.Credentials, error) {
+	}, func(_ context.Context) (*ststypes.Credentials, error) {
+		// Use the caller's ctx (not the lock-wait timeout ctx) for actual
+		// work. The lock-wait timeout bounds how long we wait for the lock,
+		// not how long the work takes once we hold it.
+
 		// Recheck cache after acquiring lock — another process may have filled it.
 		creds, cached, cacheErr := p.getCachedSession()
 		if cacheErr == nil && cached {

@@ -10,7 +10,7 @@ type lockLogger func(string, ...any)
 // lockWaiterOpts configures a lockWaiter. All fields are required except
 // Now, Sleep, and Warnf which have sensible defaults.
 type lockWaiterOpts struct {
-	Lock      ProcessLock
+	LockPath  string
 	WarnMsg   string
 	LogMsg    string
 	WaitDelay time.Duration
@@ -47,12 +47,12 @@ func (w *lockWaiter) sleepAfterMiss(ctx context.Context) error {
 	}
 	if !w.warned && w.opts.WarnAfter <= now.Sub(w.waitStart) {
 		if w.opts.Warnf != nil {
-			w.opts.Warnf(w.opts.WarnMsg, w.opts.Lock.Path())
+			w.opts.Warnf(w.opts.WarnMsg, w.opts.LockPath)
 		}
 		w.warned = true
 	}
 	if w.opts.Logf != nil && (w.lastLog.IsZero() || w.opts.LogEvery <= now.Sub(w.lastLog)) {
-		w.opts.Logf(w.opts.LogMsg, w.opts.Lock.Path())
+		w.opts.Logf(w.opts.LogMsg, w.opts.LockPath)
 		w.lastLog = now
 	}
 
