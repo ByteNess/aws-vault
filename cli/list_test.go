@@ -9,7 +9,7 @@ import (
 func ExampleListCommand() {
 	app := kingpin.New("aws-vault", "")
 	awsVault := ConfigureGlobals(app)
-	awsVault.keyringImpl = keyring.NewArrayKeyring([]keyring.Item{
+	awsVault.rawKeyringImpl = keyring.NewArrayKeyring([]keyring.Item{
 		{Key: "llamas", Data: []byte(`{"AccessKeyID":"ABC","SecretAccessKey":"XYZ"}`)},
 	})
 	ConfigureListCommand(app, awsVault)
