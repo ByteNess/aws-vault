@@ -2,6 +2,7 @@ package vault
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	ststypes "github.com/aws/aws-sdk-go-v2/service/sts/types"
+	"github.com/byteness/keyring"
 )
 
 type StsSessionProvider interface {
@@ -78,6 +80,9 @@ func NewCachedSessionProvider(key SessionMetadata, provider StsSessionProvider, 
 
 func (p *CachedSessionProvider) RetrieveStsCredentials(ctx context.Context) (*ststypes.Credentials, error) {
 	creds, cached, err := p.getCachedSession()
+	if err != nil && !errors.Is(err, keyring.ErrKeyNotFound) {
+		log.Printf("Reading cached session for %s: %v; will refresh", p.SessionKey.ProfileName, err)
+	}
 	if err == nil && cached {
 		return creds, nil
 	}
@@ -120,6 +125,9 @@ func (p *CachedSessionProvider) getSessionWithLock(ctx context.Context) (*ststyp
 		},
 	}, "session", func() (processLockResult[*ststypes.Credentials], error) {
 		creds, cached, err := p.getCachedSession()
+		if err != nil && !errors.Is(err, keyring.ErrKeyNotFound) {
+			log.Printf("Reading cached session for %s: %v; will try lock", p.SessionKey.ProfileName, err)
+		}
 		if err == nil && cached {
 			return processLockResult[*ststypes.Credentials]{value: creds, ok: true}, nil
 		}
