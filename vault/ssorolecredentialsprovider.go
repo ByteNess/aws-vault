@@ -389,7 +389,9 @@ func (p *SSORoleCredentialsProvider) newOIDCToken(ctx context.Context) (*ssooidc
 
 			var ape *ssooidctypes.AuthorizationPendingException
 			if errors.As(err, &ape) {
-				time.Sleep(retryInterval)
+				if sleepErr := p.ssoSleep(ctx, retryInterval); sleepErr != nil {
+					return nil, sleepErr
+				}
 				continue
 			}
 
