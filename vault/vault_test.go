@@ -4,8 +4,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/byteness/keyring"
 	"github.com/byteness/aws-vault/v7/vault"
+	"github.com/byteness/keyring"
 )
 
 func TestUsageWebIdentityExample(t *testing.T) {
@@ -121,5 +121,117 @@ sso_registration_scopes=sso:account:access
 	}
 	if ssoProvider.AccountID != "2160xxxx" {
 		t.Fatalf("Expected AccountID to be 2160xxxx, got %s", ssoProvider.AccountID)
+	}
+}
+
+func TestTempCredentialsProviderParallelSafeGetSessionToken(t *testing.T) {
+	config := &vault.ProfileConfig{
+		ProfileName: "creds",
+		Region:      "us-east-1",
+		MfaToken:    "123456", // provide token to avoid interactive prompt
+	}
+
+	ckr := &vault.CredentialKeyring{Keyring: keyring.NewArrayKeyring([]keyring.Item{
+		{Key: "creds", Data: []byte(`{"AccessKeyID":"AKIAIOSFODNN7EXAMPLE","SecretAccessKey":"secret"}`)},
+	})}
+	provider, err := vault.NewTempCredentialsProviderWithOptions(
+		config,
+		ckr,
+		false,
+		false,
+		vault.TempCredentialsOptions{ParallelSafe: true},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cached, ok := provider.(*vault.CachedSessionProvider)
+	if !ok {
+		t.Fatalf("Expected CachedSessionProvider, got %T", provider)
+	}
+	if !cached.UseSessionLock {
+		t.Fatalf("Expected UseSessionLock to be true")
+	}
+	_, ok = cached.SessionProvider.(*vault.SessionTokenProvider)
+	if !ok {
+		t.Fatalf("Expected SessionTokenProvider, got %T", cached.SessionProvider)
+	}
+}
+
+func TestTempCredentialsProviderParallelSafeAssumeRole(t *testing.T) {
+	config := &vault.ProfileConfig{
+		ProfileName:       "role",
+		Region:            "us-east-1",
+		RoleARN:           "arn:aws:iam::222222222222:role/role",
+		MfaSerial:         "arn:aws:iam::111111111111:mfa/user",
+		MfaToken:          "123456", // provide token to avoid interactive prompt
+		SourceProfileName: "source",
+		SourceProfile: &vault.ProfileConfig{
+			ProfileName: "source",
+			Region:      "us-east-1",
+		},
+	}
+
+	ckr := &vault.CredentialKeyring{Keyring: keyring.NewArrayKeyring([]keyring.Item{
+		{Key: "source", Data: []byte(`{"AccessKeyID":"AKIAIOSFODNN7EXAMPLE","SecretAccessKey":"secret"}`)},
+	})}
+	provider, err := vault.NewTempCredentialsProviderWithOptions(
+		config,
+		ckr,
+		true, // disableSessions: skip GetSessionToken so AssumeRole gets the MFA
+		false,
+		vault.TempCredentialsOptions{ParallelSafe: true},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cached, ok := provider.(*vault.CachedSessionProvider)
+	if !ok {
+		t.Fatalf("Expected CachedSessionProvider, got %T", provider)
+	}
+	if !cached.UseSessionLock {
+		t.Fatalf("Expected UseSessionLock to be true")
+	}
+	_, ok = cached.SessionProvider.(*vault.AssumeRoleProvider)
+	if !ok {
+		t.Fatalf("Expected AssumeRoleProvider, got %T", cached.SessionProvider)
+	}
+}
+
+func TestTempCredentialsProviderParallelSafeSSOLocks(t *testing.T) {
+	config := &vault.ProfileConfig{
+		ProfileName:  "sso-profile",
+		SSOStartURL:  "https://sso.example/start",
+		SSORegion:    "us-east-1",
+		SSOAccountID: "123456789012",
+		SSORoleName:  "Role",
+	}
+
+	ckr := &vault.CredentialKeyring{Keyring: keyring.NewArrayKeyring([]keyring.Item{})}
+	provider, err := vault.NewTempCredentialsProviderWithOptions(
+		config,
+		ckr,
+		false,
+		false,
+		vault.TempCredentialsOptions{ParallelSafe: true},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cached, ok := provider.(*vault.CachedSessionProvider)
+	if !ok {
+		t.Fatalf("Expected CachedSessionProvider, got %T", provider)
+	}
+	if !cached.UseSessionLock {
+		t.Fatalf("Expected UseSessionLock to be true")
+	}
+	ssoProvider, ok := cached.SessionProvider.(*vault.SSORoleCredentialsProvider)
+	if !ok {
+		t.Fatalf("Expected SSORoleCredentialsProvider, got %T", cached.SessionProvider)
+	}
+	if !ssoProvider.UseSSOTokenLock {
+		t.Fatalf("Expected UseSSOTokenLock to be true")
 	}
 }

@@ -5,11 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math/rand"
 	"net/http"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
-	"github.com/byteness/keyring"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awshttp "github.com/aws/aws-sdk-go-v2/aws/transport/http"
 	"github.com/aws/aws-sdk-go-v2/service/sso"
@@ -17,6 +19,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssooidc"
 	ssooidctypes "github.com/aws/aws-sdk-go-v2/service/ssooidc/types"
 	ststypes "github.com/aws/aws-sdk-go-v2/service/sts/types"
+	"github.com/byteness/keyring"
 	"github.com/skratchdot/open-golang/open"
 )
 
@@ -28,17 +31,95 @@ type OIDCTokenCacher interface {
 
 // SSORoleCredentialsProvider creates temporary credentials for an SSO Role.
 type SSORoleCredentialsProvider struct {
-	OIDCClient     *ssooidc.Client
-	OIDCTokenCache OIDCTokenCacher
-	StartURL       string
-	SSOClient      *sso.Client
-	AccountID      string
-	RoleName       string
-	UseStdout      bool
+	OIDCClient      *ssooidc.Client
+	OIDCTokenCache  OIDCTokenCacher
+	StartURL        string
+	SSOClient       *sso.Client
+	AccountID       string
+	RoleName        string
+	UseStdout       bool
+	UseSSOTokenLock bool
+	ssoTokenLock    ProcessLock
+	ssoLockWait     time.Duration
+	ssoLockLog      time.Duration
+	ssoLockTimeout  time.Duration
+	ssoNow          func() time.Time
+	ssoSleep        func(context.Context, time.Duration) error
+	ssoLogf         lockLogger
+	newOIDCTokenFn  func(context.Context) (*ssooidc.CreateTokenOutput, error)
 }
 
 func millisecondsTimeValue(v int64) time.Time {
 	return time.Unix(0, v*int64(time.Millisecond))
+}
+
+const (
+	// defaultSSOLockWaitDelay is the polling interval between lock attempts.
+	// 100ms keeps latency low for the typical case where the lock holder
+	// finishes quickly (browser auth + token cache write).
+	defaultSSOLockWaitDelay = 100 * time.Millisecond
+
+	// defaultSSOLockLogEvery controls how often we emit a debug log while
+	// waiting for the lock. 15s avoids log spam while still showing progress
+	// during long waits (e.g. slow browser auth).
+	defaultSSOLockLogEvery = 15 * time.Second
+
+	// defaultSSOLockWarnAfter is the delay before printing a user-visible
+	// "waiting for lock" message to stderr. 5s is long enough to avoid
+	// flashing the message on normal lock contention, short enough to
+	// reassure the user that the process isn't hung.
+	defaultSSOLockWarnAfter = 5 * time.Second
+
+	// defaultSSOLockTimeout is a safety net: if the lock holder is hung
+	// (e.g. a browser auth that was abandoned), waiters give up after this
+	// duration rather than blocking indefinitely. 2 minutes matches the
+	// keyring lock timeout.
+	defaultSSOLockTimeout = 2 * time.Minute
+
+	// ssoRetryTimeout is a pathological safety net: if GetRoleCredentials is still
+	// returning 429s after this duration, give up and surface the error to the user.
+	// 5 minutes is generous but accommodates burst-heavy credential_process workloads
+	// (e.g. Terraform with hundreds of parallel invocations).
+	ssoRetryTimeout = 5 * time.Minute
+
+	// ssoRetryBase is the initial backoff delay before the first retry.
+	// 200ms is short enough to avoid unnecessary latency on transient 429s
+	// while still giving the SSO service breathing room.
+	ssoRetryBase = 200 * time.Millisecond
+
+	// ssoRetryMax caps the exponential backoff so that individual waits
+	// don't grow unreasonably large between attempts.
+	ssoRetryMax = 5 * time.Second
+
+	// ssoRetryAfterJitterMin and ssoRetryAfterJitterMax define the full-jitter
+	// range as a multiplier of the base delay. 0.5x-1.5x ensures retries
+	// spread across a wide window — some fire earlier than the base delay,
+	// some later — which decorrelates concurrent processes that all received
+	// the same Retry-After header from the SSO service.
+	ssoRetryAfterJitterMin = 0.5
+	ssoRetryAfterJitterMax = 1.5
+)
+
+
+// initSSODefaults sets production defaults for all internal dependencies.
+// Called by the constructor; tests can override unexported fields afterward.
+func (p *SSORoleCredentialsProvider) initSSODefaults() {
+	p.ssoLockWait = defaultSSOLockWaitDelay
+	p.ssoLockLog = defaultSSOLockLogEvery
+	p.ssoLockTimeout = defaultSSOLockTimeout
+	p.ssoNow = time.Now
+	p.ssoSleep = defaultContextSleep
+	p.ssoLogf = log.Printf
+	p.newOIDCTokenFn = p.newOIDCToken
+}
+
+// EnableSSOTokenLock creates the SSO token lock for cross-process coordination.
+// Called at construction time when parallelSafe is true.
+func (p *SSORoleCredentialsProvider) EnableSSOTokenLock() {
+	p.UseSSOTokenLock = true
+	if !p.UseStdout && p.ssoTokenLock == nil {
+		p.ssoTokenLock = NewDefaultLock("aws-vault.sso", p.StartURL)
+	}
 }
 
 // Retrieve generates a new set of temporary credentials using SSO GetRoleCredentials.
@@ -63,42 +144,75 @@ func (p *SSORoleCredentialsProvider) getRoleCredentials(ctx context.Context) (*s
 		return nil, err
 	}
 
-	resp, err := p.SSOClient.GetRoleCredentials(ctx, &sso.GetRoleCredentialsInput{
-		AccessToken: token.AccessToken,
-		AccountId:   aws.String(p.AccountID),
-		RoleName:    aws.String(p.RoleName),
-	})
-	if err != nil {
+	baseDelay, maxDelay := ssoRetryBase, ssoRetryMax
+	deadline := p.ssoNow().Add(ssoRetryTimeout)
+	attempt := 0
+	rateLimitCount := 0
+	var maxRetryAfterSeen time.Duration
+	for {
+		attempt++
+		resp, err := p.SSOClient.GetRoleCredentials(ctx, &sso.GetRoleCredentialsInput{
+			AccessToken: token.AccessToken,
+			AccountId:   aws.String(p.AccountID),
+			RoleName:    aws.String(p.RoleName),
+		})
+		if err == nil {
+			log.Printf("Got credentials %s for SSO role %s (account: %s), expires in %s", FormatKeyForDisplay(*resp.RoleCredentials.AccessKeyId), p.RoleName, p.AccountID, time.Until(millisecondsTimeValue(resp.RoleCredentials.Expiration)).String())
+			return resp.RoleCredentials, nil
+		}
+
 		if cached && p.OIDCTokenCache != nil {
 			var rspError *awshttp.ResponseError
-			if !errors.As(err, &rspError) {
-				return nil, err
-			}
-
-			// If the error is a 401, remove the cached oidc token and try
-			// again. This is a recursive call but it should only happen once
-			// due to the cache being cleared before retrying.
-			if rspError.HTTPStatusCode() == http.StatusUnauthorized {
-				err = p.OIDCTokenCache.Remove(p.StartURL)
+			if errors.As(err, &rspError) && rspError.HTTPStatusCode() == http.StatusUnauthorized {
+				// Cached token rejected: drop it and retry with a fresh access token.
+				// This should only happen once because the cache is cleared before retrying.
+				if err = p.OIDCTokenCache.Remove(p.StartURL); err != nil {
+					return nil, err
+				}
+				token, cached, err = p.getOIDCToken(ctx)
 				if err != nil {
 					return nil, err
 				}
-				return p.getRoleCredentials(ctx)
+				attempt = 0
+				continue
 			}
 		}
+
+		if isSSORateLimitError(err) {
+			rateLimitCount++
+			remaining := deadline.Sub(p.ssoNow())
+			if 0 < remaining {
+				var delay time.Duration
+				if retryAfter, ok := retryAfterFromError(err); ok {
+					if maxRetryAfterSeen < retryAfter {
+						maxRetryAfterSeen = retryAfter
+					}
+					delay = jitterRetryAfter(retryAfter)
+				} else {
+					delay = jitteredBackoff(baseDelay, maxDelay, attempt)
+				}
+				if remaining < delay {
+					delay = remaining
+				}
+				log.Printf("SSO rate limited for role %s (account: %s); backing off %s, attempt %d (%d 429s, max retry-after %s)", p.RoleName, p.AccountID, delay, attempt, rateLimitCount, maxRetryAfterSeen)
+				if err = p.ssoSleep(ctx, delay); err != nil {
+					return nil, err
+				}
+				continue
+			}
+			return nil, fmt.Errorf("SSO rate limited for role %s (account: %s) persistently for %s (%d 429s, max retry-after %s); giving up — try again later: %w", p.RoleName, p.AccountID, ssoRetryTimeout, rateLimitCount, maxRetryAfterSeen, err)
+		}
+
 		return nil, err
 	}
-	log.Printf("Got credentials %s for SSO role %s (account: %s), expires in %s", FormatKeyForDisplay(*resp.RoleCredentials.AccessKeyId), p.RoleName, p.AccountID, time.Until(millisecondsTimeValue(resp.RoleCredentials.Expiration)).String())
-
-	return resp.RoleCredentials, nil
 }
 
 func (p *SSORoleCredentialsProvider) RetrieveStsCredentials(ctx context.Context) (*ststypes.Credentials, error) {
-	return p.getRoleCredentialsAsStsCredemtials(ctx)
+	return p.getRoleCredentialsAsStsCredentials(ctx)
 }
 
-// getRoleCredentialsAsStsCredemtials returns getRoleCredentials as sts.Credentials because sessions.Store expects it
-func (p *SSORoleCredentialsProvider) getRoleCredentialsAsStsCredemtials(ctx context.Context) (*ststypes.Credentials, error) {
+// getRoleCredentialsAsStsCredentials returns getRoleCredentials as sts.Credentials because sessions.Store expects it
+func (p *SSORoleCredentialsProvider) getRoleCredentialsAsStsCredentials(ctx context.Context) (*ststypes.Credentials, error) {
 	creds, err := p.getRoleCredentials(ctx)
 	if err != nil {
 		return nil, err
@@ -113,27 +227,112 @@ func (p *SSORoleCredentialsProvider) getRoleCredentialsAsStsCredemtials(ctx cont
 }
 
 func (p *SSORoleCredentialsProvider) getOIDCToken(ctx context.Context) (token *ssooidc.CreateTokenOutput, cached bool, err error) {
-	if p.OIDCTokenCache != nil {
-		token, err = p.OIDCTokenCache.Get(p.StartURL)
-		if err != nil && err != keyring.ErrKeyNotFound {
-			return nil, false, err
-		}
-		if token != nil {
-			return token, true, nil
-		}
+	token, cached, err = p.getCachedOIDCToken()
+	if err != nil || token != nil {
+		return token, cached, err
 	}
-	token, err = p.newOIDCToken(ctx)
+
+	if p.UseStdout {
+		return p.createAndCacheOIDCToken(ctx)
+	}
+
+	if !p.UseSSOTokenLock {
+		return p.createAndCacheOIDCToken(ctx)
+	}
+
+	return p.getOIDCTokenWithLock(ctx)
+}
+
+func (p *SSORoleCredentialsProvider) getCachedOIDCToken() (token *ssooidc.CreateTokenOutput, cached bool, err error) {
+	if p.OIDCTokenCache == nil {
+		return nil, false, nil
+	}
+
+	token, err = p.OIDCTokenCache.Get(p.StartURL)
+	if err != nil && err != keyring.ErrKeyNotFound {
+		return nil, false, err
+	}
+	if token != nil {
+		return token, true, nil
+	}
+
+	return nil, false, nil
+}
+
+func (p *SSORoleCredentialsProvider) createAndCacheOIDCToken(ctx context.Context) (token *ssooidc.CreateTokenOutput, cached bool, err error) {
+	token, err = p.newOIDCTokenFn(ctx)
 	if err != nil {
 		return nil, false, err
 	}
 
 	if p.OIDCTokenCache != nil {
-		err = p.OIDCTokenCache.Set(p.StartURL, token)
-		if err != nil {
+		if err = p.OIDCTokenCache.Set(p.StartURL, token); err != nil {
 			return nil, false, err
 		}
 	}
-	return token, false, err
+
+	return token, false, nil
+}
+
+type oidcTokenResult struct {
+	token  *ssooidc.CreateTokenOutput
+	cached bool
+}
+
+func (p *SSORoleCredentialsProvider) getOIDCTokenWithLock(ctx context.Context) (token *ssooidc.CreateTokenOutput, cached bool, err error) {
+	waitCtx, cancel := context.WithTimeout(ctx, p.ssoLockTimeout)
+	defer cancel()
+
+	result, err := withProcessLock(waitCtx, p.ssoTokenLock, lockWaiterOpts{
+		LockPath:  p.ssoTokenLock.Path(),
+		WarnMsg:   "Waiting for SSO lock at %s\n",
+		LogMsg:    "Waiting for SSO lock at %s",
+		WaitDelay: p.ssoLockWait,
+		LogEvery:  p.ssoLockLog,
+		WarnAfter: defaultSSOLockWarnAfter,
+		Now:       p.ssoNow,
+		Sleep:     p.ssoSleep,
+		Logf:      p.ssoLogf,
+		Warnf: func(format string, args ...any) {
+			fmt.Fprintf(os.Stderr, format, args...)
+		},
+	}, "SSO token", func() (processLockResult[oidcTokenResult], error) {
+		token, cached, err := p.getCachedOIDCToken()
+		if err != nil {
+			return processLockResult[oidcTokenResult]{}, err
+		}
+		if token != nil {
+			return processLockResult[oidcTokenResult]{value: oidcTokenResult{token, cached}, ok: true}, nil
+		}
+		return processLockResult[oidcTokenResult]{}, nil
+	}, func(_ context.Context) (oidcTokenResult, error) {
+		// Use the caller's ctx (not the lock-wait timeout ctx) for actual
+		// work. The lock-wait timeout bounds how long we wait for the lock,
+		// not how long the work takes once we hold it.
+
+		// Recheck cache after acquiring lock — another process may have filled it.
+		token, cached, err := p.getCachedOIDCToken()
+		if err != nil {
+			return oidcTokenResult{}, err
+		}
+		if token != nil {
+			return oidcTokenResult{token, cached}, nil
+		}
+
+		token, err = p.newOIDCTokenFn(ctx)
+		if err != nil {
+			return oidcTokenResult{}, err
+		}
+
+		if p.OIDCTokenCache != nil {
+			if err = p.OIDCTokenCache.Set(p.StartURL, token); err != nil {
+				return oidcTokenResult{}, err
+			}
+		}
+
+		return oidcTokenResult{token, false}, nil
+	})
+	return result.token, result.cached, err
 }
 
 func (p *SSORoleCredentialsProvider) newOIDCToken(ctx context.Context) (*ssooidc.CreateTokenOutput, error) {
@@ -190,7 +389,9 @@ func (p *SSORoleCredentialsProvider) newOIDCToken(ctx context.Context) (*ssooidc
 
 			var ape *ssooidctypes.AuthorizationPendingException
 			if errors.As(err, &ape) {
-				time.Sleep(retryInterval)
+				if sleepErr := p.ssoSleep(ctx, retryInterval); sleepErr != nil {
+					return nil, sleepErr
+				}
 				continue
 			}
 
@@ -200,4 +401,85 @@ func (p *SSORoleCredentialsProvider) newOIDCToken(ctx context.Context) (*ssooidc
 		log.Printf("Created new OIDC access token for %s (expires in: %ds)", p.StartURL, t.ExpiresIn)
 		return t, nil
 	}
+}
+
+func retryAfterFromError(err error) (time.Duration, bool) {
+	var rspError *awshttp.ResponseError
+	if errors.As(err, &rspError) {
+		if rspError.Response != nil {
+			if d, ok := parseRetryAfter(rspError.Response.Header.Get("Retry-After")); ok {
+				return d, true
+			}
+		}
+	}
+	return 0, false
+}
+
+func parseRetryAfter(value string) (time.Duration, bool) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return 0, false
+	}
+	if secs, err := strconv.Atoi(trimmed); err == nil {
+		if secs < 0 {
+			return 0, false
+		}
+		return time.Duration(secs) * time.Second, true
+	}
+	if t, err := http.ParseTime(trimmed); err == nil {
+		d := time.Until(t)
+		if d < 0 {
+			d = 0
+		}
+		return d, true
+	}
+	return 0, false
+}
+
+func isSSORateLimitError(err error) bool {
+	var tooMany *ssotypes.TooManyRequestsException
+	if errors.As(err, &tooMany) {
+		return true
+	}
+	var rspError *awshttp.ResponseError
+	if errors.As(err, &rspError) && rspError.HTTPStatusCode() == http.StatusTooManyRequests {
+		return true
+	}
+	return false
+}
+
+func jitterRetryAfter(base time.Duration) time.Duration {
+	if base <= 0 {
+		return 0
+	}
+	return jitterDelay(base)
+}
+
+func jitteredBackoff(base, max time.Duration, attempt int) time.Duration {
+	if attempt < 1 {
+		attempt = 1
+	}
+	capDelay := base << uint(attempt-1)
+	if max < capDelay {
+		capDelay = max
+	}
+	if capDelay < base {
+		// Overflow: large shift wrapped negative; clamp to max, not base,
+		// so late retries stay backed off instead of becoming aggressive.
+		capDelay = max
+	}
+	return jitterDelay(capDelay)
+}
+
+func jitterDelay(base time.Duration) time.Duration {
+	if base <= 0 {
+		return 0
+	}
+	min := ssoRetryAfterJitterMin
+	max := ssoRetryAfterJitterMax
+	if max < min {
+		max = min
+	}
+	factor := min + rand.Float64()*(max-min)
+	return time.Duration(float64(base) * factor)
 }
