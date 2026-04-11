@@ -2,12 +2,15 @@ package vault
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/credentials/ssocreds"
 	"github.com/aws/aws-sdk-go-v2/service/sso"
 	"github.com/aws/aws-sdk-go-v2/service/ssooidc"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
@@ -32,7 +35,7 @@ func NewAwsConfig(region, stsRegionalEndpoints, endpointURL string) aws.Config {
 func NewAwsConfigWithCredsProvider(credsProvider aws.CredentialsProvider, region, stsRegionalEndpoints, endpointURL string) aws.Config {
 	return aws.Config{
 		Region:                      region,
-		Credentials:                 credsProvider,
+		Credentials:                 aws.NewCredentialsCache(credsProvider),
 		EndpointResolverWithOptions: getSTSEndpointResolver(stsRegionalEndpoints, endpointURL),
 	}
 }
@@ -165,6 +168,84 @@ func NewSSORoleCredentialsProvider(k keyring.Keyring, config *ProfileConfig, use
 	}
 
 	return ssoRoleCredentialsProvider, nil
+}
+
+// ssoTokenCacheKey returns the key used to compute the standard SSO cache file path.
+// For profiles using [sso-session] this is the session name; for legacy profiles it is the start URL.
+func ssoTokenCacheKey(config *ProfileConfig) string {
+	if config.SSOSession != "" {
+		return config.SSOSession
+	}
+	return config.SSOStartURL
+}
+
+// NewStandardCachedSSOCredentialsProvider returns an ssocreds.Provider that reads the SSO
+// access token from the standard AWS CLI cache file (~/.aws/sso/cache/<sha1>.json).
+// Returns nil, nil if the standard token file does not exist.
+func NewStandardCachedSSOCredentialsProvider(config *ProfileConfig) (aws.CredentialsProvider, error) {
+	tokenFilepath, err := ssocreds.StandardCachedTokenFilepath(ssoTokenCacheKey(config))
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := os.Stat(tokenFilepath); os.IsNotExist(err) {
+		return nil, nil
+	}
+
+	cfg := NewAwsConfig(config.SSORegion, config.STSRegionalEndpoints, config.EndpointURL)
+
+	return ssocreds.New(
+		sso.NewFromConfig(cfg),
+		config.SSOAccountID,
+		config.SSORoleName,
+		config.SSOStartURL,
+		func(o *ssocreds.Options) {
+			o.CachedTokenFilepath = tokenFilepath
+		},
+	), nil
+}
+
+// SyncOIDCTokenToStandardCache writes the OIDC access token for the given profile
+// from the keyring to the standard AWS SSO cache file (~/.aws/sso/cache/<sha1>.json),
+// so that other AWS tools that read the standard file location can use it.
+// Returns nil without error if the standard cache file already exists.
+func SyncOIDCTokenToStandardCache(config *ProfileConfig, k keyring.Keyring) error {
+	tokenFilepath, err := ssocreds.StandardCachedTokenFilepath(ssoTokenCacheKey(config))
+	if err != nil {
+		return err
+	}
+
+	token, err := (OIDCTokenKeyring{Keyring: k}).Get(config.SSOStartURL)
+	if err != nil {
+		return fmt.Errorf("OIDC token not found in keyring for %s: %w", config.SSOStartURL, err)
+	}
+
+	expiration := time.Now().Add(time.Duration(token.ExpiresIn) * time.Second)
+
+	type cachedToken struct {
+		AccessToken  string `json:"accessToken"`
+		ExpiresAt    string `json:"expiresAt"`
+		RefreshToken string `json:"refreshToken,omitempty"`
+	}
+
+	t := cachedToken{
+		AccessToken: aws.ToString(token.AccessToken),
+		ExpiresAt:   expiration.UTC().Format(time.RFC3339),
+	}
+	if token.RefreshToken != nil {
+		t.RefreshToken = aws.ToString(token.RefreshToken)
+	}
+
+	b, err := json.Marshal(t)
+	if err != nil {
+		return err
+	}
+
+	if err := os.MkdirAll(filepath.Dir(tokenFilepath), 0700); err != nil {
+		return err
+	}
+
+	return os.WriteFile(tokenFilepath, b, 0600)
 }
 
 // NewCredentialProcessProvider creates a provider to retrieve credentials from an external

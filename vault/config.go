@@ -111,9 +111,10 @@ func (c *ConfigFile) parseFile() error {
 	log.Printf("Parsing config file %s", c.Path)
 
 	f, err := ini.LoadSources(ini.LoadOptions{
-		AllowNestedValues:   true,
-		InsensitiveSections: false,
-		InsensitiveKeys:     true,
+		AllowNestedValues:    true,
+		InsensitiveSections:  false,
+		InsensitiveKeys:      true,
+		IgnoreInlineComment:  true,
 	}, c.Path)
 	if err != nil {
 		return fmt.Errorf("Error parsing config file %s: %w", c.Path, err)

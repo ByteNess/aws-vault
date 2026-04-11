@@ -34,6 +34,7 @@ type ExecCommandInput struct {
 	NoSession        bool
 	UseStdout        bool
 	ShowHelpMessages bool
+	UseProfileEnv    bool
 }
 
 func (input ExecCommandInput) validate() error {
@@ -107,6 +108,9 @@ func ConfigureExecCommand(app *kingpin.Application, a *AwsVault) {
 	cmd.Flag("stdout", "Print the SSO link to the terminal without automatically opening the browser").
 		OverrideDefaultFromEnvar("AWS_VAULT_STDOUT").
 		BoolVar(&input.UseStdout)
+
+	cmd.Flag("profile-env", "Set AWS_PROFILE instead of injecting AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY").
+		BoolVar(&input.UseProfileEnv)
 
 	cmd.Arg("profile", "Name of the profile").
 		//Required().
@@ -220,8 +224,20 @@ func ExecCommand(input ExecCommandInput, f *vault.ConfigFile, keyring keyring.Ke
 		}
 		printHelpMessage(subshellHelp, input.ShowHelpMessages)
 	} else {
-		if err = addCredsToEnv(credsProvider, input.ProfileName, &cmdEnv); err != nil {
-			return 0, err
+		if input.UseProfileEnv {
+			if _, err = credsProvider.Retrieve(context.TODO()); err != nil {
+				return 0, fmt.Errorf("Failed to get credentials for %s: %w", input.ProfileName, err)
+			}
+			if config.HasSSOStartURL() {
+				if err = vault.SyncOIDCTokenToStandardCache(config, keyring); err != nil {
+					log.Printf("Warning: failed to sync OIDC token to standard cache: %s", err)
+				}
+			}
+			cmdEnv.Set("AWS_PROFILE", input.ProfileName)
+		} else {
+			if err = addCredsToEnv(credsProvider, input.ProfileName, &cmdEnv); err != nil {
+				return 0, err
+			}
 		}
 		printHelpMessage(subshellHelp, input.ShowHelpMessages)
 
