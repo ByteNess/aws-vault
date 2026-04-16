@@ -177,9 +177,12 @@ Full contributing [guidelines are covered here](.github/CONTRIBUTING.md).
 
 ## Maintainers
 
+This is an Envato fork.
+
+Previous Byteness maintainers:
+
 * [Marko Bevc](https://github.com/mbevc1)
 * Full [contributors list](https://github.com/envato/aws-vault/graphs/contributors)
-
 
 ## References and Inspiration
 
