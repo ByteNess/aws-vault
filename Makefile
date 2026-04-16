@@ -1,6 +1,5 @@
 VERSION=$(shell git describe --tags --candidates=1 --dirty)+envato
 BUILD_FLAGS=-ldflags="-s -w -X main.Version=$(VERSION)" -trimpath
-CERT_ID ?= Developer ID Application: ByteNess (R)
 SRC=$(shell find . -name '*.go') go.mod
 INSTALL_DIR ?= ~/bin
 .PHONY: binaries clean release install snapshot run
@@ -8,7 +7,7 @@ INSTALL_DIR ?= ~/bin
 ifeq ($(shell uname), Darwin)
 aws-vault: $(SRC)
 	go build -ldflags="-s -w -X main.Version=$(VERSION)" -o $@ .
-	codesign --options runtime --timestamp --sign "$(CERT_ID)" $@
+	codesign --options runtime --timestamp --sign - $@
 else
 aws-vault: $(SRC)
 	go build -ldflags="-s -w -X main.Version=$(VERSION)" -o $@ .
