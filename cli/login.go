@@ -17,7 +17,7 @@ import (
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
-	"github.com/byteness/aws-vault/v7/vault"
+	"github.com/envato/aws-vault/v7/vault"
 	"github.com/byteness/keyring"
 	"github.com/skratchdot/open-golang/open"
 )

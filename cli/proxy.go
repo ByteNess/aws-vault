@@ -6,7 +6,7 @@ import (
 	"syscall"
 
 	"github.com/alecthomas/kingpin/v2"
-	"github.com/byteness/aws-vault/v7/server"
+	"github.com/envato/aws-vault/v7/server"
 )
 
 func ConfigureProxyCommand(app *kingpin.Application) {

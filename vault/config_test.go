@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/byteness/aws-vault/v7/vault"
+	"github.com/envato/aws-vault/v7/vault"
 	"github.com/google/go-cmp/cmp"
 )
 

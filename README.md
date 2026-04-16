@@ -16,7 +16,7 @@ Check out the [announcement blog post](https://99designs.com.au/tech-blog/blog/2
 ## Installing
 
 You can install AWS Vault:
-- by downloading the [latest release](https://github.com/byteness/aws-vault/releases/latest)
+- by downloading the [latest release](https://github.com/envato/aws-vault/releases/latest)
 - using [Homebrew](https://formulae.brew.sh/formula/aws-vault): `brew install aws-vault`
 - on Windows with [Chocolatey](https://chocolatey.org/packages/aws-vault): `choco install aws-vault` ([repo](https://github.com/gusztavvargadr/aws-vault-chocolatey) by [Gusztáv Varga](https://github.com/gusztavvargadr))
 - on [NixOS](https://search.nixos.org/packages?channel=unstable&query=aws-vault) (currently only available on the unstable channel): `nix-env -iA nixos.aws-vault`
@@ -158,7 +158,7 @@ This behavour can be achieved by using `--auto-logout` or `-a` flag! Read more i
 
 ## Development
 
-The [macOS release builds](https://github.com/byteness/aws-vault/releases) are code-signed to avoid extra prompts in Keychain. You can verify this with:
+The [macOS release builds](https://github.com/envato/aws-vault/releases) are code-signed to avoid extra prompts in Keychain. You can verify this with:
 ```shell
 $ codesign --verify --verbose $(which aws-vault)
 ```
@@ -171,14 +171,14 @@ $ codesign --sign <Name of certificate created above> ./aws-vault
 
 ## 🧰 Contributing
 
-Report issues/questions/feature requests on in the [issues](https://github.com/byteness/aws-vault/issues/new) section.
+Report issues/questions/feature requests on in the [issues](https://github.com/envato/aws-vault/issues/new) section.
 
 Full contributing [guidelines are covered here](.github/CONTRIBUTING.md).
 
 ## Maintainers
 
 * [Marko Bevc](https://github.com/mbevc1)
-* Full [contributors list](https://github.com/byteness/aws-vault/graphs/contributors)
+* Full [contributors list](https://github.com/envato/aws-vault/graphs/contributors)
 
 
 ## References and Inspiration

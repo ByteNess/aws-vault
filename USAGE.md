@@ -747,9 +747,9 @@ Further config:
 ## Shell completion
 
 You can generate shell completions for
- - bash: `eval "$(curl -fs https://raw.githubusercontent.com/byteness/aws-vault/master/contrib/completions/bash/aws-vault.bash)"`
- - zsh: `eval "$(curl -fs https://raw.githubusercontent.com/byteness/aws-vault/master/contrib/completions/zsh/aws-vault.zsh)"`
- - fish: `eval "$(curl -fs https://raw.githubusercontent.com/byteness/aws-vault/master/contrib/completions/fish/aws-vault.fish)"`
+ - bash: `eval "$(curl -fs https://raw.githubusercontent.com/envato/aws-vault/master/contrib/completions/bash/aws-vault.bash)"`
+ - zsh: `eval "$(curl -fs https://raw.githubusercontent.com/envato/aws-vault/master/contrib/completions/zsh/aws-vault.zsh)"`
+ - fish: `eval "$(curl -fs https://raw.githubusercontent.com/envato/aws-vault/master/contrib/completions/fish/aws-vault.fish)"`
 
 Find the completion scripts at [contrib/completions](contrib/completions).
 

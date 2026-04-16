@@ -5,7 +5,7 @@ import (
 	"log"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/byteness/aws-vault/v7/prompt"
+	"github.com/envato/aws-vault/v7/prompt"
 )
 
 // Mfa contains options for an MFA device

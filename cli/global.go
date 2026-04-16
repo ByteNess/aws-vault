@@ -9,8 +9,8 @@ import (
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/alecthomas/kingpin/v2"
-	"github.com/byteness/aws-vault/v7/prompt"
-	"github.com/byteness/aws-vault/v7/vault"
+	"github.com/envato/aws-vault/v7/prompt"
+	"github.com/envato/aws-vault/v7/vault"
 	"github.com/byteness/keyring"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"

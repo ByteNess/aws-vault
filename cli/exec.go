@@ -15,9 +15,9 @@ import (
 
 	"github.com/alecthomas/kingpin/v2"
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/byteness/aws-vault/v7/iso8601"
-	"github.com/byteness/aws-vault/v7/server"
-	"github.com/byteness/aws-vault/v7/vault"
+	"github.com/envato/aws-vault/v7/iso8601"
+	"github.com/envato/aws-vault/v7/server"
+	"github.com/envato/aws-vault/v7/vault"
 	"github.com/byteness/keyring"
 )
 

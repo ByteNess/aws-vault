@@ -69,7 +69,7 @@ release:
   disable: false
   name_template: "v{{ .Version }}"
   footer: |
-    **Full Changelog**: https://github.com/byteness/aws-vault/compare/{{ .PreviousTag }}...{{ if .IsNightly }}nightly{{ else }}{{ .Tag }}{{ end }}
+    **Full Changelog**: https://github.com/envato/aws-vault/compare/{{ .PreviousTag }}...{{ if .IsNightly }}nightly{{ else }}{{ .Tag }}{{ end }}
 
 milestones:
   - close: true

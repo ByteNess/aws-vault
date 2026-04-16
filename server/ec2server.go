@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/byteness/aws-vault/v7/iso8601"
+	"github.com/envato/aws-vault/v7/iso8601"
 )
 
 const ec2CredentialsServerAddr = "127.0.0.1:9099"
@@ -74,7 +74,7 @@ func withSecurityChecks(next *http.ServeMux) http.HandlerFunc {
 
 		// Check that the request is to 169.254.169.254
 		// Without this it's possible for an attacker to mount a DNS rebinding attack
-		// See https://github.com/byteness/aws-vault/issues/578
+		// See https://github.com/envato/aws-vault/issues/578
 		if r.Host != ec2MetadataEndpointIP && r.Host != ec2MetadataEndpointAddr {
 			http.Error(w, fmt.Sprintf("Access denied for host '%s'", r.Host), http.StatusUnauthorized)
 			return
