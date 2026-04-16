@@ -1,4 +1,4 @@
-# AWS Vault
+# AWS Vault 
 
 > [!NOTE]
 > This is a company fork of https://github.com/ByteNess/aws-vault which is a maintained fork of abandoned https://github.com/99designs/aws-vault
