@@ -1,8 +1,5 @@
 # AWS Vault
 
-[![Downloads](https://img.shields.io/github/downloads/byteness/aws-vault/total)](https://github.com/byteness/aws-vault/releases)
-[![Continuous Integration](https://github.com/byteness/aws-vault/workflows/Continuous%20Integration/badge.svg)](https://github.com/byteness/aws-vault/actions)
-
 > [!NOTE]
 > This is a maintained fork of https://github.com/99designs/aws-vault which is an abandoned project.
 > Contributions are welcome and preferably please open an [issue](https://github.com/ByteNess/aws-vault/issues) first.
