@@ -125,7 +125,7 @@ func (e *EcsServer) getRoleProvider(roleArn string) aws.CredentialsProvider {
 	if ok {
 		roleProviderCache = v.(*aws.CredentialsCache)
 	} else {
-		cfg := vault.NewAwsConfigWithCredsProvider(e.baseCredsProvider, e.config.Region, e.config.STSRegionalEndpoints)
+		cfg := vault.NewAwsConfigWithCredsProvider(e.baseCredsProvider, e.config.Region, e.config.STSRegionalEndpoints, e.config.EndpointURL)
 		roleProvider := &vault.AssumeRoleProvider{
 			StsClient: sts.NewFromConfig(cfg),
 			RoleARN:   roleArn,

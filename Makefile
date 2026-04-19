@@ -59,7 +59,7 @@ release: binaries SHA256SUMS
 
 	@echo "\nTo update homebrew-cask run:\n\n    brew bump-cask-pr --version $(shell echo $(VERSION) | sed 's/v\(.*\)/\1/') aws-vault\n"
 
-ubuntu-latest: aws-vault-linux-amd64 aws-vault-linux-arm64 aws-vault-windows-amd64.exe aws-vault-windows-arm64.exe aws-vault-freebsd-amd64
+ubuntu-latest: aws-vault-linux-amd64 aws-vault-linux-arm64 aws-vault-linux-ppc64le aws-vault-windows-amd64.exe aws-vault-windows-arm64.exe aws-vault-freebsd-amd64
 
 macos-latest: aws-vault-darwin-amd64 aws-vault-darwin-arm64
 

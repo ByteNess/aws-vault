@@ -272,6 +272,7 @@ WARNING: Use of this option runs against security best practices. It is recommen
 
 To configure the default flag values of `aws-vault` and its subcommands:
 * `AWS_VAULT_BACKEND`: Secret backend to use (see the flag `--backend`)
+* `AWS_VAULT_BIOMETRICS`: Use biometric authentication using TouchID, if supported (see the flag `--biometrics`)
 * `AWS_VAULT_KEYCHAIN_NAME`: Name of macOS keychain to use (see the flag `--keychain`)
 * `AWS_VAULT_AUTO_LOGOUT`: Enable auto-logout when doing `login` (see the flag `--auto-logout`)
 * `AWS_VAULT_PROMPT`: Prompt driver to use (see the flag `--prompt`)
@@ -280,12 +281,23 @@ To configure the default flag values of `aws-vault` and its subcommands:
 * `AWS_VAULT_PASS_PREFIX`: Prefix to prepend to the item path stored in pass (see the flag `--pass-prefix`)
 * `AWS_VAULT_FILE_DIR`: Directory for the "file" password store (see the flag `--file-dir`)
 * `AWS_VAULT_FILE_PASSPHRASE`: Password for the "file" password store
+* `AWS_VAULT_OP_TIMEOUT`: Timeout for 1Password Service Account operations (see the flag `--op-timeout`)
+* `AWS_VAULT_OP_VAULT_ID`: UUID of the 1Password vault (see the flag `--op-vault-id`)
+* `AWS_VAULT_OP_ITEM_TITLE_PREFIX`: Prefix to prepend to 1Password item titles (see the flag `--op-item-title-prefix`)
+* `AWS_VAULT_OP_ITEM_TAG`: Tag to apply to 1Password items (see the flag `--op-item-tag`)
+* `AWS_VAULT_OP_CONNECT_HOST`: 1Password Connect server HTTP(S) URI (see the flag `--op-connect-host`)
+* `AWS_VAULT_OP_CONNECT_TOKEN`: 1Password Connect server access token
+* `AWS_VAULT_OP_SERVICE_ACCOUNT_TOKEN`: 1Password service account token
+* `AWS_VAULT_OP_DESKTOP_ACCOUNT_ID`: 1Password Desktop App account name or account UUID (see the flag `--op-desktop-account-id`)
+* `AWS_VAULT_PROFILE_ENV`: Set `AWS_PROFILE` instead of injecting `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` to allow profile-based SDK auth (see the flag `profile-env` for `exec`)
 * `AWS_CONFIG_FILE`: The location of the AWS config file
+* `AWS_VAULT_STDOUT`: Print login URL to stdout instead of opening in default browser (see the flag `--stdout`)
 
 To override the AWS config file (used in the `exec`, `login` and `rotate` subcommands):
 * `AWS_REGION`: The AWS region
 * `AWS_DEFAULT_REGION`: The AWS region, applied only if `AWS_REGION` isn't set
 * `AWS_STS_REGIONAL_ENDPOINTS`: STS endpoint resolution logic, must be "regional" or "legacy"
+* `AWS_ENDPOINT_URL`: The AWS endpoint URL to use
 * `AWS_MFA_SERIAL`: The identification number of the MFA device to use
 * `AWS_ROLE_ARN`: Specifies the ARN of an IAM role in the active profile
 * `AWS_ROLE_SESSION_NAME`: Specifies the name to attach to the role session in the active profile
@@ -525,7 +537,7 @@ The ECS Credential provider binds to a random, ephemeral port and requires an au
  2. Allows multiple providers simultaneously for discrete processes
  3. Mitigates the security issues that accompany the EC2 Metadata Service because the address is not well-known and the authorization token is only exposed to the subprocess via environment variables
 
-However, this will only work with the AWS SDKs [that support `AWS_CONTAINER_CREDENTIALS_FULL_URI`](https://docs.aws.amazon.com/sdkref/latest/guide/feature-container-credentials.html). The C++ and PHP SDKs do not currently support it.
+However, this will only work with the AWS SDKs [that support `AWS_CONTAINER_CREDENTIALS_FULL_URI`](https://docs.aws.amazon.com/sdkref/latest/guide/feature-container-credentials.html).
 
 The ECS server also responds to requests on `/role-arn/YOUR_ROLE_ARN` with the role credentials, making it usable with  `AWS_CONTAINER_CREDENTIALS_RELATIVE_URI` when combined with a reverse proxy (see the Docker section below).
 
@@ -711,6 +723,7 @@ In case of TOTP being out of sync (AWS API doesn't accept MFA codes), a yubikey 
 Note that each `[profile <name>]` in your `~/.aws/config` only supports one `mfa_serial` entry. If you wish to use multiple Yubikeys, or mix and match MFA devices, you'll need to add a profile for each method.
 
 ### Usage
+
 Using the `ykman` prompt driver, aws-vault will execute `ykman` to generate tokens for any profile in your `.aws/config` using an `mfa_device`.
 ```shell
 aws-vault exec --prompt ykman ${AWS_VAULT_PROFILE_USING_MFA} -- aws s3 ls

@@ -3,29 +3,49 @@ name: PR checks
 on:
   pull_request:
     types: [opened, synchronize, reopened, edited]
+  pull_request_target: # support target PR changes for labelling
+    types: [opened, synchronize, reopened, edited]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read  # This is required for the label PR action
   pull-requests: write # This is required for the label PR action
+  #issues: write # Required to create new labels
 
 jobs:
   validate-pr-title:
+    # Run only when the PR comes from the same repository, not from a fork
+    #if: github.event.pull_request.head.repo.full_name == github.repository
     name: Validate PR
     runs-on: ubuntu-latest
     steps:
       - name: PR Conventional Commit Validation
-        uses: ytanikin/pr-conventional-commits@1.4.1
+        uses: ytanikin/pr-conventional-commits@1.5.2
         with:
           task_types: '["feat","fix","docs","test","ci","refactor","perf","chore","revert"]'
           add_label: 'true'
           #custom_labels: '{"feat": "feature", "fix": "fix", "docs": "documentation", "test": "test", "ci": "CI/CD", "refactor": "refactor", "perf": "performance", "chore": "chore", "revert": "revert", "wip": "WIP"}'
           #add_scope_label: 'true'
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Require Conventional Commits
+        id: require-conventional-commits
+        uses: webiny/action-conventional-commits@faccb24fc2550dd15c0390d944379d2d8ed9690e # v1.3.1
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          allowed-commit-types: "feat,fix,docs,chore,ci,test,refactor,perf,revert,changelog,build,style,merge"
   labeler:
+    # Run only when the PR comes from the same repository, not from a fork
+    #if: github.event.pull_request.head.repo.full_name == github.repository
     name: Label PRs
     runs-on: ubuntu-latest
     steps:
       - name: Label PRs
         id: label-prs
-        uses: actions/labeler@v5
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: actions/labeler@v6
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          sync-labels: true
+          configuration-path: ".github/labeler.yaml"

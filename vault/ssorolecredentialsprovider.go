@@ -9,7 +9,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/byteness/keyring"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awshttp "github.com/aws/aws-sdk-go-v2/aws/transport/http"
 	"github.com/aws/aws-sdk-go-v2/service/sso"
@@ -17,6 +16,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssooidc"
 	ssooidctypes "github.com/aws/aws-sdk-go-v2/service/ssooidc/types"
 	ststypes "github.com/aws/aws-sdk-go-v2/service/sts/types"
+	"github.com/byteness/keyring"
 	"github.com/skratchdot/open-golang/open"
 )
 

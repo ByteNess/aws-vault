@@ -6,6 +6,8 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/byteness/aws-vault/v7/internal/tty"
 )
 
 // YkmanProvider runs ykman to generate a OATH-TOTP token from the Yubikey device
@@ -35,7 +37,24 @@ func YkmanMfaProvider(mfaSerial string) (string, error) {
 
 	log.Printf("Fetching MFA code using `ykman %s`", strings.Join(args, " "))
 	cmd := exec.Command("ykman", args...)
-	cmd.Stderr = os.Stderr
+
+	// Route stdin and stderr to the controlling TTY so that:
+	//   - Stderr: the "Touch your YubiKey..." prompt is visible even when
+	//     aws-vault is spawned as a credential_process subprocess (where the
+	//     parent process may capture os.Stderr via a pipe).
+	//   - Stdin: ykman sees a real TTY as stdin, so sys.stdin.isatty() == True
+	//     and interactive prompts (e.g. OATH password) work even when
+	//     aws-vault's stdin is a pipe (e.g. docker credential helper).
+	ttyIn, ttyOut, cleanup := tty.Open()
+	defer cleanup()
+	if ttyIn != nil {
+		cmd.Stdin = ttyIn
+	}
+	if ttyOut != nil {
+		cmd.Stderr = ttyOut
+	} else {
+		cmd.Stderr = os.Stderr
+	}
 
 	out, err := cmd.Output()
 	if err != nil {

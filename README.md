@@ -4,8 +4,8 @@
 [![Continuous Integration](https://github.com/byteness/aws-vault/workflows/Continuous%20Integration/badge.svg)](https://github.com/byteness/aws-vault/actions)
 
 > [!NOTE]
-> This is a maintained fork of https://github.com/99designs/aws-vault which seems to be an abandoned project.
-> Contributions are welcome, but keep in mind this is a side project and maintained on best effort basis!
+> This is a maintained fork of https://github.com/99designs/aws-vault which is an abandoned project.
+> Contributions are welcome and preferably please open an [issue](https://github.com/ByteNess/aws-vault/issues) first.
 
 AWS Vault is a tool to securely store and access AWS credentials in a development environment.
 
@@ -19,6 +19,7 @@ You can install AWS Vault:
 - by downloading the [latest release](https://github.com/byteness/aws-vault/releases/latest)
 - using [Homebrew](https://formulae.brew.sh/formula/aws-vault): `brew install aws-vault`
 - on Windows with [Chocolatey](https://chocolatey.org/packages/aws-vault): `choco install aws-vault` ([repo](https://github.com/gusztavvargadr/aws-vault-chocolatey) by [Gusztáv Varga](https://github.com/gusztavvargadr))
+- on [NixOS](https://search.nixos.org/packages?channel=unstable&query=aws-vault): `nix-env -iA nixos.aws-vault`
 
 ## Documentation
 
@@ -33,7 +34,11 @@ The supported vaulting backends are:
 * Secret Service ([Gnome Keyring](https://wiki.gnome.org/Projects/GnomeKeyring), [KWallet](https://kde.org/applications/system/org.kde.kwalletmanager5))
 * [KWallet](https://kde.org/applications/system/org.kde.kwalletmanager5)
 * [Pass](https://www.passwordstore.org/)
+* [Passage](https://github.com/FiloSottile/passage)
 * Encrypted file
+* [1Password Connect](https://developer.1password.com/docs/connect/)
+* [1Password Service Accounts](https://developer.1password.com/docs/service-accounts)
+* [1Password Desktop App](https://developer.1password.com/docs/sdks/desktop-app-integrations/)
 
 Use the `--backend` flag or `AWS_VAULT_BACKEND` environment variable to specify.
 
@@ -43,7 +48,9 @@ Use the `--backend` flag or `AWS_VAULT_BACKEND` environment variable to specify.
 # Store AWS credentials for the "jonsmith" profile
 $ aws-vault add jonsmith
 Enter Access Key Id: ABDCDEFDASDASF
-Enter Secret Key: %%%
+Enter Secret Key: ****************************************
+Enter MFA Device ARN (If MFA is not enabled, leave this blank): arn:aws:iam::123456789012:mfa/jonsmith
+Added credentials to profile "jonsmith" in vault
 
 # Execute a command (using temporary credentials)
 $ aws-vault exec jonsmith -- aws s3 ls

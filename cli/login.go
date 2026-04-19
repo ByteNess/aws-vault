@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -60,10 +61,12 @@ func ConfigureLoginCommand(app *kingpin.Application, a *AwsVault) {
 		StringVar(&input.Config.Region)
 
 	cmd.Flag("stdout", "Print login URL to stdout instead of opening in default browser").
+		OverrideDefaultFromEnvar("AWS_VAULT_STDOUT").
 		Short('s').
 		BoolVar(&input.UseStdout)
 
 	cmd.Arg("profile", "Name of the profile. If none given, credentials will be sourced from env vars").
+		Default(os.Getenv("AWS_PROFILE")).
 		HintAction(a.MustGetProfileNames).
 		StringVar(&input.ProfileName)
 
@@ -236,6 +239,9 @@ func generateLoginURL(region string, path string) (string, string) {
 		case strings.HasPrefix(region, "us-gov-"):
 			loginURLPrefix = "https://signin.amazonaws-us-gov.com/federation"
 			destinationDomain = "console.amazonaws-us-gov.com"
+		case strings.HasPrefix(region, "eusc-"):
+			loginURLPrefix = "https://signin.amazonaws-eusc.eu/federation" // NOTE: not yet available for aws-eusc
+			destinationDomain = "console.amazonaws-eusc.eu"                // URL for console.aws.eu
 		}
 		if path != "" {
 			destination = fmt.Sprintf("https://%s.%s/%s?region=%s",
@@ -249,7 +255,7 @@ func generateLoginURL(region string, path string) (string, string) {
 }
 
 func isCallerIdentityAssumedRole(ctx context.Context, credsProvider aws.CredentialsProvider, config *vault.ProfileConfig) (bool, error) {
-	cfg := vault.NewAwsConfigWithCredsProvider(credsProvider, config.Region, config.STSRegionalEndpoints)
+	cfg := vault.NewAwsConfigWithCredsProvider(credsProvider, config.Region, config.STSRegionalEndpoints, config.EndpointURL)
 	client := sts.NewFromConfig(cfg)
 	id, err := client.GetCallerIdentity(ctx, nil)
 	if err != nil {

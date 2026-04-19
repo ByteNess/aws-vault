@@ -3,9 +3,9 @@ package cli
 import (
 	"fmt"
 
-	"github.com/byteness/keyring"
 	"github.com/alecthomas/kingpin/v2"
 	"github.com/byteness/aws-vault/v7/vault"
+	"github.com/byteness/keyring"
 )
 
 type ClearCommandInput struct {

@@ -34,6 +34,7 @@ type ExecCommandInput struct {
 	NoSession        bool
 	UseStdout        bool
 	ShowHelpMessages bool
+	UseProfileEnv    bool
 }
 
 func (input ExecCommandInput) validate() error {
@@ -105,10 +106,16 @@ func ConfigureExecCommand(app *kingpin.Application, a *AwsVault) {
 		BoolVar(&input.Lazy)
 
 	cmd.Flag("stdout", "Print the SSO link to the terminal without automatically opening the browser").
+		OverrideDefaultFromEnvar("AWS_VAULT_STDOUT").
 		BoolVar(&input.UseStdout)
+
+	cmd.Flag("profile-env", "Set AWS_PROFILE instead of injecting AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY").
+		OverrideDefaultFromEnvar("AWS_VAULT_PROFILE_ENV").
+		BoolVar(&input.UseProfileEnv)
 
 	cmd.Arg("profile", "Name of the profile").
 		//Required().
+		Default(os.Getenv("AWS_PROFILE")).
 		HintAction(a.MustGetProfileNames).
 		StringVar(&input.ProfileName)
 
@@ -195,7 +202,7 @@ func ExecCommand(input ExecCommandInput, f *vault.ConfigFile, keyring keyring.Ke
 		subshellHelp = fmt.Sprintf("Starting subshell %s, use `exit` to exit the subshell", input.Command)
 	}
 
-	cmdEnv := createEnv(input.ProfileName, config.Region)
+	cmdEnv := createEnv(input.ProfileName, config.Region, config.EndpointURL)
 
 	if input.StartEc2Server {
 		if server.IsProxyRunning() {
@@ -219,8 +226,22 @@ func ExecCommand(input ExecCommandInput, f *vault.ConfigFile, keyring keyring.Ke
 		}
 		printHelpMessage(subshellHelp, input.ShowHelpMessages)
 	} else {
-		if err = addCredsToEnv(credsProvider, input.ProfileName, &cmdEnv); err != nil {
-			return 0, err
+		if input.UseProfileEnv {
+			// Validate credentials are accessible before setting AWS_PROFILE,
+			// so we fail fast rather than letting the child process fail silently.
+			if _, err = credsProvider.Retrieve(context.TODO()); err != nil {
+				return 0, fmt.Errorf("failed to get credentials for %s: %w", input.ProfileName, err)
+			}
+			if config.HasSSOStartURL() {
+				if err = vault.SyncOIDCTokenToStandardCache(config, keyring); err != nil {
+					log.Printf("Warning: failed to sync OIDC token to standard cache: %s", err)
+				}
+			}
+			cmdEnv.Set("AWS_PROFILE", input.ProfileName)
+		} else {
+			if err = addCredsToEnv(credsProvider, input.ProfileName, &cmdEnv); err != nil {
+				return 0, err
+			}
 		}
 		printHelpMessage(subshellHelp, input.ShowHelpMessages)
 
@@ -248,7 +269,7 @@ func printToStderr(helpMsg string) {
 	fmt.Fprint(os.Stderr, helpMsg, "\n")
 }
 
-func createEnv(profileName string, region string) environ {
+func createEnv(profileName string, region string, endpointURL string) environ {
 	env := environ(os.Environ())
 	env.Unset("AWS_ACCESS_KEY_ID")
 	env.Unset("AWS_SECRET_ACCESS_KEY")
@@ -267,6 +288,11 @@ func createEnv(profileName string, region string) environ {
 		log.Printf("Setting subprocess env: AWS_REGION=%s, AWS_DEFAULT_REGION=%s", region, region)
 		env.Set("AWS_REGION", region)
 		env.Set("AWS_DEFAULT_REGION", region)
+	}
+
+	if endpointURL != "" {
+		log.Printf("Setting subprocess env: AWS_ENDPOINT_URL=%s", endpointURL)
+		env.Set("AWS_ENDPOINT_URL", endpointURL)
 	}
 
 	return env

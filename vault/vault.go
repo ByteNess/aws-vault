@@ -2,12 +2,15 @@ package vault
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/credentials/ssocreds"
 	"github.com/aws/aws-sdk-go-v2/service/sso"
 	"github.com/aws/aws-sdk-go-v2/service/ssooidc"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
@@ -22,18 +25,18 @@ func init() {
 	}
 }
 
-func NewAwsConfig(region, stsRegionalEndpoints string) aws.Config {
+func NewAwsConfig(region, stsRegionalEndpoints, endpointURL string) aws.Config {
 	return aws.Config{
 		Region:                      region,
-		EndpointResolverWithOptions: getSTSEndpointResolver(stsRegionalEndpoints),
+		EndpointResolverWithOptions: getSTSEndpointResolver(stsRegionalEndpoints, endpointURL),
 	}
 }
 
-func NewAwsConfigWithCredsProvider(credsProvider aws.CredentialsProvider, region, stsRegionalEndpoints string) aws.Config {
+func NewAwsConfigWithCredsProvider(credsProvider aws.CredentialsProvider, region, stsRegionalEndpoints, endpointURL string) aws.Config {
 	return aws.Config{
 		Region:                      region,
 		Credentials:                 credsProvider,
-		EndpointResolverWithOptions: getSTSEndpointResolver(stsRegionalEndpoints),
+		EndpointResolverWithOptions: getSTSEndpointResolver(stsRegionalEndpoints, endpointURL),
 	}
 }
 
@@ -63,7 +66,7 @@ func NewMasterCredentialsProvider(k *CredentialKeyring, credentialsName string) 
 }
 
 func NewSessionTokenProvider(credsProvider aws.CredentialsProvider, k keyring.Keyring, config *ProfileConfig, useSessionCache bool) (aws.CredentialsProvider, error) {
-	cfg := NewAwsConfigWithCredsProvider(credsProvider, config.Region, config.STSRegionalEndpoints)
+	cfg := NewAwsConfigWithCredsProvider(credsProvider, config.Region, config.STSRegionalEndpoints, config.EndpointURL)
 
 	sessionTokenProvider := &SessionTokenProvider{
 		StsClient: sts.NewFromConfig(cfg),
@@ -89,7 +92,7 @@ func NewSessionTokenProvider(credsProvider aws.CredentialsProvider, k keyring.Ke
 
 // NewAssumeRoleProvider returns a provider that generates credentials using AssumeRole
 func NewAssumeRoleProvider(credsProvider aws.CredentialsProvider, k keyring.Keyring, config *ProfileConfig, useSessionCache bool) (aws.CredentialsProvider, error) {
-	cfg := NewAwsConfigWithCredsProvider(credsProvider, config.Region, config.STSRegionalEndpoints)
+	cfg := NewAwsConfigWithCredsProvider(credsProvider, config.Region, config.STSRegionalEndpoints, config.EndpointURL)
 
 	p := &AssumeRoleProvider{
 		StsClient:         sts.NewFromConfig(cfg),
@@ -122,7 +125,7 @@ func NewAssumeRoleProvider(credsProvider aws.CredentialsProvider, k keyring.Keyr
 // NewAssumeRoleWithWebIdentityProvider returns a provider that generates
 // credentials using AssumeRoleWithWebIdentity
 func NewAssumeRoleWithWebIdentityProvider(k keyring.Keyring, config *ProfileConfig, useSessionCache bool) (aws.CredentialsProvider, error) {
-	cfg := NewAwsConfig(config.Region, config.STSRegionalEndpoints)
+	cfg := NewAwsConfig(config.Region, config.STSRegionalEndpoints, config.EndpointURL)
 
 	p := &AssumeRoleWithWebIdentityProvider{
 		StsClient:               sts.NewFromConfig(cfg),
@@ -150,7 +153,7 @@ func NewAssumeRoleWithWebIdentityProvider(k keyring.Keyring, config *ProfileConf
 
 // NewSSORoleCredentialsProvider creates a provider for SSO credentials
 func NewSSORoleCredentialsProvider(k keyring.Keyring, config *ProfileConfig, useSessionCache bool) (aws.CredentialsProvider, error) {
-	cfg := NewAwsConfig(config.SSORegion, config.STSRegionalEndpoints)
+	cfg := NewAwsConfig(config.SSORegion, config.STSRegionalEndpoints, config.EndpointURL)
 
 	ssoRoleCredentialsProvider := &SSORoleCredentialsProvider{
 		OIDCClient: ssooidc.NewFromConfig(cfg),
@@ -178,6 +181,125 @@ func NewSSORoleCredentialsProvider(k keyring.Keyring, config *ProfileConfig, use
 	return ssoRoleCredentialsProvider, nil
 }
 
+// ssoTokenCacheKey returns the key used to compute the standard SSO cache file path.
+// For profiles using [sso-session] this is the session name; for legacy profiles it is the start URL.
+func ssoTokenCacheKey(config *ProfileConfig) string {
+	if config.SSOSession != "" {
+		return config.SSOSession
+	}
+	return config.SSOStartURL
+}
+
+// SyncOIDCTokenToStandardCache writes the OIDC access token for the given profile
+// from the keyring to the standard AWS SSO cache file (~/.aws/sso/cache/<sha1>.json),
+// so that other AWS tools that read the standard file location can use it.
+func SyncOIDCTokenToStandardCache(config *ProfileConfig, k keyring.Keyring) error {
+	tokenFilepath, err := ssocreds.StandardCachedTokenFilepath(ssoTokenCacheKey(config))
+	if err != nil {
+		return err
+	}
+
+	token, err := (OIDCTokenKeyring{Keyring: k}).Get(config.SSOStartURL)
+	if err != nil {
+		return fmt.Errorf("OIDC token not found in keyring for %s: %w", config.SSOStartURL, err)
+	}
+
+	// ExpiresIn is recalculated by OIDCTokenKeyring.Get() to reflect the
+	// remaining seconds until expiry, so time.Now().Add() is correct here.
+	expiration := time.Now().Add(time.Duration(token.ExpiresIn) * time.Second)
+
+	type cachedToken struct {
+		AccessToken  string `json:"accessToken"`
+		ExpiresAt    string `json:"expiresAt"`
+		RefreshToken string `json:"refreshToken,omitempty"`
+	}
+
+	t := cachedToken{
+		AccessToken: aws.ToString(token.AccessToken),
+		ExpiresAt:   expiration.UTC().Format(time.RFC3339),
+	}
+	if token.RefreshToken != nil {
+		t.RefreshToken = aws.ToString(token.RefreshToken)
+	}
+
+	b, err := json.Marshal(t)
+	if err != nil {
+		return err
+	}
+
+	// MkdirAll only sets perms when creating the directory. If
+	// ~/.aws/sso/cache already exists with looser permissions (e.g. 0755
+	// from a prior AWS CLI run), we intentionally do not tighten them here
+	// — changing directory perms out from under another tool would be
+	// surprising. The token file itself is written 0600 below.
+	if err := os.MkdirAll(filepath.Dir(tokenFilepath), 0700); err != nil {
+		return err
+	}
+
+	return writeFileAtomic(tokenFilepath, b, 0600)
+}
+
+// writeFileAtomic writes data to filename atomically by first writing to a
+// temporary file in the same directory and then renaming it into place.
+// The temp file is created with mode 0600 and fsync'd before the rename so
+// that a crash or concurrent writer cannot leave a partial or corrupt file
+// at the destination — readers either see the old contents or the new,
+// never a half-written mix.
+//
+// The temp file is created in the same directory as filename to guarantee
+// that os.Rename is atomic (rename(2) is only atomic within a single
+// filesystem; /tmp is often on a different one).
+//
+// Note: this does not tighten permissions on an existing parent directory.
+// Callers that need 0700 on the directory must enforce that separately,
+// and should be aware that os.MkdirAll is a no-op (including on perms) if
+// the directory already exists.
+func writeFileAtomic(filename string, data []byte, perm os.FileMode) (err error) {
+	dir := filepath.Dir(filename)
+
+	f, err := os.CreateTemp(dir, filepath.Base(filename)+".tmp-*")
+	if err != nil {
+		return fmt.Errorf("create temp file: %w", err)
+	}
+	tmpName := f.Name()
+
+	// Best-effort cleanup if we bail out before the rename succeeds.
+	defer func() {
+		if err != nil {
+			_ = os.Remove(tmpName)
+		}
+	}()
+
+	// CreateTemp defaults to 0600 on Unix, but be explicit — umask and
+	// platform behavior vary, and this file holds a bearer token.
+	if err = f.Chmod(perm); err != nil {
+		f.Close()
+		return fmt.Errorf("chmod temp file: %w", err)
+	}
+
+	if _, err = f.Write(data); err != nil {
+		f.Close()
+		return fmt.Errorf("write temp file: %w", err)
+	}
+
+	// fsync before rename so the contents are durable on disk before any
+	// reader can observe the new inode at the target path.
+	if err = f.Sync(); err != nil {
+		f.Close()
+		return fmt.Errorf("sync temp file: %w", err)
+	}
+
+	if err = f.Close(); err != nil {
+		return fmt.Errorf("close temp file: %w", err)
+	}
+
+	if err = os.Rename(tmpName, filename); err != nil {
+		return fmt.Errorf("rename temp file into place: %w", err)
+	}
+
+	return nil
+}
+
 // NewCredentialProcessProvider creates a provider to retrieve credentials from an external
 // executable as described in https://docs.aws.amazon.com/cli/latest/topic/config-vars.html#sourcing-credentials-from-external-processes
 func NewCredentialProcessProvider(k keyring.Keyring, config *ProfileConfig, useSessionCache bool) (aws.CredentialsProvider, error) {
@@ -201,7 +323,7 @@ func NewCredentialProcessProvider(k keyring.Keyring, config *ProfileConfig, useS
 }
 
 func NewFederationTokenProvider(ctx context.Context, credsProvider aws.CredentialsProvider, config *ProfileConfig) (*FederationTokenProvider, error) {
-	cfg := NewAwsConfigWithCredsProvider(credsProvider, config.Region, config.STSRegionalEndpoints)
+	cfg := NewAwsConfigWithCredsProvider(credsProvider, config.Region, config.STSRegionalEndpoints, config.EndpointURL)
 
 	name, err := GetUsernameFromSession(ctx, cfg)
 	if err != nil {

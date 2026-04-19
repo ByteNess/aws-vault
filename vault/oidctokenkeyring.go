@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/byteness/keyring"
 	"github.com/aws/aws-sdk-go-v2/service/ssooidc"
+	"github.com/byteness/keyring"
 )
 
 type OIDCTokenKeyring struct {

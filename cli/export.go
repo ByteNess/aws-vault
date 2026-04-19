@@ -57,6 +57,7 @@ func ConfigureExportCommand(app *kingpin.Application, a *AwsVault) {
 		EnumVar(&input.Format, FormatTypeEnv, FormatTypeExportEnv, FormatTypeExportJSON, FormatTypeExportINI)
 
 	cmd.Flag("stdout", "Print the SSO link to the terminal without automatically opening the browser").
+		OverrideDefaultFromEnvar("AWS_VAULT_STDOUT").
 		BoolVar(&input.UseStdout)
 
 	cmd.Arg("profile", "Name of the profile").

@@ -33,6 +33,10 @@ Region=us-east-1
 duration_seconds=1200
 sts_regional_endpoints=legacy
 
+[profile withendpointurl]
+region=us-east-1
+endpoint_url=https://localhost:1234
+
 [profile testincludeprofile1]
 region=us-east-1
 
@@ -114,6 +118,7 @@ func TestConfigParsingProfiles(t *testing.T) {
 		{vault.ProfileSection{Name: "user2", Region: "us-east-1"}, true},
 		{vault.ProfileSection{Name: "withsource", SourceProfile: "user2", Region: "us-east-1"}, true},
 		{vault.ProfileSection{Name: "withMFA", MfaSerial: "arn:aws:iam::1234513441:mfa/blah", RoleARN: "arn:aws:iam::4451234513441615400570:role/aws_admin", Region: "us-east-1", DurationSeconds: 1200, SourceProfile: "user2", STSRegionalEndpoints: "legacy"}, true},
+		{vault.ProfileSection{Name: "withendpointurl", Region: "us-east-1", EndpointURL: "https://localhost:1234"}, true},
 		{vault.ProfileSection{Name: "nopenotthere"}, false},
 	}
 
@@ -168,6 +173,7 @@ func TestProfilesFromConfig(t *testing.T) {
 		{Name: "user2", Region: "us-east-1"},
 		{Name: "withsource", Region: "us-east-1", SourceProfile: "user2"},
 		{Name: "withMFA", MfaSerial: "arn:aws:iam::1234513441:mfa/blah", RoleARN: "arn:aws:iam::4451234513441615400570:role/aws_admin", Region: "us-east-1", DurationSeconds: 1200, SourceProfile: "user2", STSRegionalEndpoints: "legacy"},
+		{Name: "withendpointurl", Region: "us-east-1", EndpointURL: "https://localhost:1234"},
 		{Name: "testincludeprofile1", Region: "us-east-1"},
 		{Name: "testincludeprofile2", IncludeProfile: "testincludeprofile1"},
 		{Name: "with-sso-session", SSOSession: "moon-sso", Region: "moon-1", SSOAccountID: "123456"},
@@ -203,6 +209,7 @@ func TestAddProfileToExistingConfig(t *testing.T) {
 		{Name: "user2", Region: "us-east-1"},
 		{Name: "withsource", Region: "us-east-1", SourceProfile: "user2"},
 		{Name: "withMFA", MfaSerial: "arn:aws:iam::1234513441:mfa/blah", RoleARN: "arn:aws:iam::4451234513441615400570:role/aws_admin", Region: "us-east-1", DurationSeconds: 1200, SourceProfile: "user2", STSRegionalEndpoints: "legacy"},
+		{Name: "withendpointurl", Region: "us-east-1", EndpointURL: "https://localhost:1234"},
 		{Name: "testincludeprofile1", Region: "us-east-1"},
 		{Name: "testincludeprofile2", IncludeProfile: "testincludeprofile1"},
 		{Name: "with-sso-session", SSOSession: "moon-sso", Region: "moon-1", SSOAccountID: "123456"},
