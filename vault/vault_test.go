@@ -304,6 +304,85 @@ source_profile=source
 	}
 }
 
+// Ensures inherited default MFA only triggers GetSessionToken at the long-term source profile.
+func TestDefaultMfaRoleChainDoesNotCallGetSessionTokenWithSessionCreds(t *testing.T) {
+	f := newConfigFile(t, []byte(`
+[default]
+mfa_serial=arn:aws:iam::111111111111:mfa/user
+
+[profile source]
+region=eu-west-1
+duration_seconds=7200
+
+[profile admin]
+role_arn=arn:aws:iam::222222222222:role/admin
+source_profile=source
+role_session_name=user
+duration_seconds=7200
+
+[profile target]
+role_arn=arn:aws:iam::333333333333:role/target
+role_session_name=user
+source_profile=admin
+duration_seconds=7200
+`))
+	defer os.Remove(f)
+
+	configFile, err := vault.LoadConfig(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	configLoader := &vault.ConfigLoader{File: configFile, ActiveProfile: "target"}
+	config, err := configLoader.GetProfileConfig("target")
+	if err != nil {
+		t.Fatalf("Should have found a profile: %v", err)
+	}
+	config.MfaToken = "123456"
+	config.SourceProfile.MfaToken = "123456"
+	config.SourceProfile.SourceProfile.MfaToken = "123456"
+
+	ckr := &vault.CredentialKeyring{Keyring: keyring.NewArrayKeyring([]keyring.Item{})}
+	err = ckr.Set("source", aws.Credentials{AccessKeyID: "id", SecretAccessKey: "secret"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var buf bytes.Buffer
+	prevWriter := log.Writer()
+	prevFlags := log.Flags()
+	prevPrefix := log.Prefix()
+	log.SetOutput(&buf)
+	log.SetFlags(0)
+	log.SetPrefix("")
+	defer func() {
+		log.SetOutput(prevWriter)
+		log.SetFlags(prevFlags)
+		log.SetPrefix(prevPrefix)
+	}()
+
+	_, err = vault.NewTempCredentialsProvider(config, ckr, false, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	logs := buf.String()
+	if !strings.Contains(logs, "profile source: using GetSessionToken") {
+		t.Fatalf("expected source to use GetSessionToken, logs:\n%s", logs)
+	}
+	if strings.Contains(logs, "profile admin: using GetSessionToken") {
+		t.Fatalf("did not expect admin to use GetSessionToken with session credentials, logs:\n%s", logs)
+	}
+	if strings.Contains(logs, "profile target: using GetSessionToken") {
+		t.Fatalf("did not expect target to use GetSessionToken, logs:\n%s", logs)
+	}
+	if !strings.Contains(logs, "profile admin: using AssumeRole (chained MFA)") {
+		t.Fatalf("expected admin to use chained AssumeRole, logs:\n%s", logs)
+	}
+	if !strings.Contains(logs, "profile target: using AssumeRole (chained MFA)") {
+		t.Fatalf("expected target to use chained AssumeRole, logs:\n%s", logs)
+	}
+}
+
 // Ensures chained AssumeRole duration is capped to 1 hour when a higher duration is requested.
 func TestRoleChainingCapsAssumeRoleDurationToOneHour(t *testing.T) {
 	f := newConfigFile(t, []byte(`

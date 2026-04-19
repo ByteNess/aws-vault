@@ -268,7 +268,7 @@ func (t *TempCredentialsCreator) getSourceCredWithSession(config *ProfileConfig,
 	isSourceForRoleProfile := config.ChainedFromProfile != nil && config.ChainedFromProfile.HasRole()
 
 	if !config.HasRole() || isSourceForRoleProfile {
-		if isMasterCredentialsProvider(sourcecredsProvider) || isSourceForRoleProfile {
+		if isMasterCredentialsProvider(sourcecredsProvider) {
 			canUseGetSessionToken, reason := t.canUseGetSessionToken(config)
 			if !canUseGetSessionToken {
 				log.Printf("profile %s: skipping GetSessionToken because %s", config.ProfileName, reason)
