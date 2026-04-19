@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/byteness/aws-vault/v7/vault"
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/byteness/aws-vault/v7/vault"
 	"github.com/byteness/keyring"
 )
 
