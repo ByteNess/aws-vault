@@ -409,14 +409,14 @@ func (t *TempCredentialsCreator) getSourceCredWithSession(config *ProfileConfig,
 	}
 
 	if config.HasRole() {
-		if isTemporaryCredentialsProvider(sourcecredsProvider) && config.AssumeRoleDuration > roleChainingMaximumDuration {
+		if isTemporaryCredentialsProvider(sourcecredsProvider) && config.AssumeRoleDuration > RoleChainingMaximumDuration {
 			log.Printf(
 				"profile %s: capping AssumeRole duration from %s to AWS maximum %s for role chaining",
 				config.ProfileName,
 				config.AssumeRoleDuration,
-				roleChainingMaximumDuration,
+				RoleChainingMaximumDuration,
 			)
-			config.AssumeRoleDuration = roleChainingMaximumDuration
+			config.AssumeRoleDuration = RoleChainingMaximumDuration
 		}
 
 		isMfaChained := config.MfaSerial != "" && config.MfaSerial == t.chainedMfa

@@ -411,7 +411,7 @@ duration_seconds=7200
 	}
 }
 
-// Ensures the chained GetSessionToken keeps the requested duration while AssumeRole is capped to 1 hour.
+// Ensures the chained GetSessionToken keeps the requested duration while AssumeRole is capped.
 func TestRoleChainingCapsAssumeRoleDurationToOneHour(t *testing.T) {
 	f := newConfigFile(t, []byte(`
 [profile source]
@@ -465,14 +465,14 @@ mfa_serial=arn:aws:iam::111111111111:mfa/user
 		t.Fatal(err)
 	}
 
-	if config.SourceProfile.GetSessionTokenDuration() != 12*time.Hour {
-		t.Fatalf("expected source GetSessionToken duration to remain 12h, got %s", config.SourceProfile.GetSessionTokenDuration())
+	if config.SourceProfile.GetSessionTokenDuration() != base.ChainedGetSessionTokenDuration {
+		t.Fatalf("expected source GetSessionToken duration to remain %s, got %s", base.ChainedGetSessionTokenDuration, config.SourceProfile.GetSessionTokenDuration())
 	}
-	if config.SourceProfile.AssumeRoleDuration != time.Hour {
-		t.Fatalf("expected source AssumeRole duration to be capped to 1h, got %s", config.SourceProfile.AssumeRoleDuration)
+	if config.SourceProfile.AssumeRoleDuration != vault.RoleChainingMaximumDuration {
+		t.Fatalf("expected source AssumeRole duration to be capped to %s, got %s", vault.RoleChainingMaximumDuration, config.SourceProfile.AssumeRoleDuration)
 	}
-	if config.AssumeRoleDuration != time.Hour {
-		t.Fatalf("expected target AssumeRole duration to be capped to 1h, got %s", config.AssumeRoleDuration)
+	if config.AssumeRoleDuration != vault.RoleChainingMaximumDuration {
+		t.Fatalf("expected target AssumeRole duration to be capped to %s, got %s", vault.RoleChainingMaximumDuration, config.AssumeRoleDuration)
 	}
 
 	logs := buf.String()
