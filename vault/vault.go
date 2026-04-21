@@ -405,7 +405,8 @@ func requiresRoleChainingDurationCap(credsProvider aws.CredentialsProvider) bool
 }
 
 func capAssumeRoleDurationIfChained(sourcecredsProvider aws.CredentialsProvider, config *ProfileConfig) {
-	if !requiresRoleChainingDurationCap(sourcecredsProvider) || config.AssumeRoleDuration <= RoleChainingMaximumDuration {
+	requiresCap := requiresRoleChainingDurationCap(sourcecredsProvider)
+	if !requiresCap || config.AssumeRoleDuration <= RoleChainingMaximumDuration {
 		return
 	}
 
