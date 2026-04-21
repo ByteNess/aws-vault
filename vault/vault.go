@@ -49,7 +49,6 @@ func isMasterCredentialsProvider(credsProvider aws.CredentialsProvider) bool {
 	return ok
 }
 
-
 // NewMasterCredentialsProvider creates a provider for the master credentials
 func NewMasterCredentialsProvider(k *CredentialKeyring, credentialsName string) *KeyringProvider {
 	return &KeyringProvider{k, credentialsName}
