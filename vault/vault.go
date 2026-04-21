@@ -49,16 +49,6 @@ func isMasterCredentialsProvider(credsProvider aws.CredentialsProvider) bool {
 	return ok
 }
 
-func isTemporaryCredentialsProvider(credsProvider aws.CredentialsProvider) bool {
-	switch p := credsProvider.(type) {
-	case *SessionTokenProvider, *AssumeRoleProvider, *SSORoleCredentialsProvider, *AssumeRoleWithWebIdentityProvider:
-		return true
-	case *CachedSessionProvider:
-		return isTemporaryCredentialsProvider(p.SessionProvider)
-	default:
-		return false
-	}
-}
 
 // NewMasterCredentialsProvider creates a provider for the master credentials
 func NewMasterCredentialsProvider(k *CredentialKeyring, credentialsName string) *KeyringProvider {
@@ -404,8 +394,19 @@ func (t *TempCredentialsCreator) primeWithGetSessionToken(config *ProfileConfig,
 	return sourcecredsProvider, config.HasRole(), nil
 }
 
+func requiresRoleChainingDurationCap(credsProvider aws.CredentialsProvider) bool {
+	switch p := credsProvider.(type) {
+	case *SessionTokenProvider, *AssumeRoleProvider:
+		return true
+	case *CachedSessionProvider:
+		return requiresRoleChainingDurationCap(p.SessionProvider)
+	default:
+		return false
+	}
+}
+
 func capAssumeRoleDurationIfChained(sourcecredsProvider aws.CredentialsProvider, config *ProfileConfig) {
-	if !isTemporaryCredentialsProvider(sourcecredsProvider) || config.AssumeRoleDuration <= RoleChainingMaximumDuration {
+	if !requiresRoleChainingDurationCap(sourcecredsProvider) || config.AssumeRoleDuration <= RoleChainingMaximumDuration {
 		return
 	}
 
