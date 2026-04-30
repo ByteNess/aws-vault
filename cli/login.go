@@ -35,6 +35,10 @@ type LoginCommandInput struct {
 func ConfigureLoginCommand(app *kingpin.Application, a *AwsVault) {
 	input := LoginCommandInput{}
 
+	// NOTE: login intentionally does not use --parallel-safe. The login command
+	// opens a browser for an interactive console session — you cannot meaningfully
+	// log in to multiple AWS consoles in parallel, so there is no concurrent-access
+	// problem for --parallel-safe to solve here.
 	cmd := app.Command("login", "Generate a login link for the AWS Console.")
 
 	cmd.Flag("duration", "Duration of the assume-role or federated session. Defaults to 1h").
@@ -75,7 +79,10 @@ func ConfigureLoginCommand(app *kingpin.Application, a *AwsVault) {
 		input.Config.NonChainedGetSessionTokenDuration = input.SessionDuration
 		input.Config.AssumeRoleDuration = input.SessionDuration
 		input.Config.GetFederationTokenDuration = input.SessionDuration
-		keyring, err := a.Keyring()
+		// Login uses the raw keyring without the parallel-safe lock wrapper.
+		// Console login is inherently single-use — there's no concurrent-access
+		// problem for --parallel-safe to solve here.
+		keyring, err := a.RawKeyring()
 		if err != nil {
 			return err
 		}
