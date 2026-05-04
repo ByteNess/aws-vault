@@ -516,7 +516,7 @@ aws-vault: error: Failed to get credentials for default: ValidationError: The re
         status code: 400, request id: aa58fa50-4a5e-11e9-9566-293ea5c350ee
 ```
 
-For that reason, AWS Vault will not use `GetSessionToken` if `--duration` or the role's `duration_seconds` is longer than 1h.
+For that reason, when role chaining is in effect AWS Vault keeps the source profile's `GetSessionToken` session at the duration you requested (up to AWS's 36h maximum for IAM user MFA sessions), and silently caps the chained `AssumeRole` calls to AWS's 1h limit (logged as `capping AssumeRole duration ... for role chaining`).
 
 ### Using `--server`
 

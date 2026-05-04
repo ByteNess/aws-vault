@@ -22,7 +22,7 @@ const (
 	// RoleChainingMaximumDuration is the maximum duration for AssumeRole sessions when role chaining
 	RoleChainingMaximumDuration = time.Hour * 1
 
-	defaultSectionName          = "default"
+	defaultSectionName = "default"
 )
 
 func init() {

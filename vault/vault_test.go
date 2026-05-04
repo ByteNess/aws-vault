@@ -1,12 +1,12 @@
 package vault_test
 
 import (
-	"os"
-	"path/filepath"
-	"testing"
 	"bytes"
 	"log"
+	"os"
+	"path/filepath"
 	"strings"
+	"testing"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -58,7 +58,7 @@ web_identity_token_process = oidccli raw
 		t.Fatalf("Should have found a profile: %v", err)
 	}
 
-	ckr := &vault.CredentialKeyring{Keyring: keyring.NewArrayKeyring([]keyring.Item{})}
+	ckr := newSeededKeyring(t, "")
 	p, err := vault.NewTempCredentialsProvider(config, ckr, true, true)
 	if err != nil {
 		t.Fatal(err)
@@ -94,7 +94,7 @@ role_arn=arn:aws:iam::12345678901:role/allow-view-only-access-from-other-account
 		t.Fatalf("Should have found a profile: %v", err)
 	}
 
-	ckr := &vault.CredentialKeyring{Keyring: keyring.NewArrayKeyring([]keyring.Item{})}
+	ckr := newSeededKeyring(t, "")
 	p, err := vault.NewTempCredentialsProvider(config, ckr, true, true)
 	if err != nil {
 		t.Fatal(err)
@@ -142,7 +142,7 @@ sso_registration_scopes=sso:account:access
 		t.Fatalf("Should have found a profile: %v", err)
 	}
 
-	ckr := &vault.CredentialKeyring{Keyring: keyring.NewArrayKeyring([]keyring.Item{})}
+	ckr := newSeededKeyring(t, "")
 	p, err := vault.NewTempCredentialsProvider(config, ckr, true, true)
 	if err != nil {
 		t.Fatal(err)
@@ -177,24 +177,9 @@ mfa_serial=arn:aws:iam::111111111111:mfa/user
 	}
 	config.MfaToken = "123456"
 
-	ckr := &vault.CredentialKeyring{Keyring: keyring.NewArrayKeyring([]keyring.Item{})}
-	err = ckr.Set("target", aws.Credentials{AccessKeyID: "id", SecretAccessKey: "secret"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	ckr := newSeededKeyring(t, "target")
 
-	var buf bytes.Buffer
-	prevWriter := log.Writer()
-	prevFlags := log.Flags()
-	prevPrefix := log.Prefix()
-	log.SetOutput(&buf)
-	log.SetFlags(0)
-	log.SetPrefix("")
-	defer func() {
-		log.SetOutput(prevWriter)
-		log.SetFlags(prevFlags)
-		log.SetPrefix(prevPrefix)
-	}()
+	buf := captureLogs(t)
 
 	_, err = vault.NewTempCredentialsProvider(config, ckr, false, true)
 	if err != nil {
@@ -237,24 +222,9 @@ mfa_serial=arn:aws:iam::111111111111:mfa/user
 	config.MfaToken = "123456"
 	config.SourceProfile.MfaToken = "123456"
 
-	ckr := &vault.CredentialKeyring{Keyring: keyring.NewArrayKeyring([]keyring.Item{})}
-	err = ckr.Set("source", aws.Credentials{AccessKeyID: "id", SecretAccessKey: "secret"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	ckr := newSeededKeyring(t, "source")
 
-	var buf bytes.Buffer
-	prevWriter := log.Writer()
-	prevFlags := log.Flags()
-	prevPrefix := log.Prefix()
-	log.SetOutput(&buf)
-	log.SetFlags(0)
-	log.SetPrefix("")
-	defer func() {
-		log.SetOutput(prevWriter)
-		log.SetFlags(prevFlags)
-		log.SetPrefix(prevPrefix)
-	}()
+	buf := captureLogs(t)
 
 	_, err = vault.NewTempCredentialsProvider(config, ckr, false, true)
 	if err != nil {
@@ -298,24 +268,9 @@ source_profile=source
 	config.MfaPromptMethod = "terminal"
 	config.SourceProfile.MfaToken = "123456"
 
-	ckr := &vault.CredentialKeyring{Keyring: keyring.NewArrayKeyring([]keyring.Item{})}
-	err = ckr.Set("source", aws.Credentials{AccessKeyID: "id", SecretAccessKey: "secret"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	ckr := newSeededKeyring(t, "source")
 
-	var buf bytes.Buffer
-	prevWriter := log.Writer()
-	prevFlags := log.Flags()
-	prevPrefix := log.Prefix()
-	log.SetOutput(&buf)
-	log.SetFlags(0)
-	log.SetPrefix("")
-	defer func() {
-		log.SetOutput(prevWriter)
-		log.SetFlags(prevFlags)
-		log.SetPrefix(prevPrefix)
-	}()
+	buf := captureLogs(t)
 
 	_, err = vault.NewTempCredentialsProvider(config, ckr, false, true)
 	if err != nil {
@@ -369,24 +324,9 @@ duration_seconds=7200
 	config.SourceProfile.MfaToken = "123456"
 	config.SourceProfile.SourceProfile.MfaToken = "123456"
 
-	ckr := &vault.CredentialKeyring{Keyring: keyring.NewArrayKeyring([]keyring.Item{})}
-	err = ckr.Set("source", aws.Credentials{AccessKeyID: "id", SecretAccessKey: "secret"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	ckr := newSeededKeyring(t, "source")
 
-	var buf bytes.Buffer
-	prevWriter := log.Writer()
-	prevFlags := log.Flags()
-	prevPrefix := log.Prefix()
-	log.SetOutput(&buf)
-	log.SetFlags(0)
-	log.SetPrefix("")
-	defer func() {
-		log.SetOutput(prevWriter)
-		log.SetFlags(prevFlags)
-		log.SetPrefix(prevPrefix)
-	}()
+	buf := captureLogs(t)
 
 	_, err = vault.NewTempCredentialsProvider(config, ckr, false, true)
 	if err != nil {
@@ -441,24 +381,9 @@ mfa_serial=arn:aws:iam::111111111111:mfa/user
 	config.MfaToken = "123456"
 	config.SourceProfile.MfaToken = "123456"
 
-	ckr := &vault.CredentialKeyring{Keyring: keyring.NewArrayKeyring([]keyring.Item{})}
-	err = ckr.Set("source", aws.Credentials{AccessKeyID: "id", SecretAccessKey: "secret"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	ckr := newSeededKeyring(t, "source")
 
-	var buf bytes.Buffer
-	prevWriter := log.Writer()
-	prevFlags := log.Flags()
-	prevPrefix := log.Prefix()
-	log.SetOutput(&buf)
-	log.SetFlags(0)
-	log.SetPrefix("")
-	defer func() {
-		log.SetOutput(prevWriter)
-		log.SetFlags(prevFlags)
-		log.SetPrefix(prevPrefix)
-	}()
+	buf := captureLogs(t)
 
 	_, err = vault.NewTempCredentialsProvider(config, ckr, false, true)
 	if err != nil {
@@ -488,4 +413,44 @@ mfa_serial=arn:aws:iam::111111111111:mfa/user
 	if !strings.Contains(logs, "using GetSessionToken") {
 		t.Fatalf("expected source GetSessionToken flow after duration cap, logs:\n%s", logs)
 	}
+}
+
+// newSeededKeyring returns a CredentialKeyring with a single set of stub
+// credentials stored under the given profile name. Pass an empty name to get
+// an empty keyring.
+func newSeededKeyring(t *testing.T, profileName string) *vault.CredentialKeyring {
+	t.Helper()
+
+	ckr := &vault.CredentialKeyring{Keyring: keyring.NewArrayKeyring([]keyring.Item{})}
+	if profileName == "" {
+		return ckr
+	}
+	if err := ckr.Set(profileName, aws.Credentials{AccessKeyID: "id", SecretAccessKey: "secret"}); err != nil {
+		t.Fatal(err)
+	}
+	return ckr
+}
+
+// captureLogs redirects the standard log package output into a buffer for the
+// duration of the test, restoring the previous writer, flags and prefix when
+// the test ends. Returns the buffer the caller can read with buf.String().
+func captureLogs(t *testing.T) *bytes.Buffer {
+	t.Helper()
+
+	var buf bytes.Buffer
+	prevWriter := log.Writer()
+	prevFlags := log.Flags()
+	prevPrefix := log.Prefix()
+
+	log.SetOutput(&buf)
+	log.SetFlags(0)
+	log.SetPrefix("")
+
+	t.Cleanup(func() {
+		log.SetOutput(prevWriter)
+		log.SetFlags(prevFlags)
+		log.SetPrefix(prevPrefix)
+	})
+
+	return &buf
 }
