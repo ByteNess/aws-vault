@@ -19,8 +19,10 @@ const (
 	// DefaultChainedSessionDuration is the default duration for GetSessionToken sessions when chaining
 	DefaultChainedSessionDuration = time.Hour * 8
 
+	// RoleChainingMaximumDuration is the maximum duration for AssumeRole sessions when role chaining
+	RoleChainingMaximumDuration = time.Hour * 1
+
 	defaultSectionName          = "default"
-	roleChainingMaximumDuration = 1 * time.Hour
 )
 
 func init() {
