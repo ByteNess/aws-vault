@@ -53,6 +53,10 @@ jobs:
           go-version: 'stable'
           #go-version-file: 'go.mod'
           check-latest: true
+      - name: Check formatting
+        run: |
+          make fmt
+          git diff --exit-code
       - name: Lint
         run: make vet
       #- name: golangci-lint
