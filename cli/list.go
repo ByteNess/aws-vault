@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"text/tabwriter"
@@ -11,6 +12,44 @@ import (
 	"github.com/byteness/aws-vault/v7/vault"
 	"github.com/byteness/keyring"
 )
+
+// listRow holds the display values for one output row.
+// Empty string fields are rendered as "-" by writeTo.
+type listRow struct {
+	Profile     string
+	Credentials string
+	Sessions    string
+}
+
+// display returns s, or "-" if s is empty.
+func (r listRow) display(s string) string {
+	if s == "" {
+		return "-"
+	}
+	return s
+}
+
+func (r listRow) writeTo(w io.Writer) {
+	fmt.Fprintf(w, "%s\t%s\t%s\t\n",
+		r.display(r.Profile),
+		r.display(r.Credentials),
+		r.display(r.Sessions),
+	)
+}
+
+// listCommandOutput holds all rows to display in the table.
+type listCommandOutput struct {
+	Rows []listRow
+}
+
+func (o listCommandOutput) writeTo(w io.Writer) {
+	fmt.Fprintln(w, "Profile\tCredentials\tSessions\t")
+	fmt.Fprintln(w, "=======\t===========\t========\t")
+
+	for _, r := range o.Rows {
+		r.writeTo(w)
+	}
+}
 
 type ListCommandInput struct {
 	OnlyProfiles    bool
@@ -125,14 +164,11 @@ func ListCommand(input ListCommandInput, awsConfigFile *vault.ConfigFile, keyrin
 
 	displayedSessionLabels := []string{}
 
-	w := tabwriter.NewWriter(os.Stdout, 25, 4, 2, ' ', 0)
-
-	fmt.Fprintln(w, "Profile\tCredentials\tSessions\t")
-	fmt.Fprintln(w, "=======\t===========\t========\t")
+	var rows []listRow
 
 	// list out known profiles first
 	for _, profileName := range awsConfigFile.ProfileNames() {
-		fmt.Fprintf(w, "%s\t", profileName)
+		row := listRow{Profile: profileName}
 
 		hasCred, err := credentialKeyring.Has(profileName)
 		if err != nil {
@@ -140,9 +176,7 @@ func ListCommand(input ListCommandInput, awsConfigFile *vault.ConfigFile, keyrin
 		}
 
 		if hasCred {
-			fmt.Fprintf(w, "%s\t", profileName)
-		} else {
-			fmt.Fprintf(w, "-\t")
+			row.Credentials = profileName
 		}
 
 		var sessionLabels []string
@@ -162,11 +196,10 @@ func ListCommand(input ListCommandInput, awsConfigFile *vault.ConfigFile, keyrin
 		}
 
 		if len(sessionLabels) > 0 {
-			fmt.Fprintf(w, "%s\t\n", strings.Join(sessionLabels, ", "))
-		} else {
-			fmt.Fprintf(w, "-\t\n")
+			row.Sessions = strings.Join(sessionLabels, ", ")
 		}
 
+		rows = append(rows, row)
 		displayedSessionLabels = append(displayedSessionLabels, sessionLabels...)
 	}
 
@@ -174,15 +207,18 @@ func ListCommand(input ListCommandInput, awsConfigFile *vault.ConfigFile, keyrin
 	for _, credentialName := range credentialsNames {
 		_, ok := awsConfigFile.ProfileSection(credentialName)
 		if !ok {
-			fmt.Fprintf(w, "-\t%s\t-\t\n", credentialName)
+			rows = append(rows, listRow{Credentials: credentialName})
 		}
 	}
 
 	// show sessions that don't have profiles
 	sessionsWithoutProfiles := stringslice(allSessionLabels).remove(displayedSessionLabels)
 	for _, s := range sessionsWithoutProfiles {
-		fmt.Fprintf(w, "-\t-\t%s\t\n", s)
+		rows = append(rows, listRow{Sessions: s})
 	}
 
+	w := tabwriter.NewWriter(os.Stdout, 25, 4, 2, ' ', 0)
+	o := listCommandOutput{Rows: rows}
+	o.writeTo(w)
 	return w.Flush()
 }
