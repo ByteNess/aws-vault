@@ -12,7 +12,6 @@ package cli
 
 import (
 	"bytes"
-	"fmt"
 	"os"
 	osexec "os/exec"
 	"runtime"
@@ -23,22 +22,45 @@ import (
 	"github.com/byteness/keyring"
 )
 
+// TestExecCommand runs the real exec CLI action inside a child copy of the test
+// binary (see TestExecCommandHelper). This avoids stubbing os.Exit or
+// syscall.Exec, so both the Unix execve path and the Windows fallback
+// (runSubProcess + os.Exit) are exercised with their actual implementations.
 func TestExecCommand(t *testing.T) {
+	type testCmd struct {
+		exe  string
+		args []string
+	}
+
+	// platformCmd selects the Windows or Unix variant at test run time.
+	platformCmd := func(win, unix testCmd) testCmd {
+		if runtime.GOOS == "windows" {
+			return win
+		}
+		return unix
+	}
+
 	cases := []struct {
 		name       string
-		mode       string
+		cmd        testCmd
 		wantStdout string
 		wantExit   int
 	}{
 		{
-			name:       "injects credentials",
-			mode:       "echo-access-key",
+			name: "injects credentials",
+			cmd: platformCmd(
+				testCmd{"cmd", []string{"/c", "echo %AWS_ACCESS_KEY_ID%"}},
+				testCmd{"sh", []string{"-c", "echo $AWS_ACCESS_KEY_ID"}},
+			),
 			wantStdout: "ABC",
 			wantExit:   0,
 		},
 		{
-			name:     "mirrors subprocess exit status",
-			mode:     "exit-7",
+			name: "mirrors subprocess exit status",
+			cmd: platformCmd(
+				testCmd{"cmd", []string{"/c", "exit /b 7"}},
+				testCmd{"sh", []string{"-c", "exit 7"}},
+			),
 			wantExit: 7,
 		},
 	}
@@ -47,8 +69,17 @@ func TestExecCommand(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			configPath := writeExecTestConfig(t)
 
-			cmd := osexec.Command(os.Args[0], "-test.run=^TestExecCommandHelper$")
-			cmd.Env = execTestEnv(configPath, tc.mode)
+			// Re-run this test binary as the child. Only TestExecCommandHelper
+			// will run because of the -test.run filter; the helper exits (via
+			// os.Exit or execve) before t.Fatal can be reached, so the child
+			// process exit code is the one produced by the CLI action itself.
+			// The command to run is passed as argv after "--" so no JSON or mode
+			// string is needed — the test case table is the single source of truth.
+			helperArgs := []string{"-test.run=^TestExecCommandHelper$", "--", tc.cmd.exe}
+			helperArgs = append(helperArgs, tc.cmd.args...)
+
+			cmd := osexec.Command(os.Args[0], helperArgs...)
+			cmd.Env = execTestEnv(configPath)
 
 			var stdout bytes.Buffer
 			var stderr bytes.Buffer
@@ -72,9 +103,20 @@ func TestExecCommand(t *testing.T) {
 	}
 }
 
+// TestExecCommandHelper is the child-process entry point. It is invoked by
+// TestExecCommand via os.Args[0] with AWS_VAULT_EXEC_TEST_HELPER=1. When that
+// variable is absent (normal test run) the function returns immediately and has
+// no effect. When present, it wires up the real CLI and runs the requested
+// mode; the exec command will call os.Exit (Windows) or execve (Unix) and
+// never return — if it does return, t.Fatal surfaces the bug.
 func TestExecCommandHelper(t *testing.T) {
 	if os.Getenv("AWS_VAULT_EXEC_TEST_HELPER") != "1" {
 		return
+	}
+
+	helperCommand, helperArgs, ok := execTestHelperCommand(os.Args)
+	if !ok {
+		t.Fatalf("missing helper command in args: %q", os.Args)
 	}
 
 	app := kingpin.New("aws-vault", "")
@@ -86,37 +128,28 @@ func TestExecCommandHelper(t *testing.T) {
 
 	ConfigureExecCommand(app, awsVault)
 
-	command, args := execTestCommand(os.Getenv("AWS_VAULT_EXEC_TEST_MODE"))
-
-	parseArgs := []string{"--debug", "exec", "--no-session", "llamas", "--", command}
-	parseArgs = append(parseArgs, args...)
+	parseArgs := []string{"--debug", "exec", "--no-session", "llamas", "--", helperCommand}
+	parseArgs = append(parseArgs, helperArgs...)
 
 	kingpin.MustParse(app.Parse(parseArgs))
 
 	t.Fatal("exec command returned without exiting")
 }
 
-func execTestCommand(mode string) (string, []string) {
-	switch mode {
-	case "echo-access-key":
-		switch runtime.GOOS {
-		case "windows":
-			return "cmd", []string{"/c", "echo %AWS_ACCESS_KEY_ID%"}
-		default:
-			return "sh", []string{"-c", "echo $AWS_ACCESS_KEY_ID"}
-		}
+// execTestHelperCommand extracts the command and its arguments from os.Args by
+// finding the "--" separator that the parent placed after the -test.run flag.
+func execTestHelperCommand(args []string) (string, []string, bool) {
+	for i, arg := range args {
+		if arg == "--" {
+			if i+1 >= len(args) {
+				return "", nil, false
+			}
 
-	case "exit-7":
-		switch runtime.GOOS {
-		case "windows":
-			return "cmd", []string{"/c", "exit /b 7"}
-		default:
-			return "sh", []string{"-c", "exit 7"}
+			return args[i+1], args[i+2:], true
 		}
-
-	default:
-		panic(fmt.Sprintf("unknown exec test mode %q", mode))
 	}
+
+	return "", nil, false
 }
 
 func writeExecTestConfig(t *testing.T) string {
@@ -144,10 +177,13 @@ func writeExecTestConfig(t *testing.T) string {
 	return path
 }
 
-func execTestEnv(configPath string, mode string) []string {
+// execTestEnv builds a child environment by inheriting the parent's env and
+// then overriding/unsetting the vars the test needs. We manipulate a []string
+// slice rather than calling os.Setenv so that the changes are scoped to the
+// child process and don't affect the parent test process or parallel tests.
+func execTestEnv(configPath string) []string {
 	env := os.Environ()
 	env = setEnv(env, "AWS_VAULT_EXEC_TEST_HELPER", "1")
-	env = setEnv(env, "AWS_VAULT_EXEC_TEST_MODE", mode)
 	env = setEnv(env, "AWS_CONFIG_FILE", configPath)
 	env = setEnv(env, "AWS_VAULT_DISABLE_HELP_MESSAGE", "1")
 	env = unsetEnv(env, "AWS_VAULT")
