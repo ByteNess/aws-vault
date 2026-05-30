@@ -389,11 +389,19 @@ func runSubProcess(command string, args []string, env []string) (int, error) {
 		return 0, err
 	}
 
+	// to prevent goroutine leak
+	done := make(chan struct{})
+	defer close(done)
+
 	// proxy signals to process
 	go func() {
 		for {
-			sig := <-sigChan
-			_ = cmd.Process.Signal(sig)
+			select {
+			case sig := <-sigChan:
+				_ = cmd.Process.Signal(sig)
+			case <-done:
+				return
+			}
 		}
 	}()
 
