@@ -93,7 +93,7 @@ func ConfigureExportCommand(app *kingpin.Application, a *AwsVault) {
 		}
 
 		err = ExportCommand(input, f, keyring)
-		app.FatalIfError(err, "exec")
+		app.FatalIfError(err, "export")
 		return nil
 	})
 }
