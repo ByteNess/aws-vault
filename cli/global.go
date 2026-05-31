@@ -42,7 +42,7 @@ type AwsVault struct {
 	rawKeyringImpl keyring.Keyring
 	keyringImpl    keyring.Keyring
 	awsConfigFile  *vault.ConfigFile
-	UseBiometrics bool
+	UseBiometrics  bool
 }
 
 func isATerminal() bool {
