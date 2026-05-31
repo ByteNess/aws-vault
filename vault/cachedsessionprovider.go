@@ -21,18 +21,18 @@ type StsSessionProvider interface {
 // CachedSessionProvider retrieves cached credentials from the keyring, or if no credentials are cached
 // retrieves temporary credentials using the CredentialsFunc
 type CachedSessionProvider struct {
-	SessionKey      SessionMetadata
-	SessionProvider StsSessionProvider
-	Keyring         *SessionKeyring
-	ExpiryWindow    time.Duration
-	UseSessionLock  bool
+	SessionKey         SessionMetadata
+	SessionProvider    StsSessionProvider
+	Keyring            *SessionKeyring
+	ExpiryWindow       time.Duration
+	UseSessionLock     bool
 	sessionLock        ProcessLock
 	sessionLockWait    time.Duration
 	sessionLockLog     time.Duration
 	sessionLockTimeout time.Duration
 	sessionNow         func() time.Time
-	sessionSleep    func(context.Context, time.Duration) error
-	sessionLogf     lockLogger
+	sessionSleep       func(context.Context, time.Duration) error
+	sessionLogf        lockLogger
 }
 
 const (
@@ -62,18 +62,18 @@ const (
 // (sessionLock, sessionNow, etc.) after construction to inject mocks.
 func NewCachedSessionProvider(key SessionMetadata, provider StsSessionProvider, keyring *SessionKeyring, expiryWindow time.Duration, useSessionLock bool) *CachedSessionProvider {
 	return &CachedSessionProvider{
-		SessionKey:      key,
-		SessionProvider: provider,
-		Keyring:         keyring,
-		ExpiryWindow:    expiryWindow,
-		UseSessionLock:  useSessionLock,
+		SessionKey:         key,
+		SessionProvider:    provider,
+		Keyring:            keyring,
+		ExpiryWindow:       expiryWindow,
+		UseSessionLock:     useSessionLock,
 		sessionLock:        NewDefaultLock("aws-vault.session", key.StringForMatching()),
 		sessionLockWait:    defaultSessionLockWaitDelay,
 		sessionLockLog:     defaultSessionLockLogEvery,
 		sessionLockTimeout: defaultSessionLockTimeout,
 		sessionNow:         time.Now,
-		sessionSleep:    defaultContextSleep,
-		sessionLogf:     log.Printf,
+		sessionSleep:       defaultContextSleep,
+		sessionLogf:        log.Printf,
 	}
 }
 
