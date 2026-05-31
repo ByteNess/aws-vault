@@ -13,8 +13,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awshttp "github.com/aws/aws-sdk-go-v2/aws/transport/http"
 	"github.com/aws/aws-sdk-go-v2/service/sso"
-	"github.com/aws/aws-sdk-go-v2/service/ssooidc"
 	ssotypes "github.com/aws/aws-sdk-go-v2/service/sso/types"
+	"github.com/aws/aws-sdk-go-v2/service/ssooidc"
 	smithyhttp "github.com/aws/smithy-go/transport/http"
 )
 
@@ -191,8 +191,8 @@ func TestGetRoleCredentialsTimeoutOnPersistentRateLimit(t *testing.T) {
 
 	// Disable SDK retries so our retry loop handles them
 	ssoClient := sso.New(sso.Options{
-		Region:       "us-east-1",
-		BaseEndpoint: aws.String(srv.URL),
+		Region:           "us-east-1",
+		BaseEndpoint:     aws.String(srv.URL),
 		RetryMaxAttempts: 1,
 	})
 
