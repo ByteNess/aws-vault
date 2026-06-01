@@ -34,10 +34,12 @@ func TestWriteFileAtomic_NoPartialOnCrash(t *testing.T) {
 		t.Fatalf("expected 1 file, got %d: %v", len(entries), entries)
 	}
 
-	// Perms are 0600.
+	// Perms are 0600 on Unix. Windows has no Unix permission bits, so the
+	// expected mode is provided per-platform by wantTokenPerm (see
+	// perm_unix_test.go / perm_windows_test.go).
 	info, _ := os.Stat(target)
-	if info.Mode().Perm() != 0600 {
-		t.Errorf("perm = %o, want 0600", info.Mode().Perm())
+	if got := info.Mode().Perm(); got != wantTokenPerm() {
+		t.Errorf("perm = %o, want %o", got, wantTokenPerm())
 	}
 }
 

@@ -4,6 +4,7 @@
 package server
 
 import (
+	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -38,7 +39,12 @@ func msgFound(localised []string, toTest string) bool {
 func runAndWrapAdminErrors(name string, arg ...string) ([]byte, error) {
 	out, err := exec.Command(name, arg...).CombinedOutput()
 	if msgFound(runAsAdministratorLocalised, string(out)) {
-		err = fmt.Errorf("Creation of network alias for server mode requires elevated permissions, run as administrator", err)
+		const msg = "creation of network alias for server mode requires elevated permissions, run as administrator"
+		if err != nil {
+			err = fmt.Errorf("%s: %w", msg, err)
+		} else {
+			err = errors.New(msg)
+		}
 	}
 
 	return out, err
