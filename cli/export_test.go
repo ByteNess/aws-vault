@@ -21,5 +21,4 @@ func ExampleExportCommand() {
 	// [llamas]
 	// aws_access_key_id=ABC
 	// aws_secret_access_key=XYZ
-	// region=us-east-1
 }
