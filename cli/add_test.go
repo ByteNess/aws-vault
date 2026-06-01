@@ -18,6 +18,7 @@ func ExampleAddCommand() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	f.Close()
 	defer os.RemoveAll(fileDir)
 
 	os.Setenv("AWS_CONFIG_FILE", f.Name())
