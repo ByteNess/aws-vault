@@ -296,3 +296,15 @@ func pickAwsProfile2(profiles []string) (string, error) {
 
 	return ProfileName, err
 }
+
+// profileResolvable reports whether profileName can be used as a target profile:
+// either it has a section in the AWS config file, or long-term credentials are
+// stored under that name in the keyring. It is used to reject a mistyped or
+// non-existent profile before it silently inherits the [default] profile.
+func profileResolvable(f *vault.ConfigFile, k keyring.Keyring, profileName string) bool {
+	if _, ok := f.ProfileSection(profileName); ok {
+		return true
+	}
+	hasCred, _ := (&vault.CredentialKeyring{Keyring: k}).Has(profileName)
+	return hasCred
+}

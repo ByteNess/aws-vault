@@ -63,6 +63,10 @@ func ConfigureRotateCommand(app *kingpin.Application, a *AwsVault) {
 }
 
 func RotateCommand(input RotateCommandInput, f *vault.ConfigFile, keyring keyring.Keyring) error {
+	if !profileResolvable(f, keyring, input.ProfileName) {
+		return fmt.Errorf("profile '%s' not found in ~/.aws/config and no stored credentials exist for it", input.ProfileName)
+	}
+
 	configLoader := vault.NewConfigLoader(input.Config, f, input.ProfileName)
 	config, err := configLoader.GetProfileConfig(input.ProfileName)
 	if err != nil {
