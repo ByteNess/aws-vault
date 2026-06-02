@@ -2,6 +2,7 @@ package cli
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -33,14 +34,14 @@ sso_role_name = ReadOnly
 
 func writeTempConfig(t *testing.T, b []byte) *vault.ConfigFile {
 	t.Helper()
-	f, err := os.CreateTemp(t.TempDir(), "aws-config")
-	if err != nil {
+	// Write to a path rather than using os.CreateTemp: CreateTemp returns an
+	// open file handle, and on Windows t.TempDir() cleanup cannot remove a file
+	// that still has a live handle.
+	path := filepath.Join(t.TempDir(), "aws-config")
+	if err := os.WriteFile(path, b, 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(f.Name(), b, 0600); err != nil {
-		t.Fatal(err)
-	}
-	configFile, err := vault.LoadConfig(f.Name())
+	configFile, err := vault.LoadConfig(path)
 	if err != nil {
 		t.Fatal(err)
 	}
