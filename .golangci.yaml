@@ -7,6 +7,8 @@ linters:
           list-mode: lax
           files:
             - $all
+          allow:
+            - $gostd
   enable:
     - bodyclose
     - contextcheck

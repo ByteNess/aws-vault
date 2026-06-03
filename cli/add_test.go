@@ -13,16 +13,26 @@ func ExampleAddCommand() {
 		log.Fatal(err)
 	}
 	defer os.Remove(f.Name())
+	f.Close()
+
+	fileDir, err := os.MkdirTemp("", "aws-vault-file-backend")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer os.RemoveAll(fileDir)
 
 	os.Setenv("AWS_CONFIG_FILE", f.Name())
 	os.Setenv("AWS_ACCESS_KEY_ID", "llamas")
 	os.Setenv("AWS_SECRET_ACCESS_KEY", "rock")
 	os.Setenv("AWS_VAULT_BACKEND", "file")
+	os.Setenv("AWS_VAULT_FILE_DIR", fileDir)
 	os.Setenv("AWS_VAULT_FILE_PASSPHRASE", "password")
 
+	defer os.Unsetenv("AWS_CONFIG_FILE")
 	defer os.Unsetenv("AWS_ACCESS_KEY_ID")
 	defer os.Unsetenv("AWS_SECRET_ACCESS_KEY")
 	defer os.Unsetenv("AWS_VAULT_BACKEND")
+	defer os.Unsetenv("AWS_VAULT_FILE_DIR")
 	defer os.Unsetenv("AWS_VAULT_FILE_PASSPHRASE")
 
 	app := kingpin.New(`aws-vault`, ``)
