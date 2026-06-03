@@ -151,6 +151,21 @@ func ConfigureExecCommand(app *kingpin.Application, a *AwsVault) {
 			}
 
 			input.ProfileName = ProfileName
+		} else {
+			// Validate the explicitly-provided profile name exists in the AWS config.
+			// Without this check a typo or a non-existent profile silently falls
+			// through to the AWS SDK which may resolve $AWS_DEFAULT_PROFILE or
+			// "default", leaking credentials from the wrong account.
+			found := false
+			for _, name := range f.ProfileNames() {
+				if name == input.ProfileName {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return fmt.Errorf("profile %q not found in AWS config — run 'aws-vault list' to see available profiles", input.ProfileName)
+			}
 		}
 
 		exitcode := 0
