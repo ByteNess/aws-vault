@@ -103,6 +103,10 @@ func ExportCommand(input ExportCommandInput, f *vault.ConfigFile, keyring keyrin
 		return fmt.Errorf("in an existing aws-vault subshell; 'exit' from the subshell or unset AWS_VAULT to force")
 	}
 
+	if !profileResolvable(f, keyring, input.ProfileName) {
+		return fmt.Errorf("profile '%s' not found in ~/.aws/config and no stored credentials exist for it", input.ProfileName)
+	}
+
 	config, err := vault.NewConfigLoader(input.Config, f, input.ProfileName).GetProfileConfig(input.ProfileName)
 	if err != nil {
 		return fmt.Errorf("Error loading config: %w", err)

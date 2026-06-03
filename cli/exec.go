@@ -186,6 +186,10 @@ func ExecCommand(input ExecCommandInput, f *vault.ConfigFile, keyring keyring.Ke
 		return 0, err
 	}
 
+	if !profileResolvable(f, keyring, input.ProfileName) {
+		return 0, fmt.Errorf("profile '%s' not found in ~/.aws/config and no stored credentials exist for it", input.ProfileName)
+	}
+
 	config, err := vault.NewConfigLoader(input.Config, f, input.ProfileName).GetProfileConfig(input.ProfileName)
 	if err != nil {
 		return 0, fmt.Errorf("Error loading config: %w", err)

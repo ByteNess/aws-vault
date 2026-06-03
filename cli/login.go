@@ -149,6 +149,13 @@ func getCredsProvider(input LoginCommandInput, config *vault.ProfileConfig, f *v
 // LoginCommand creates a login URL for the AWS Management Console using the method described at
 // https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_providers_enable-console-custom-url.html
 func LoginCommand(ctx context.Context, input LoginCommandInput, f *vault.ConfigFile, keyring keyring.Keyring) error {
+	// An empty ProfileName is valid for login: getCredsProvider falls back to
+	// environment credentials or an interactive profile picker. Only guard when
+	// the user explicitly named a profile.
+	if input.ProfileName != "" && !profileResolvable(f, keyring, input.ProfileName) {
+		return fmt.Errorf("profile '%s' not found in ~/.aws/config and no stored credentials exist for it", input.ProfileName)
+	}
+
 	config, err := vault.NewConfigLoader(input.Config, f, input.ProfileName).GetProfileConfig(input.ProfileName)
 	if err != nil {
 		return fmt.Errorf("Error loading config: %w", err)
