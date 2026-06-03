@@ -415,6 +415,63 @@ mfa_serial=arn:aws:iam::111111111111:mfa/user
 	}
 }
 
+// Ensures a single-role login from a non-role MFA source profile keeps its requested duration without GetSessionToken priming (#290).
+func TestSourceProfileRoleLoginDoesNotCapAssumeRoleDuration(t *testing.T) {
+	f := newConfigFile(t, []byte(`
+[profile source]
+region=us-east-1
+mfa_serial=arn:aws:iam::111111111111:mfa/user
+
+[profile target]
+source_profile=source
+region=us-east-1
+mfa_serial=arn:aws:iam::111111111111:mfa/user
+role_arn=arn:aws:iam::111111111111:role/target
+`))
+	defer os.Remove(f)
+
+	base := vault.ProfileConfig{
+		AssumeRoleDuration:             12 * time.Hour,
+		ChainedGetSessionTokenDuration: 12 * time.Hour,
+	}
+	configFile, err := vault.LoadConfig(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	configLoader := vault.NewConfigLoader(base, configFile, "target")
+	config, err := configLoader.GetProfileConfig("target")
+	if err != nil {
+		t.Fatalf("Should have found a profile: %v", err)
+	}
+	config.MfaToken = "123456"
+	config.SourceProfile.MfaToken = "123456"
+
+	ckr := newSeededKeyring(t, "source")
+
+	buf := captureLogs(t)
+
+	_, err = vault.NewTempCredentialsProvider(config, ckr, false, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Single role in the chain -> assumed directly from long-term creds -> full duration kept.
+	if config.AssumeRoleDuration != 12*time.Hour {
+		t.Fatalf("expected target AssumeRole duration to remain %s, got %s", 12*time.Hour, config.AssumeRoleDuration)
+	}
+
+	logs := buf.String()
+	if strings.Contains(logs, "using GetSessionToken") {
+		t.Fatalf("did not expect GetSessionToken for a direct (single-role) login, logs:\n%s", logs)
+	}
+	if strings.Contains(logs, "profile target: capping AssumeRole duration") {
+		t.Fatalf("did not expect target AssumeRole to be capped, logs:\n%s", logs)
+	}
+	if !strings.Contains(logs, "profile target: using AssumeRole (with MFA)") {
+		t.Fatalf("expected target to use a direct AssumeRole (with MFA), logs:\n%s", logs)
+	}
+}
+
 // newSeededKeyring returns a CredentialKeyring with a single set of stub
 // credentials stored under the given profile name. Pass an empty name to get
 // an empty keyring.
