@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -386,27 +387,42 @@ func runSubProcess(command string, args []string, env []string) (int, error) {
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan)
+	defer signal.Stop(sigChan)
 
 	if err := cmd.Start(); err != nil {
 		return 0, err
 	}
 
+	// to prevent goroutine leak
+	done := make(chan struct{})
+	defer close(done)
+
 	// proxy signals to process
 	go func() {
 		for {
-			sig := <-sigChan
-			_ = cmd.Process.Signal(sig)
+			select {
+			case sig := <-sigChan:
+				_ = cmd.Process.Signal(sig)
+			case <-done:
+				return
+			}
 		}
 	}()
 
 	if err := cmd.Wait(); err != nil {
+		// Nonzero exit code results in an ExitError from Wait()!
+		var exitErr *osexec.ExitError
+		if errors.As(err, &exitErr) {
+			// Forward exit code to caller
+			return exitErr.ExitCode(), nil
+		}
+
 		_ = cmd.Process.Signal(os.Kill)
-		return 0, fmt.Errorf("Failed to wait for command termination: %v", err)
+		return 0, fmt.Errorf("Failed to wait for command termination: %w", err)
 	}
 
-	waitStatus := cmd.ProcessState.Sys().(syscall.WaitStatus)
-
-	return waitStatus.ExitStatus(), nil
+	// Wait returned nil so exit code should be 0, but return the process exit code explicitly for clarity.
+	return cmd.ProcessState.ExitCode(), nil
 }
 
 func doExecSyscall(command string, args []string, env []string) error {
