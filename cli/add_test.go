@@ -13,12 +13,12 @@ func ExampleAddCommand() {
 		log.Fatal(err)
 	}
 	defer os.Remove(f.Name())
+	f.Close()
 
 	fileDir, err := os.MkdirTemp("", "aws-vault-file-backend")
 	if err != nil {
 		log.Fatal(err)
 	}
-	f.Close()
 	defer os.RemoveAll(fileDir)
 
 	os.Setenv("AWS_CONFIG_FILE", f.Name())

@@ -15,10 +15,6 @@ func ExampleExportCommand() {
 		log.Fatal(err)
 	}
 	defer os.Remove(f.Name())
-
-	if _, err = f.WriteString("[profile llamas]\nregion = us-east-1\n"); err != nil {
-		log.Fatal(err)
-	}
 	f.Close()
 
 	os.Setenv("AWS_CONFIG_FILE", f.Name())
@@ -38,5 +34,4 @@ func ExampleExportCommand() {
 	// [llamas]
 	// aws_access_key_id=ABC
 	// aws_secret_access_key=XYZ
-	// region=us-east-1
 }
