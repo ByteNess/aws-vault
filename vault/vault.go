@@ -497,6 +497,18 @@ func (t *TempCredentialsCreator) canUseGetSessionToken(c *ProfileConfig) (bool, 
 			return false, fmt.Sprintf("MFA serial doesn't match profile '%s'", c.ChainedFromProfile.ProfileName)
 		}
 
+		// If the role assumed from source credentials is a leaf (no chaining)
+		// and wants more than the role-chaining maximum, skip GetSessionToken
+		// so the role is assumed directly with MFA. A direct AssumeRole from
+		// long-term user credentials is not role chaining, so AWS honours the
+		// full duration. We keep GetSessionToken for intermediate roles:
+		// they must consolidate MFA into one session token, and a role
+		// they feed is genuinely chained (AWS caps it to 1h regardless).
+		role := c.ChainedFromProfile
+		isLeafRole := role.ChainedFromProfile == nil || !role.ChainedFromProfile.HasRole()
+		if !c.HasRole() && isLeafRole && role.AssumeRoleDuration > RoleChainingMaximumDuration {
+			return false, fmt.Sprintf("profile '%s' requested duration %s; assuming the role directly with MFA so the full duration is preserved", role.ProfileName, role.AssumeRoleDuration)
+		}
 	}
 
 	return true, ""

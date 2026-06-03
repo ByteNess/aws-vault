@@ -417,6 +417,120 @@ mfa_serial=arn:aws:iam::111111111111:mfa/user
 	}
 }
 
+// A leaf role (nothing chains off it) sourced from long-term IAM-user
+// credentials and requesting more than the role-chaining maximum must be
+// assumed directly with MFA (no GetSessionToken), so AWS honours the full
+// requested duration instead of capping it to 1h.
+func TestLeafRoleAboveOneHourIsAssumedDirectly(t *testing.T) {
+	f := newConfigFile(t, []byte(`
+[profile mgmt]
+mfa_serial=arn:aws:iam::111111111111:mfa/user
+
+[profile role]
+source_profile=mgmt
+mfa_serial=arn:aws:iam::111111111111:mfa/user
+role_arn=arn:aws:iam::111111111111:role/admin
+duration_seconds=43200
+`))
+	defer os.Remove(f)
+
+	base := vault.ProfileConfig{
+		AssumeRoleDuration:             12 * time.Hour,
+		ChainedGetSessionTokenDuration: 12 * time.Hour,
+	}
+	configFile, err := vault.LoadConfig(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	configLoader := vault.NewConfigLoader(base, configFile, "role")
+	config, err := configLoader.GetProfileConfig("role")
+	if err != nil {
+		t.Fatalf("Should have found a profile: %v", err)
+	}
+	config.MfaToken = "123456"
+	if config.SourceProfile != nil {
+		config.SourceProfile.MfaToken = "123456"
+	}
+
+	buf := captureLogs(t)
+	if _, err = vault.NewTempCredentialsProvider(config, newSeededKeyring(t, "mgmt"), false, true); err != nil {
+		t.Fatal(err)
+	}
+
+	if config.AssumeRoleDuration != 12*time.Hour {
+		t.Fatalf("expected role AssumeRole duration to remain 12h0m0s, got %s", config.AssumeRoleDuration)
+	}
+
+	logs := buf.String()
+	if strings.Contains(logs, "capping AssumeRole duration") {
+		t.Fatalf("did not expect duration capping for a directly-assumed leaf role, logs:\n%s", logs)
+	}
+	if strings.Contains(logs, "using GetSessionToken") {
+		t.Fatalf("expected GetSessionToken to be skipped so the role is assumed directly, logs:\n%s", logs)
+	}
+	if !strings.Contains(logs, "profile role: using AssumeRole (with MFA)") {
+		t.Fatalf("expected a direct AssumeRole with MFA, logs:\n%s", logs)
+	}
+}
+
+// A role that sources from another role is genuine role chaining: AWS caps it
+// to 1h regardless, so it must stay on the GetSessionToken path (one cached,
+// MFA-backed session token shared across the chain) and be capped to 1h. This
+// guards against the direct-assume path leaking into chains (which would lose
+// the shared MFA session and push MFA onto a role-signed AssumeRole).
+func TestChainedRoleAboveOneHourStillUsesGetSessionToken(t *testing.T) {
+	f := newConfigFile(t, []byte(`
+[profile mgmt]
+mfa_serial=arn:aws:iam::111111111111:mfa/user
+
+[profile mid]
+source_profile=mgmt
+mfa_serial=arn:aws:iam::111111111111:mfa/user
+role_arn=arn:aws:iam::111111111111:role/mid
+duration_seconds=43200
+
+[profile leaf]
+source_profile=mid
+role_arn=arn:aws:iam::222222222222:role/leaf
+duration_seconds=43200
+`))
+	defer os.Remove(f)
+
+	base := vault.ProfileConfig{
+		AssumeRoleDuration:             12 * time.Hour,
+		ChainedGetSessionTokenDuration: 12 * time.Hour,
+	}
+	configFile, err := vault.LoadConfig(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	configLoader := vault.NewConfigLoader(base, configFile, "leaf")
+	config, err := configLoader.GetProfileConfig("leaf")
+	if err != nil {
+		t.Fatalf("Should have found a profile: %v", err)
+	}
+	for c := config; c != nil; c = c.SourceProfile {
+		c.MfaToken = "123456"
+	}
+
+	buf := captureLogs(t)
+	if _, err = vault.NewTempCredentialsProvider(config, newSeededKeyring(t, "mgmt"), false, true); err != nil {
+		t.Fatal(err)
+	}
+
+	if config.AssumeRoleDuration != vault.RoleChainingMaximumDuration {
+		t.Fatalf("expected chained leaf AssumeRole duration capped to %s, got %s", vault.RoleChainingMaximumDuration, config.AssumeRoleDuration)
+	}
+
+	logs := buf.String()
+	if !strings.Contains(logs, "profile mgmt: using GetSessionToken") {
+		t.Fatalf("expected base profile to consolidate MFA via GetSessionToken, logs:\n%s", logs)
+	}
+	if !strings.Contains(logs, "profile leaf: capping AssumeRole duration") {
+		t.Fatalf("expected chained leaf to be capped to 1h, logs:\n%s", logs)
+	}
+}
+
 // newSeededKeyring returns a CredentialKeyring with a single set of stub
 // credentials stored under the given profile name. Pass an empty name to get
 // an empty keyring.
