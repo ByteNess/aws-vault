@@ -370,9 +370,23 @@ func (t *TempCredentialsCreator) getSourceCreds(config *ProfileConfig, hasStored
 	return nil, fmt.Errorf("profile %s: credentials missing", config.ProfileName)
 }
 
+func rolesInChain(config *ProfileConfig) int {
+	count := 0
+	for c := config; c != nil; c = c.ChainedFromProfile {
+		if c.HasRole() {
+			count++
+		}
+	}
+	return count
+}
+
 func (t *TempCredentialsCreator) primeWithGetSessionToken(config *ProfileConfig, sourcecredsProvider aws.CredentialsProvider) (aws.CredentialsProvider, bool, error) {
-	isSourceForRoleProfile := config.ChainedFromProfile != nil && config.ChainedFromProfile.HasRole()
-	shouldPrime := !config.HasRole() || isSourceForRoleProfile
+	// IMPORTANT:
+	// GetSessionToken priming carries a single MFA authentication across the chain, but any AssumeRole made from the resulting session token is itself limited to 1h by AWS. So only prime when priming is actually needed:
+	//   - exactly one role in the chain: a direct role login. AssumeRole straight from the long-term credentials so the role's full max session duration is available. Do NOT prime.
+	//   - zero roles: the session token itself is the deliverable.
+	//   - two or more roles: genuine role chaining. Prime once so MFA is entered a single time. Each chained AssumeRole is then capped to 1h with capAssumeRoleDurationIfChained.
+	shouldPrime := rolesInChain(config) != 1
 	if !shouldPrime || !isMasterCredentialsProvider(sourcecredsProvider) {
 		return sourcecredsProvider, true, nil
 	}
