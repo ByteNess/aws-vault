@@ -417,6 +417,197 @@ mfa_serial=arn:aws:iam::111111111111:mfa/user
 	}
 }
 
+// Ensures a single-role login from a non-role MFA source profile keeps its requested duration without GetSessionToken priming (#290).
+func TestSourceProfileRoleLoginDoesNotCapAssumeRoleDuration(t *testing.T) {
+	f := newConfigFile(t, []byte(`
+[profile source]
+region=us-east-1
+mfa_serial=arn:aws:iam::111111111111:mfa/user
+
+[profile target]
+source_profile=source
+region=us-east-1
+mfa_serial=arn:aws:iam::111111111111:mfa/user
+role_arn=arn:aws:iam::111111111111:role/target
+`))
+	defer os.Remove(f)
+
+	base := vault.ProfileConfig{
+		AssumeRoleDuration:             12 * time.Hour,
+		ChainedGetSessionTokenDuration: 12 * time.Hour,
+	}
+	configFile, err := vault.LoadConfig(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	configLoader := vault.NewConfigLoader(base, configFile, "target")
+	config, err := configLoader.GetProfileConfig("target")
+	if err != nil {
+		t.Fatalf("Should have found a profile: %v", err)
+	}
+	config.MfaToken = "123456"
+	config.SourceProfile.MfaToken = "123456"
+
+	ckr := newSeededKeyring(t, "source")
+
+	buf := captureLogs(t)
+
+	_, err = vault.NewTempCredentialsProvider(config, ckr, false, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Single role in the chain -> assumed directly from long-term creds -> full duration kept.
+	if config.AssumeRoleDuration != 12*time.Hour {
+		t.Fatalf("expected target AssumeRole duration to remain %s, got %s", 12*time.Hour, config.AssumeRoleDuration)
+	}
+
+	logs := buf.String()
+	if strings.Contains(logs, "using GetSessionToken") {
+		t.Fatalf("did not expect GetSessionToken for a direct (single-role) login, logs:\n%s", logs)
+	}
+	if strings.Contains(logs, "profile target: capping AssumeRole duration") {
+		t.Fatalf("did not expect target AssumeRole to be capped, logs:\n%s", logs)
+	}
+	if !strings.Contains(logs, "profile target: using AssumeRole (with MFA)") {
+		t.Fatalf("expected target to use a direct AssumeRole (with MFA), logs:\n%s", logs)
+	}
+}
+
+// Ensures a single-role login behind a non-role alias profile keeps its requested duration without GetSessionToken priming.
+func TestAliasedSourceProfileRoleLoginDoesNotCapAssumeRoleDuration(t *testing.T) {
+	f := newConfigFile(t, []byte(`
+[profile source]
+region=us-east-1
+mfa_serial=arn:aws:iam::111111111111:mfa/user
+
+[profile alias]
+source_profile=source
+region=us-east-1
+mfa_serial=arn:aws:iam::111111111111:mfa/user
+
+[profile target]
+source_profile=alias
+region=us-east-1
+mfa_serial=arn:aws:iam::111111111111:mfa/user
+role_arn=arn:aws:iam::111111111111:role/target
+`))
+	defer os.Remove(f)
+
+	base := vault.ProfileConfig{
+		AssumeRoleDuration:             12 * time.Hour,
+		ChainedGetSessionTokenDuration: 12 * time.Hour,
+	}
+	configFile, err := vault.LoadConfig(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	configLoader := vault.NewConfigLoader(base, configFile, "target")
+	config, err := configLoader.GetProfileConfig("target")
+	if err != nil {
+		t.Fatalf("Should have found a profile: %v", err)
+	}
+	config.MfaToken = "123456"
+	config.SourceProfile.MfaToken = "123456"
+	config.SourceProfile.SourceProfile.MfaToken = "123456"
+
+	ckr := newSeededKeyring(t, "source")
+
+	buf := captureLogs(t)
+
+	_, err = vault.NewTempCredentialsProvider(config, ckr, false, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Still a single role in the chain -> assumed directly from long-term creds -> full duration kept.
+	if config.AssumeRoleDuration != 12*time.Hour {
+		t.Fatalf("expected target AssumeRole duration to remain %s, got %s", 12*time.Hour, config.AssumeRoleDuration)
+	}
+
+	logs := buf.String()
+	if strings.Contains(logs, "using GetSessionToken") {
+		t.Fatalf("did not expect GetSessionToken for a single-role login behind an alias, logs:\n%s", logs)
+	}
+	if strings.Contains(logs, "capping AssumeRole duration") {
+		t.Fatalf("did not expect AssumeRole duration capping for a single-role login, logs:\n%s", logs)
+	}
+	if !strings.Contains(logs, "profile target: using AssumeRole (with MFA)") {
+		t.Fatalf("expected target to use a direct AssumeRole (with MFA), logs:\n%s", logs)
+	}
+}
+
+// Ensures a role chain with a non-role passthrough profile still consolidates MFA via GetSessionToken and caps the chained AssumeRole calls.
+func TestPassthroughRoleChainingCapsAssumeRoleDurationToOneHour(t *testing.T) {
+	f := newConfigFile(t, []byte(`
+[profile source]
+mfa_serial=arn:aws:iam::111111111111:mfa/user
+
+[profile admin]
+source_profile=source
+mfa_serial=arn:aws:iam::111111111111:mfa/user
+role_arn=arn:aws:iam::222222222222:role/admin
+role_session_name=user
+
+[profile passthrough]
+source_profile=admin
+region=us-east-1
+
+[profile target]
+source_profile=passthrough
+mfa_serial=arn:aws:iam::111111111111:mfa/user
+role_arn=arn:aws:iam::333333333333:role/target
+role_session_name=user
+`))
+	defer os.Remove(f)
+
+	base := vault.ProfileConfig{
+		AssumeRoleDuration:             12 * time.Hour,
+		ChainedGetSessionTokenDuration: 12 * time.Hour,
+	}
+	configFile, err := vault.LoadConfig(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	configLoader := vault.NewConfigLoader(base, configFile, "target")
+	config, err := configLoader.GetProfileConfig("target")
+	if err != nil {
+		t.Fatalf("Should have found a profile: %v", err)
+	}
+	config.MfaToken = "123456"
+	config.SourceProfile.MfaToken = "123456"
+	config.SourceProfile.SourceProfile.MfaToken = "123456"
+	config.SourceProfile.SourceProfile.SourceProfile.MfaToken = "123456"
+
+	ckr := newSeededKeyring(t, "source")
+
+	buf := captureLogs(t)
+
+	_, err = vault.NewTempCredentialsProvider(config, ckr, false, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	admin := config.SourceProfile.SourceProfile
+	if admin.AssumeRoleDuration != vault.RoleChainingMaximumDuration {
+		t.Fatalf("expected admin AssumeRole duration to be capped to %s, got %s", vault.RoleChainingMaximumDuration, admin.AssumeRoleDuration)
+	}
+	if config.AssumeRoleDuration != vault.RoleChainingMaximumDuration {
+		t.Fatalf("expected target AssumeRole duration to be capped to %s, got %s", vault.RoleChainingMaximumDuration, config.AssumeRoleDuration)
+	}
+
+	logs := buf.String()
+	if !strings.Contains(logs, "profile source: using GetSessionToken") {
+		t.Fatalf("expected source to consolidate MFA via GetSessionToken, logs:\n%s", logs)
+	}
+	if !strings.Contains(logs, "profile admin: using AssumeRole (chained MFA)") {
+		t.Fatalf("expected admin to use chained AssumeRole, logs:\n%s", logs)
+	}
+	if !strings.Contains(logs, "profile target: using AssumeRole (chained MFA)") {
+		t.Fatalf("expected target to use chained AssumeRole, logs:\n%s", logs)
+	}
+}
+
 // newSeededKeyring returns a CredentialKeyring with a single set of stub
 // credentials stored under the given profile name. Pass an empty name to get
 // an empty keyring.
