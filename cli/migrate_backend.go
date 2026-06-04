@@ -9,6 +9,7 @@ import (
 	"github.com/byteness/keyring"
 )
 
+// MigrateBackendCommandInput contains the selected source, destination, and safety options.
 type MigrateBackendCommandInput struct {
 	FromBackend  string
 	ToBackend    string
@@ -18,6 +19,7 @@ type MigrateBackendCommandInput struct {
 	DeleteSource bool
 }
 
+// ConfigureMigrateBackendCommand adds the migrate-backend subcommand to the CLI.
 func ConfigureMigrateBackendCommand(app *kingpin.Application, a *AwsVault) {
 	input := MigrateBackendCommandInput{}
 
@@ -50,6 +52,7 @@ func ConfigureMigrateBackendCommand(app *kingpin.Application, a *AwsVault) {
 	})
 }
 
+// MigrateBackendCommand migrates long-lived credentials between keyring backends.
 func MigrateBackendCommand(input MigrateBackendCommandInput, cfg keyring.Config) error {
 	if err := validateMigrateBackendInput(input); err != nil {
 		return err
