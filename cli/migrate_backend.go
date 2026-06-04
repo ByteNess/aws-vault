@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/alecthomas/kingpin/v2"
+	"github.com/byteness/aws-vault/v7/vault"
 	"github.com/byteness/keyring"
 )
 
@@ -53,7 +54,44 @@ func MigrateBackendCommand(input MigrateBackendCommandInput, cfg keyring.Config)
 		return err
 	}
 
+	src, err := openSpecificBackend(cfg, input.FromBackend)
+	if err != nil {
+		return fmt.Errorf("open source backend %q: %w", input.FromBackend, err)
+	}
+	srcCreds := &vault.CredentialKeyring{Keyring: src}
+
+	profiles, err := migrationProfiles(srcCreds, input.ProfileName)
+	if err != nil {
+		return err
+	}
+
+	if input.DryRun {
+		for _, profile := range profiles {
+			fmt.Println(profile)
+		}
+		return nil
+	}
+
 	return fmt.Errorf("not implemented")
+}
+
+func migrationProfiles(src *vault.CredentialKeyring, profile string) ([]string, error) {
+	if profile != "" {
+		ok, err := src.Has(profile)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			return nil, fmt.Errorf("profile %q not found in source backend", profile)
+		}
+		return []string{profile}, nil
+	}
+
+	profiles, err := src.Keys()
+	if err != nil {
+		return nil, err
+	}
+	return profiles, nil
 }
 
 func validateMigrateBackendInput(input MigrateBackendCommandInput) error {
