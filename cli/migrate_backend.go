@@ -124,11 +124,20 @@ func migrateOneCredential(profile string, src *vault.CredentialKeyring, dst *vau
 	if err := dst.Set(profile, creds); err != nil {
 		return "", fmt.Errorf("write destination profile %q: %w", profile, err)
 	}
+	got, err := dst.Get(profile)
+	if err != nil {
+		return "", fmt.Errorf("verify destination profile %q: %w", profile, err)
+	}
+	if got.AccessKeyID != creds.AccessKeyID ||
+		got.SecretAccessKey != creds.SecretAccessKey ||
+		got.SessionToken != creds.SessionToken {
+		return "", fmt.Errorf("verify destination profile %q: credential mismatch", profile)
+	}
 
 	if exists {
-		return "overwritten", nil
+		return "overwritten, verified", nil
 	}
-	return "copied", nil
+	return "copied, verified", nil
 }
 
 func migrationProfiles(src *vault.CredentialKeyring, profile string) ([]string, error) {
