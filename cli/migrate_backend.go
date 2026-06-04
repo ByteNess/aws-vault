@@ -70,7 +70,28 @@ func MigrateBackendCommand(input MigrateBackendCommandInput, cfg keyring.Config)
 		return nil
 	}
 
-	return fmt.Errorf("not implemented")
+	if len(profiles) == 0 {
+		fmt.Printf("No credentials found in source backend %s.\n", input.FromBackend)
+		return nil
+	}
+
+	dst, err := openSpecificBackend(cfg, input.ToBackend)
+	if err != nil {
+		return fmt.Errorf("open destination backend %q: %w", input.ToBackend, err)
+	}
+	dstCreds := &vault.CredentialKeyring{Keyring: dst}
+
+	for _, profile := range profiles {
+		fmt.Printf("Migrating %s... ", profile)
+		result, err := migrateOneCredential(profile, srcCreds, dstCreds, input.Overwrite)
+		if err != nil {
+			fmt.Printf("failed: %v\n", err)
+			return err
+		}
+		fmt.Println(result)
+	}
+
+	return nil
 }
 
 func printMigrateBackendDryRun(input MigrateBackendCommandInput, profiles []string) {
@@ -85,6 +106,29 @@ func printMigrateBackendDryRun(input MigrateBackendCommandInput, profiles []stri
 	}
 	fmt.Println()
 	fmt.Println("No changes made.")
+}
+
+func migrateOneCredential(profile string, src *vault.CredentialKeyring, dst *vault.CredentialKeyring, overwrite bool) (string, error) {
+	exists, err := dst.Has(profile)
+	if err != nil {
+		return "", fmt.Errorf("check destination profile %q: %w", profile, err)
+	}
+	if exists && !overwrite {
+		return "skipped, already exists in destination", nil
+	}
+
+	creds, err := src.Get(profile)
+	if err != nil {
+		return "", fmt.Errorf("read source profile %q: %w", profile, err)
+	}
+	if err := dst.Set(profile, creds); err != nil {
+		return "", fmt.Errorf("write destination profile %q: %w", profile, err)
+	}
+
+	if exists {
+		return "overwritten", nil
+	}
+	return "copied", nil
 }
 
 func migrationProfiles(src *vault.CredentialKeyring, profile string) ([]string, error) {
