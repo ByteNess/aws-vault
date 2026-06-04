@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/alecthomas/kingpin/v2"
 	"github.com/byteness/aws-vault/v7/vault"
@@ -81,6 +82,14 @@ func MigrateBackendCommand(input MigrateBackendCommandInput, cfg keyring.Config)
 	}
 	dstCreds := &vault.CredentialKeyring{Keyring: dst}
 
+	if _, err := migrateBackendProfiles(input, profiles, srcCreds, dstCreds); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func migrateBackendProfiles(input MigrateBackendCommandInput, profiles []string, srcCreds *vault.CredentialKeyring, dstCreds *vault.CredentialKeyring) (migrateBackendSummary, error) {
 	summary := migrateBackendSummary{}
 	for _, profile := range profiles {
 		fmt.Printf("Migrating %s... ", profile)
@@ -88,14 +97,14 @@ func MigrateBackendCommand(input MigrateBackendCommandInput, cfg keyring.Config)
 		if err != nil {
 			fmt.Printf("failed: %v\n", err)
 			fmt.Println("Migration stopped. Source credentials were not deleted for the failed profile.")
-			return err
+			return summary, err
 		}
 		message := result.Message
 		summary.Add(result)
 		if input.DeleteSource && result.Migrated {
 			if err := srcCreds.Remove(profile); err != nil {
 				fmt.Printf("failed: %v\n", err)
-				return fmt.Errorf("delete source profile %q: %w", profile, err)
+				return summary, fmt.Errorf("delete source profile %q: %w", profile, err)
 			}
 			message += ", deleted source"
 			summary.Deleted++
@@ -104,7 +113,7 @@ func MigrateBackendCommand(input MigrateBackendCommandInput, cfg keyring.Config)
 	}
 	printMigrateBackendSummary(summary)
 
-	return nil
+	return summary, nil
 }
 
 func printMigrateBackendDryRun(input MigrateBackendCommandInput, profiles []string) {
@@ -210,6 +219,7 @@ func migrationProfiles(src *vault.CredentialKeyring, profile string) ([]string, 
 	if err != nil {
 		return nil, err
 	}
+	sort.Strings(profiles)
 	return profiles, nil
 }
 
