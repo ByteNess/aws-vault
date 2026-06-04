@@ -81,23 +81,28 @@ func MigrateBackendCommand(input MigrateBackendCommandInput, cfg keyring.Config)
 	}
 	dstCreds := &vault.CredentialKeyring{Keyring: dst}
 
+	summary := migrateBackendSummary{}
 	for _, profile := range profiles {
 		fmt.Printf("Migrating %s... ", profile)
 		result, err := migrateOneCredential(profile, srcCreds, dstCreds, input.Overwrite)
 		if err != nil {
 			fmt.Printf("failed: %v\n", err)
+			fmt.Println("Migration stopped. Source credentials were not deleted for the failed profile.")
 			return err
 		}
 		message := result.Message
+		summary.Add(result)
 		if input.DeleteSource && result.Migrated {
 			if err := srcCreds.Remove(profile); err != nil {
 				fmt.Printf("failed: %v\n", err)
 				return fmt.Errorf("delete source profile %q: %w", profile, err)
 			}
 			message += ", deleted source"
+			summary.Deleted++
 		}
 		fmt.Println(message)
 	}
+	printMigrateBackendSummary(summary)
 
 	return nil
 }
@@ -119,6 +124,42 @@ func printMigrateBackendDryRun(input MigrateBackendCommandInput, profiles []stri
 type migrateCredentialResult struct {
 	Message  string
 	Migrated bool
+	Outcome  migrateCredentialOutcome
+}
+
+type migrateCredentialOutcome string
+
+const (
+	migrateCredentialCopied      migrateCredentialOutcome = "copied"
+	migrateCredentialOverwritten migrateCredentialOutcome = "overwritten"
+	migrateCredentialSkipped     migrateCredentialOutcome = "skipped"
+)
+
+type migrateBackendSummary struct {
+	Copied      int
+	Overwritten int
+	Skipped     int
+	Deleted     int
+}
+
+func (s *migrateBackendSummary) Add(result migrateCredentialResult) {
+	switch result.Outcome {
+	case migrateCredentialCopied:
+		s.Copied++
+	case migrateCredentialOverwritten:
+		s.Overwritten++
+	case migrateCredentialSkipped:
+		s.Skipped++
+	}
+}
+
+func printMigrateBackendSummary(summary migrateBackendSummary) {
+	fmt.Println()
+	fmt.Println("Migration summary:")
+	fmt.Printf("  copied: %d\n", summary.Copied)
+	fmt.Printf("  overwritten: %d\n", summary.Overwritten)
+	fmt.Printf("  skipped: %d\n", summary.Skipped)
+	fmt.Printf("  deleted from source: %d\n", summary.Deleted)
 }
 
 func migrateOneCredential(profile string, src *vault.CredentialKeyring, dst *vault.CredentialKeyring, overwrite bool) (migrateCredentialResult, error) {
@@ -127,7 +168,7 @@ func migrateOneCredential(profile string, src *vault.CredentialKeyring, dst *vau
 		return migrateCredentialResult{}, fmt.Errorf("check destination profile %q: %w", profile, err)
 	}
 	if exists && !overwrite {
-		return migrateCredentialResult{Message: "skipped, already exists in destination"}, nil
+		return migrateCredentialResult{Message: "skipped, already exists in destination", Outcome: migrateCredentialSkipped}, nil
 	}
 
 	creds, err := src.Get(profile)
@@ -148,9 +189,9 @@ func migrateOneCredential(profile string, src *vault.CredentialKeyring, dst *vau
 	}
 
 	if exists {
-		return migrateCredentialResult{Message: "overwritten, verified", Migrated: true}, nil
+		return migrateCredentialResult{Message: "overwritten, verified", Migrated: true, Outcome: migrateCredentialOverwritten}, nil
 	}
-	return migrateCredentialResult{Message: "copied, verified", Migrated: true}, nil
+	return migrateCredentialResult{Message: "copied, verified", Migrated: true, Outcome: migrateCredentialCopied}, nil
 }
 
 func migrationProfiles(src *vault.CredentialKeyring, profile string) ([]string, error) {
