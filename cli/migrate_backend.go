@@ -66,13 +66,25 @@ func MigrateBackendCommand(input MigrateBackendCommandInput, cfg keyring.Config)
 	}
 
 	if input.DryRun {
-		for _, profile := range profiles {
-			fmt.Println(profile)
-		}
+		printMigrateBackendDryRun(input, profiles)
 		return nil
 	}
 
 	return fmt.Errorf("not implemented")
+}
+
+func printMigrateBackendDryRun(input MigrateBackendCommandInput, profiles []string) {
+	if len(profiles) == 0 {
+		fmt.Printf("No credentials found in source backend %s.\n", input.FromBackend)
+		return
+	}
+
+	fmt.Printf("Would migrate %d credential profile(s) from %s to %s:\n", len(profiles), input.FromBackend, input.ToBackend)
+	for _, profile := range profiles {
+		fmt.Printf("  %s\n", profile)
+	}
+	fmt.Println()
+	fmt.Println("No changes made.")
 }
 
 func migrationProfiles(src *vault.CredentialKeyring, profile string) ([]string, error) {
