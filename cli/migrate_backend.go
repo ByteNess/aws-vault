@@ -88,7 +88,15 @@ func MigrateBackendCommand(input MigrateBackendCommandInput, cfg keyring.Config)
 			fmt.Printf("failed: %v\n", err)
 			return err
 		}
-		fmt.Println(result)
+		message := result.Message
+		if input.DeleteSource && result.Migrated {
+			if err := srcCreds.Remove(profile); err != nil {
+				fmt.Printf("failed: %v\n", err)
+				return fmt.Errorf("delete source profile %q: %w", profile, err)
+			}
+			message += ", deleted source"
+		}
+		fmt.Println(message)
 	}
 
 	return nil
@@ -108,36 +116,41 @@ func printMigrateBackendDryRun(input MigrateBackendCommandInput, profiles []stri
 	fmt.Println("No changes made.")
 }
 
-func migrateOneCredential(profile string, src *vault.CredentialKeyring, dst *vault.CredentialKeyring, overwrite bool) (string, error) {
+type migrateCredentialResult struct {
+	Message  string
+	Migrated bool
+}
+
+func migrateOneCredential(profile string, src *vault.CredentialKeyring, dst *vault.CredentialKeyring, overwrite bool) (migrateCredentialResult, error) {
 	exists, err := dst.Has(profile)
 	if err != nil {
-		return "", fmt.Errorf("check destination profile %q: %w", profile, err)
+		return migrateCredentialResult{}, fmt.Errorf("check destination profile %q: %w", profile, err)
 	}
 	if exists && !overwrite {
-		return "skipped, already exists in destination", nil
+		return migrateCredentialResult{Message: "skipped, already exists in destination"}, nil
 	}
 
 	creds, err := src.Get(profile)
 	if err != nil {
-		return "", fmt.Errorf("read source profile %q: %w", profile, err)
+		return migrateCredentialResult{}, fmt.Errorf("read source profile %q: %w", profile, err)
 	}
 	if err := dst.Set(profile, creds); err != nil {
-		return "", fmt.Errorf("write destination profile %q: %w", profile, err)
+		return migrateCredentialResult{}, fmt.Errorf("write destination profile %q: %w", profile, err)
 	}
 	got, err := dst.Get(profile)
 	if err != nil {
-		return "", fmt.Errorf("verify destination profile %q: %w", profile, err)
+		return migrateCredentialResult{}, fmt.Errorf("verify destination profile %q: %w", profile, err)
 	}
 	if got.AccessKeyID != creds.AccessKeyID ||
 		got.SecretAccessKey != creds.SecretAccessKey ||
 		got.SessionToken != creds.SessionToken {
-		return "", fmt.Errorf("verify destination profile %q: credential mismatch", profile)
+		return migrateCredentialResult{}, fmt.Errorf("verify destination profile %q: credential mismatch", profile)
 	}
 
 	if exists {
-		return "overwritten, verified", nil
+		return migrateCredentialResult{Message: "overwritten, verified", Migrated: true}, nil
 	}
-	return "copied, verified", nil
+	return migrateCredentialResult{Message: "copied, verified", Migrated: true}, nil
 }
 
 func migrationProfiles(src *vault.CredentialKeyring, profile string) ([]string, error) {
