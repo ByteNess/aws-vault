@@ -49,5 +49,36 @@ func ConfigureMigrateBackendCommand(app *kingpin.Application, a *AwsVault) {
 }
 
 func MigrateBackendCommand(input MigrateBackendCommandInput, cfg keyring.Config) error {
+	if err := validateMigrateBackendInput(input); err != nil {
+		return err
+	}
+
 	return fmt.Errorf("not implemented")
+}
+
+func validateMigrateBackendInput(input MigrateBackendCommandInput) error {
+	if !backendAvailable(input.FromBackend) {
+		return fmt.Errorf("source backend %q is not available", input.FromBackend)
+	}
+	if !backendAvailable(input.ToBackend) {
+		return fmt.Errorf("destination backend %q is not available", input.ToBackend)
+	}
+	if input.FromBackend == input.ToBackend {
+		return fmt.Errorf("source and destination backends must differ")
+	}
+	return nil
+}
+
+func backendAvailable(name string) bool {
+	for _, backend := range keyring.AvailableBackends() {
+		if string(backend) == name {
+			return true
+		}
+	}
+	return false
+}
+
+func openSpecificBackend(cfg keyring.Config, backendName string) (keyring.Keyring, error) {
+	cfg.AllowedBackends = []keyring.BackendType{keyring.BackendType(backendName)}
+	return keyring.Open(cfg)
 }
