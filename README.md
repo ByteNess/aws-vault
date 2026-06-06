@@ -46,7 +46,7 @@ The supported vaulting backends are:
 
 Use the `--backend` flag or `AWS_VAULT_BACKEND` environment variable to specify a backend. Run `aws-vault --help` to see the backends available in your build and environment.
 
-By default, aws-vault selects the first available backend for the platform: `wincred` on Windows, `keychain` on macOS, and `secret-service` on Linux when Secret Service is available. On Linux, automatic selection then falls back through `kwallet`, `keyctl`, `pass`, `passage`, and `file`. The 1Password backends are opt-in and are listed after `file`, so choose them explicitly with `--backend` or `AWS_VAULT_BACKEND`.
+By default, `aws-vault` selects the first available backend for the platform: `wincred` on Windows, `keychain` on macOS, and `secret-service` on Linux when Secret Service is available. On Linux, automatic selection then falls back through `kwallet`, `keyctl`, `pass`, `passage`, and `file`. The 1Password backends are opt-in and are listed after `file`, so choose them explicitly with `--backend` or `AWS_VAULT_BACKEND`.
 
 ## Quick start
 
