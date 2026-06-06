@@ -29,19 +29,24 @@ Config, usage, tips and tricks are available in the [USAGE.md](./USAGE.md) file.
 
 The supported vaulting backends are:
 
-* [macOS Keychain](https://support.apple.com/en-au/guide/keychain-access/welcome/mac)
-* [Windows Credential Manager](https://support.microsoft.com/en-au/help/4026814/windows-accessing-credential-manager)
-* [Windows Hello](https://support.microsoft.com/en-us/windows/configure-windows-hello-dae28983-8242-bb2a-d3d1-87c9d265a5f0)-gated encrypted Credential Manager backend
-* Secret Service ([Gnome Keyring](https://wiki.gnome.org/Projects/GnomeKeyring), [KWallet](https://kde.org/applications/system/org.kde.kwalletmanager5))
-* [KWallet](https://kde.org/applications/system/org.kde.kwalletmanager5)
-* [Pass](https://www.passwordstore.org/)
-* [Passage](https://github.com/FiloSottile/passage)
-* Encrypted file
-* [1Password Connect](https://developer.1password.com/docs/connect/)
-* [1Password Service Accounts](https://developer.1password.com/docs/service-accounts)
-* [1Password Desktop App](https://developer.1password.com/docs/sdks/desktop-app-integrations/)
+| Internal name | Backend | How it works | Platforms |
+| --- | --- | --- | --- |
+| `keychain` | [macOS Keychain](https://support.apple.com/en-au/guide/keychain-access/welcome/mac) | Stores credentials as generic password items in the configured Keychain. Optional biometrics support can use Touch ID to unlock the aws-vault keychain. | macOS |
+| `wincred` | [Windows Credential Manager](https://support.microsoft.com/en-au/help/4026814/windows-accessing-credential-manager) | Stores credentials as generic credentials under an aws-vault target-name prefix in Windows Credential Manager. | Windows |
+| `winhello` | [Windows Hello](https://support.microsoft.com/en-us/windows/configure-windows-hello-dae28983-8242-bb2a-d3d1-87c9d265a5f0) | Stores encrypted envelopes in Windows Credential Manager. The encryption key is wrapped by Windows Hello / Passport, so reads require PIN/biometrics. | Windows |
+| `secret-service` | Secret Service ([GNOME Keyring](https://wiki.gnome.org/Projects/GnomeKeyring), [KWallet](https://apps.kde.org/kwalletmanager5/), ...) | Stores credentials in a Secret Service collection over the desktop session D-Bus. The collection may be unlocked by the desktop keyring service. | Linux |
+| `kwallet` | [KWallet](https://apps.kde.org/kwalletmanager5/) | Stores credentials as entries in the configured KWallet folder over the KDE Wallet D-Bus service directly (rather than through the Secret Service API). | Linux |
+| `keyctl` | [Linux kernel keyring](https://man7.org/linux/man-pages/man7/keyrings.7.html) | Stores credentials in the Linux kernel key retention service, optionally inside a named keyring for the configured service. | Linux |
+| `pass` | [Pass](https://www.passwordstore.org/) | Stores JSON-encoded credential items in a `pass` password store, encrypted by GPG and managed through the `pass` command. | macOS, Linux, FreeBSD |
+| `passage` | [Passage](https://github.com/FiloSottile/passage) | Stores JSON-encoded credential items in a Passage store, encrypted with age and managed through the `passage` command. | macOS, Linux, FreeBSD |
+| `file` | Encrypted file | Stores one encrypted file per credential under `AWS_VAULT_FILE_DIR` (by default `~/.awsvault/keys/`) using passphrase-based JWE encryption. | All platforms |
+| `op-connect` | [1Password Connect](https://developer.1password.com/docs/connect/) | Stores credentials as concealed fields in 1Password items through a 1Password Connect server and token. | Windows, macOS, Linux |
+| `op` | [1Password Service Accounts](https://developer.1password.com/docs/service-accounts) | Stores credentials as concealed fields in 1Password items through the 1Password SDK using a service account token. | Windows, macOS, Linux |
+| `op-desktop` | [1Password Desktop App](https://developer.1password.com/docs/sdks/desktop-app-integrations/) | Stores credentials as concealed fields in 1Password items through the local 1Password desktop app integration. | Windows, macOS, Linux |
 
-Use the `--backend` flag or `AWS_VAULT_BACKEND` environment variable to specify.
+Use the `--backend` flag or `AWS_VAULT_BACKEND` environment variable to specify a backend. Run `aws-vault --help` to see the backends available in your build and environment.
+
+By default, aws-vault selects the first available backend for the platform: `wincred` on Windows, `keychain` on macOS, and `secret-service` on Linux when Secret Service is available. On Linux, automatic selection then falls back through `kwallet`, `keyctl`, `pass`, `passage`, and `file`. The 1Password backends are opt-in and are listed after `file`, so choose them explicitly with `--backend` or `AWS_VAULT_BACKEND`.
 
 ## Quick start
 
