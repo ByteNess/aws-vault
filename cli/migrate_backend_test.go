@@ -69,9 +69,9 @@ func TestMigrationProfilesExplicitMissingProfile(t *testing.T) {
 
 func TestMigrationProfilesExplicitlyRejectsSessionsAndOIDCTokens(t *testing.T) {
 	for _, key := range []string{
-		"oidc:https://example.com/start",
-		"session,ZGV2,,9999999999",
-		"dev session (61633665646639303539)",
+		"oidc:https://example.com/start",     // OIDC token key.
+		"session,ZGV2,,9999999999",           // Current session key for profile "dev".
+		"dev session (61633665646639303539)", // Legacy session key.
 	} {
 		t.Run(key, func(t *testing.T) {
 			src := &vault.CredentialKeyring{Keyring: keyring.NewArrayKeyring([]keyring.Item{{Key: key}})}
