@@ -22,16 +22,20 @@ type MigrateBackendCommandInput struct {
 // ConfigureMigrateBackendCommand adds the migrate-backend subcommand to the CLI.
 func ConfigureMigrateBackendCommand(app *kingpin.Application, a *AwsVault) {
 	input := MigrateBackendCommandInput{}
+	backendsAvailable := make([]string, 0, len(keyring.AvailableBackends()))
+	for _, backend := range keyring.AvailableBackends() {
+		backendsAvailable = append(backendsAvailable, string(backend))
+	}
 
 	cmd := app.Command("migrate-backend", "Migrate stored credentials between keyring backends.")
 
 	cmd.Flag("from", "Source keyring backend.").
 		Required().
-		StringVar(&input.FromBackend)
+		EnumVar(&input.FromBackend, backendsAvailable...)
 
 	cmd.Flag("to", "Destination keyring backend.").
 		Required().
-		StringVar(&input.ToBackend)
+		EnumVar(&input.ToBackend, backendsAvailable...)
 
 	cmd.Flag("profile", "Migrate only this profile.").
 		StringVar(&input.ProfileName)
@@ -194,9 +198,7 @@ func migrateOneCredential(profile string, src *vault.CredentialKeyring, dst *vau
 	if err != nil {
 		return migrateCredentialResult{}, fmt.Errorf("verify destination profile %q: %w", profile, err)
 	}
-	if got.AccessKeyID != creds.AccessKeyID ||
-		got.SecretAccessKey != creds.SecretAccessKey ||
-		got.SessionToken != creds.SessionToken {
+	if got != creds {
 		return migrateCredentialResult{}, fmt.Errorf("verify destination profile %q: credential mismatch", profile)
 	}
 
@@ -207,45 +209,29 @@ func migrateOneCredential(profile string, src *vault.CredentialKeyring, dst *vau
 }
 
 func migrationProfiles(src *vault.CredentialKeyring, profile string) ([]string, error) {
-	if profile != "" {
-		ok, err := src.Has(profile)
-		if err != nil {
-			return nil, err
-		}
-		if !ok {
-			return nil, fmt.Errorf("profile %q not found in source backend", profile)
-		}
-		return []string{profile}, nil
-	}
-
 	profiles, err := src.Keys()
 	if err != nil {
 		return nil, err
 	}
+
+	if profile != "" {
+		for _, candidate := range profiles {
+			if candidate == profile {
+				return []string{profile}, nil
+			}
+		}
+		return nil, fmt.Errorf("profile %q not found in source backend", profile)
+	}
+
 	sort.Strings(profiles)
 	return profiles, nil
 }
 
 func validateMigrateBackendInput(input MigrateBackendCommandInput) error {
-	if !backendAvailable(input.FromBackend) {
-		return fmt.Errorf("source backend %q is not available", input.FromBackend)
-	}
-	if !backendAvailable(input.ToBackend) {
-		return fmt.Errorf("destination backend %q is not available", input.ToBackend)
-	}
 	if input.FromBackend == input.ToBackend {
 		return fmt.Errorf("source and destination backends must differ")
 	}
 	return nil
-}
-
-func backendAvailable(name string) bool {
-	for _, backend := range keyring.AvailableBackends() {
-		if string(backend) == name {
-			return true
-		}
-	}
-	return false
 }
 
 func openSpecificBackend(cfg keyring.Config, backendName string) (keyring.Keyring, error) {

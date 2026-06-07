@@ -4,6 +4,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/alecthomas/kingpin/v2"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/byteness/aws-vault/v7/vault"
 	"github.com/byteness/keyring"
@@ -22,13 +23,19 @@ func TestValidateMigrateBackendInput(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected same backend validation error")
 	}
+}
 
-	err = validateMigrateBackendInput(MigrateBackendCommandInput{
-		FromBackend: "does-not-exist",
-		ToBackend:   string(backends[0]),
+func TestConfigureMigrateBackendCommandRejectsUnavailableBackend(t *testing.T) {
+	app := kingpin.New("aws-vault", "")
+	ConfigureMigrateBackendCommand(app, &AwsVault{})
+
+	_, err := app.Parse([]string{
+		"migrate-backend",
+		"--from", "does-not-exist",
+		"--to", string(keyring.AvailableBackends()[0]),
 	})
 	if err == nil {
-		t.Fatal("expected unavailable source backend validation error")
+		t.Fatal("expected unavailable backend parse error")
 	}
 }
 
@@ -57,6 +64,51 @@ func TestMigrationProfilesExplicitMissingProfile(t *testing.T) {
 	_, err := migrationProfiles(src, "missing")
 	if err == nil {
 		t.Fatal("expected missing profile error")
+	}
+}
+
+func TestMigrationProfilesExplicitlyRejectsSessionsAndOIDCTokens(t *testing.T) {
+	for _, key := range []string{
+		"oidc:https://example.com/start",
+		"session,ZGV2,,9999999999",
+		"dev session (61633665646639303539)",
+	} {
+		t.Run(key, func(t *testing.T) {
+			src := &vault.CredentialKeyring{Keyring: keyring.NewArrayKeyring([]keyring.Item{{Key: key}})}
+
+			_, err := migrationProfiles(src, key)
+			if err == nil {
+				t.Fatalf("expected explicit profile %q to be rejected", key)
+			}
+		})
+	}
+}
+
+func TestMigrateBackendProfilesCopiesCredential(t *testing.T) {
+	src := &vault.CredentialKeyring{Keyring: keyring.NewArrayKeyring(nil)}
+	dst := &vault.CredentialKeyring{Keyring: keyring.NewArrayKeyring(nil)}
+	want := aws.Credentials{AccessKeyID: "SRC", SecretAccessKey: "source"}
+	mustSetDevCredential(t, src, want)
+
+	summary, err := migrateBackendProfiles(
+		MigrateBackendCommandInput{},
+		[]string{"dev"},
+		src,
+		dst,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary.Copied != 1 || summary.Overwritten != 0 || summary.Skipped != 0 || summary.Deleted != 0 {
+		t.Fatalf("summary = %#v, want one copied", summary)
+	}
+
+	got, err := dst.Get("dev")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Fatalf("destination credentials = %#v, want %#v", got, want)
 	}
 }
 
