@@ -12,7 +12,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sso v1.31.2
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.36.5
 	github.com/aws/aws-sdk-go-v2/service/sts v1.43.2
-	github.com/byteness/keyring v1.10.0
+	github.com/byteness/keyring v1.10.1
 	github.com/charmbracelet/huh v1.0.0
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/google/go-cmp v0.7.0
@@ -83,7 +83,7 @@ require (
 	go.opentelemetry.io/proto/otlp v1.9.0 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 	golang.org/x/crypto v0.52.0 // indirect
-	golang.org/x/sys v0.45.0 // indirect
+	golang.org/x/sys v0.46.0 // indirect
 	golang.org/x/text v0.37.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 )

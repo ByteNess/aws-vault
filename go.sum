@@ -54,8 +54,8 @@ github.com/byteness/go-keychain v0.0.0-20191008050251-8e49817e8af4 h1:HFl8GFmwK1
 github.com/byteness/go-keychain v0.0.0-20191008050251-8e49817e8af4/go.mod h1:9HlL8SWBRtCZE7sCNq+c3//H/oHywgSwtocmPTdOij8=
 github.com/byteness/go-libsecret v0.0.0-20260108215642-107379d3dee0 h1:j59wGsxaBk6aFBuuYofk2oznMGZYyzFovjDqavlJHM8=
 github.com/byteness/go-libsecret v0.0.0-20260108215642-107379d3dee0/go.mod h1:3FrDGTXj08zj6qtqlIvt0vS8eWNrrYpnXOEbcQgFmvM=
-github.com/byteness/keyring v1.10.0 h1:Dx9ufzCwYwh+nVhuUGtRMChjGuYZztekrIe/8QfdZfQ=
-github.com/byteness/keyring v1.10.0/go.mod h1:LBFt9PutyCdWdx7ktWE2UNGoWOLsrqVI0fY14CT/S8U=
+github.com/byteness/keyring v1.10.1 h1:stdAWk+gJnTd+HCVPcdvcS/d5R2/EMAhUomgGZiGw2c=
+github.com/byteness/keyring v1.10.1/go.mod h1:6XtCd89bIE9pjH3jgY71U5wRAj3rcdCTUrG+fyPElLI=
 github.com/byteness/percent v0.2.2 h1:vnIFh8WBR1xoC+U2etz0EMB1cgp+vsK6vynqTCeDziU=
 github.com/byteness/percent v0.2.2/go.mod h1:nwavge92FhIyfnldz4YWZD8uxPVvdh8NlzLRd1VYRDs=
 github.com/catppuccin/go v0.3.0 h1:d+0/YicIq+hSTo5oPuRi5kOpqkVA5tAsU6dNhvRu+aY=
@@ -217,8 +217,8 @@ golang.org/x/sys v0.0.0-20210615035016-665e8c7367d1/go.mod h1:oPkhp1MJrh7nUepCBc
 golang.org/x/sys v0.0.0-20210809222454-d867a43fc93e/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
 golang.org/x/sys v0.0.0-20220520151302-bc2c85ada10a/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
 golang.org/x/sys v0.0.0-20220722155257-8c9f86f7a55f/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
-golang.org/x/sys v0.45.0 h1:dO4czNzziLiiXplLQgBCEpCvXQ3dnkn0SdaZSYdQ+FY=
-golang.org/x/sys v0.45.0/go.mod h1:4GL1E5IUh+htKOUEOaiffhrAeqysfVGipDYzABqnCmw=
+golang.org/x/sys v0.46.0 h1:noSf2Fq6F8DBgS+LysIkx7rIExoNHJsxOAtPp4rthXw=
+golang.org/x/sys v0.46.0/go.mod h1:4GL1E5IUh+htKOUEOaiffhrAeqysfVGipDYzABqnCmw=
 golang.org/x/term v0.0.0-20201126162022-7de9c90e9dd1/go.mod h1:bj7SfCRtBDWHUb9snDiAeCFNEtKQo2Wmx5Cou7ajbmo=
 golang.org/x/term v0.0.0-20210927222741-03fcf44c2211/go.mod h1:jbD1KX2456YbFQfuXm/mYQcufACuNUgVhRMnK/tPxf8=
 golang.org/x/term v0.43.0 h1:S4RLU2sB31O/NCl+zFN9Aru9A/Cq2aqKpTZJ6B+DwT4=
