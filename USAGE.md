@@ -428,6 +428,8 @@ aws-vault migrate-backend --from wincred --to winhello --delete-source
 
 Use `--dry-run` to list the credential profiles that would be migrated without reading secret data or writing anything. Use `--overwrite` to replace credentials that already exist in the destination backend.
 
+Note: Even with `--dry-run`, some source backends may prompt for confirmation in order to read the profile list itself.
+
 The command migrates long-lived aws-vault credentials only. It does not migrate cached STS sessions or SSO/OIDC tokens. If the destination backend requires interactive unlock, verification may prompt during migration.
 
 ### Rotating credentials
