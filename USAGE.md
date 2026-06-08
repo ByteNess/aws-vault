@@ -20,6 +20,7 @@
     - [Using multiple profiles](#using-multiple-profiles)
     - [Listing profiles and credentials](#listing-profiles-and-credentials)
     - [Removing credentials](#removing-credentials)
+    - [Migrating credentials between backends](#migrating-credentials-between-backends)
     - [Rotating credentials](#rotating-credentials)
   - [Managing Sessions](#managing-sessions)
     - [Executing a command](#executing-a-command)
@@ -404,6 +405,32 @@ $ aws-vault remove work
 Delete credentials for profile "work"? (y|N) y
 Deleted credentials.
 ```
+
+### Migrating credentials between backends
+
+You can copy stored long-lived credentials from one backend to another:
+
+```shell
+aws-vault migrate-backend --from wincred --to winhello
+```
+
+To migrate one profile:
+
+```shell
+aws-vault migrate-backend --from wincred --to winhello --profile dev
+```
+
+By default, migration copies credentials and leaves the source backend unchanged. To delete source credentials after the destination has been written and verified:
+
+```shell
+aws-vault migrate-backend --from wincred --to winhello --delete-source
+```
+
+Use `--dry-run` to list the credential profiles that would be migrated without reading secret data or writing anything. Use `--overwrite` to replace credentials that already exist in the destination backend.
+
+Note: Even with `--dry-run`, some source backends may prompt for confirmation in order to read the profile list itself.
+
+The command migrates long-lived aws-vault credentials only. It does not migrate cached STS sessions or SSO/OIDC tokens. If the destination backend requires interactive unlock, verification may prompt during migration.
 
 ### Rotating credentials
 

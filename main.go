@@ -29,6 +29,7 @@ func main() {
 	a := cli.ConfigureGlobals(app)
 	cli.ConfigureAddCommand(app, a)
 	cli.ConfigureRemoveCommand(app, a)
+	cli.ConfigureMigrateBackendCommand(app, a)
 	cli.ConfigureListCommand(app, a)
 	cli.ConfigureRotateCommand(app, a)
 	cli.ConfigureExecCommand(app, a)
