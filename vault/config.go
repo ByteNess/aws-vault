@@ -524,6 +524,17 @@ func (cl *ConfigLoader) hydrateSourceConfig(config *ProfileConfig) error {
 		}
 		sc.ChainedFromProfile = config
 		config.SourceProfile = sc
+
+		// Inherit mfa_process from the source profile when this profile doesn't
+		// define its own. The MFA token authenticates the AssumeRole performed
+		// against the source profile's credentials, so the source profile's
+		// mfa_process is the natural provider for that token. This keeps the
+		// pre-7.11.1 behaviour where the source profile's GetSessionToken priming
+		// supplied the token, even though a single-role login now assumes the role
+		// directly from the long-term credentials.
+		if config.MfaProcess == "" {
+			config.MfaProcess = sc.MfaProcess
+		}
 	}
 	return nil
 }
