@@ -280,6 +280,7 @@ type ConfigLoader struct {
 	ActiveProfile string
 
 	visitedProfiles []string
+	sourceChain     map[string]bool
 }
 
 func NewConfigLoader(baseConfig ProfileConfig, file *ConfigFile, activeProfile string) *ConfigLoader {
@@ -287,6 +288,7 @@ func NewConfigLoader(baseConfig ProfileConfig, file *ConfigFile, activeProfile s
 		BaseConfig:    baseConfig,
 		File:          file,
 		ActiveProfile: activeProfile,
+		sourceChain:   make(map[string]bool),
 	}
 }
 
@@ -414,11 +416,6 @@ func (cl *ConfigLoader) populateFromConfigFile(config *ProfileConfig, profileNam
 		if err != nil {
 			return err
 		}
-	} else if profileName != defaultSectionName {
-		err := cl.populateFromConfigFile(config, defaultSectionName)
-		if err != nil {
-			return err
-		}
 	}
 
 	// Ignore source_profile if it recursively refers to the profile
@@ -541,6 +538,14 @@ func (cl *ConfigLoader) hydrateSourceConfig(config *ProfileConfig) error {
 
 // GetProfileConfig loads the profile from the config file and environment variables into config
 func (cl *ConfigLoader) GetProfileConfig(profileName string) (*ProfileConfig, error) {
+	if cl.sourceChain[profileName] {
+		return nil, fmt.Errorf("Loop detected in source_profile chain for profile '%s'", profileName)
+	}
+	cl.sourceChain[profileName] = true
+	defer func() {
+		delete(cl.sourceChain, profileName)
+	}()
+
 	config := cl.BaseConfig
 	config.ProfileName = profileName
 	cl.populateFromEnv(&config)
