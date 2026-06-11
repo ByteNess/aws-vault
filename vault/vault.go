@@ -380,13 +380,39 @@ func rolesInChain(config *ProfileConfig) int {
 	return count
 }
 
+func maxAssumeRoleDurationInChain(config *ProfileConfig) time.Duration {
+	var max time.Duration
+	for c := config; c != nil; c = c.ChainedFromProfile {
+		if c.HasRole() && c.AssumeRoleDuration > max {
+			max = c.AssumeRoleDuration
+		}
+	}
+	return max
+}
+
 func (t *TempCredentialsCreator) primeWithGetSessionToken(config *ProfileConfig, sourcecredsProvider aws.CredentialsProvider) (aws.CredentialsProvider, bool, error) {
 	// IMPORTANT:
-	// GetSessionToken priming carries a single MFA authentication across the chain, but any AssumeRole made from the resulting session token is itself limited to 1h by AWS. So only prime when priming is actually needed:
-	//   - exactly one role in the chain: a direct role login. AssumeRole straight from the long-term credentials so the role's full max session duration is available. Do NOT prime.
-	//   - zero roles: the session token itself is the deliverable.
-	//   - two or more roles: genuine role chaining. Prime once so MFA is entered a single time. Each chained AssumeRole is then capped to 1h with capAssumeRoleDurationIfChained.
-	shouldPrime := rolesInChain(config) != 1
+	// GetSessionToken priming carries a single MFA authentication across the chain (the
+	// cached session on the source profile is shared by every role profile sourcing it),
+	// but any AssumeRole made from the resulting session token is itself limited to 1h by
+	// AWS. Prime when this profile is a session deliverable or a shared source for role
+	// profiles — unless skipping is actually worth it:
+	//   - no role, not a source for a role profile: the session token itself is the
+	//     deliverable. Prime.
+	//   - role profile holding its own long-term credentials: nothing to share a session
+	//     through. AssumeRole directly. Do NOT prime.
+	//   - source for a single role within the 1h cap (the default): priming loses
+	//     nothing, so prime to keep the MFA session shared across role profiles.
+	//   - source for a single role requesting more than the 1h chaining cap: AssumeRole
+	//     straight from the long-term credentials so the role's full session duration is
+	//     available, at the cost of an MFA prompt per role profile. Do NOT prime.
+	//   - two or more roles: genuine role chaining. Prime once so MFA is entered a single
+	//     time. Each chained AssumeRole is then capped to 1h with
+	//     capAssumeRoleDurationIfChained.
+	isSourceForRoleProfile := config.ChainedFromProfile != nil && config.ChainedFromProfile.HasRole()
+	singleRoleWantsLongDuration := rolesInChain(config) == 1 &&
+		maxAssumeRoleDurationInChain(config) > RoleChainingMaximumDuration
+	shouldPrime := (!config.HasRole() || isSourceForRoleProfile) && !singleRoleWantsLongDuration
 	if !shouldPrime || !isMasterCredentialsProvider(sourcecredsProvider) {
 		return sourcecredsProvider, true, nil
 	}
