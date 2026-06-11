@@ -11,9 +11,9 @@ Contributions are welcome and encouraged! Whether you're fixing a typo, adding a
 
 Please read the following first:
 
-- **[AI_POLICY.md](../AI_POLICY.md)** — if you intend to use any AI assistance (Claude, Copilot, Cursor, etc.) for your contribution. The short version: AI is welcome, but its use must be disclosed, code must be human-tested, and AI-generated PRs require an accepted issue first. Drive-by AI PRs will be closed.
-- **[SECURITY.md](../SECURITY.md)** — if you've found a security vulnerability. **Do not file a public issue.** Follow the disclosure process there.
-- **[CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md)** — we expect respectful, constructive interactions.
+- **[AI_POLICY.md](/AI_POLICY.md)** — if you intend to use any AI assistance (Claude, Copilot, Cursor, etc.) for your contribution. The short version: AI is welcome, but its use must be disclosed, code must be human-tested, and AI-generated PRs require an accepted issue first. Drive-by AI PRs will be closed.
+- **[SECURITY.md](/SECURITY.md)** — if you've found a security vulnerability. **Do not file a public issue.** Follow the disclosure process there.
+- **[CODE_OF_CONDUCT.md](/.github/CODE_OF_CONDUCT.md)** — we expect respectful, constructive interactions.
 
 ## How to contribute
 
