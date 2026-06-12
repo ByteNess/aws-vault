@@ -370,24 +370,21 @@ func (t *TempCredentialsCreator) getSourceCreds(config *ProfileConfig, hasStored
 	return nil, fmt.Errorf("profile %s: credentials missing", config.ProfileName)
 }
 
-func rolesInChain(config *ProfileConfig) int {
-	count := 0
+// assumeRoleKeepsFullDuration reports whether the chain's role can request more than the 1h cap.
+func assumeRoleKeepsFullDuration(config *ProfileConfig) bool {
+	var role *ProfileConfig
 	for c := config; c != nil; c = c.ChainedFromProfile {
-		if c.HasRole() {
-			count++
+		if !c.HasRole() {
+			continue
 		}
-	}
-	return count
-}
-
-func maxAssumeRoleDurationInChain(config *ProfileConfig) time.Duration {
-	var max time.Duration
-	for c := config; c != nil; c = c.ChainedFromProfile {
-		if c.HasRole() && c.AssumeRoleDuration > max {
-			max = c.AssumeRoleDuration
+		if role != nil {
+			return false // two or more roles: genuine role chaining, always capped to 1h
 		}
+		role = c
 	}
-	return max
+	// A single role is assumed straight from long-term credentials (not role chaining), so it
+	// keeps its full session duration when it requests more than 1h.
+	return role != nil && role.AssumeRoleDuration > RoleChainingMaximumDuration
 }
 
 func (t *TempCredentialsCreator) primeWithGetSessionToken(config *ProfileConfig, sourcecredsProvider aws.CredentialsProvider) (aws.CredentialsProvider, bool, error) {
@@ -410,9 +407,7 @@ func (t *TempCredentialsCreator) primeWithGetSessionToken(config *ProfileConfig,
 	//     time. Each chained AssumeRole is then capped to 1h with
 	//     capAssumeRoleDurationIfChained.
 	isSourceForRoleProfile := config.ChainedFromProfile != nil && config.ChainedFromProfile.HasRole()
-	singleRoleWantsLongDuration := rolesInChain(config) == 1 &&
-		maxAssumeRoleDurationInChain(config) > RoleChainingMaximumDuration
-	shouldPrime := (!config.HasRole() || isSourceForRoleProfile) && !singleRoleWantsLongDuration
+	shouldPrime := (!config.HasRole() || isSourceForRoleProfile) && !assumeRoleKeepsFullDuration(config)
 	if !shouldPrime || !isMasterCredentialsProvider(sourcecredsProvider) {
 		return sourcecredsProvider, true, nil
 	}
