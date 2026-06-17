@@ -537,6 +537,56 @@ role_arn=arn:aws:iam::111111111111:role/target
 	}
 }
 
+// Ensures a single role within the 1h chaining cap is still primed with GetSessionToken on
+// the source profile, so the MFA session is shared across role profiles sourcing it (#392).
+func TestSingleRoleWithinCapPrimesGetSessionToken(t *testing.T) {
+	f := newConfigFile(t, []byte(`
+[profile source]
+region=us-east-1
+mfa_serial=arn:aws:iam::111111111111:mfa/user
+
+[profile target]
+source_profile=source
+region=us-east-1
+mfa_serial=arn:aws:iam::111111111111:mfa/user
+role_arn=arn:aws:iam::111111111111:role/target
+`))
+	defer os.Remove(f)
+
+	configFile, err := vault.LoadConfig(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	configLoader := &vault.ConfigLoader{File: configFile, ActiveProfile: "target"}
+	config, err := configLoader.GetProfileConfig("target")
+	if err != nil {
+		t.Fatalf("Should have found a profile: %v", err)
+	}
+	config.MfaToken = "123456"
+	config.SourceProfile.MfaToken = "123456"
+
+	ckr := newSeededKeyring(t, "source")
+
+	buf := captureLogs(t)
+
+	_, err = vault.NewTempCredentialsProvider(config, ckr, false, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	logs := buf.String()
+	if !strings.Contains(logs, "profile source: using GetSessionToken") {
+		t.Fatalf("expected source to consolidate MFA via GetSessionToken, logs:\n%s", logs)
+	}
+	if !strings.Contains(logs, "profile target: using AssumeRole (chained MFA)") {
+		t.Fatalf("expected target to use chained AssumeRole, logs:\n%s", logs)
+	}
+	// Default duration is already within the chaining cap, so nothing to cap.
+	if strings.Contains(logs, "capping AssumeRole duration") {
+		t.Fatalf("did not expect AssumeRole duration capping at the default duration, logs:\n%s", logs)
+	}
+}
+
 // Ensures a role chain with a non-role passthrough profile still consolidates MFA via GetSessionToken and caps the chained AssumeRole calls.
 func TestPassthroughRoleChainingCapsAssumeRoleDurationToOneHour(t *testing.T) {
 	f := newConfigFile(t, []byte(`
