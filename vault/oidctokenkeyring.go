@@ -31,12 +31,12 @@ func IsOIDCTokenKey(k string) bool {
 }
 
 func (o OIDCTokenKeyring) Has(startURL string) (bool, error) {
-	kk, err := o.Keyring.Keys()
+	keys, err := o.Keys()
 	if err != nil {
 		return false, err
 	}
 
-	for _, k := range kk {
+	for _, k := range keys {
 		if startURL == k {
 			return true, nil
 		}

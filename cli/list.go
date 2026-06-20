@@ -2,6 +2,8 @@ package cli
 
 import (
 	"fmt"
+	"io"
+	"net/url"
 	"os"
 	"strings"
 	"text/tabwriter"
@@ -42,7 +44,7 @@ func ConfigureListCommand(app *kingpin.Application, a *AwsVault) {
 		if err != nil {
 			return err
 		}
-		err = ListCommand(input, awsConfigFile, keyring)
+		err = ListCommand(input, awsConfigFile, keyring, os.Stdout)
 		app.FatalIfError(err, "list")
 		return nil
 	})
@@ -74,7 +76,25 @@ func sessionLabel(sess vault.SessionMetadata) string {
 	return fmt.Sprintf("%s:%s", sess.Type, time.Until(sess.Expiration).Truncate(time.Second))
 }
 
-func ListCommand(input ListCommandInput, awsConfigFile *vault.ConfigFile, keyring keyring.Keyring) (err error) {
+// oidcLabel returns the Sessions-column label for an OIDC token.
+// For modern configs the sso-session name is used as the identifier;
+// for legacy inline sso_start_url configs the hostname is used instead.
+// No TTL is included: reading it requires Get(), which on macOS triggers a
+// Keychain unlock prompt and evicts expired tokens — both wrong for a
+// read-only listing command.
+func oidcLabel(sessionName, startURL string) string {
+	id := sessionName
+	if id == "" {
+		if u, err := url.Parse(startURL); err == nil && u.Host != "" {
+			id = u.Host
+		} else {
+			id = startURL
+		}
+	}
+	return fmt.Sprintf("oidc:%s", id)
+}
+
+func ListCommand(input ListCommandInput, awsConfigFile *vault.ConfigFile, keyring keyring.Keyring, out io.Writer) (err error) {
 	credentialKeyring := &vault.CredentialKeyring{Keyring: keyring}
 	oidcTokenKeyring := &vault.OIDCTokenKeyring{Keyring: credentialKeyring.Keyring}
 	sessionKeyring := &vault.SessionKeyring{Keyring: credentialKeyring.Keyring}
@@ -94,9 +114,33 @@ func ListCommand(input ListCommandInput, awsConfigFile *vault.ConfigFile, keyrin
 		return err
 	}
 
+	credentialsSet := make(map[string]bool, len(credentialsNames))
+	for _, n := range credentialsNames {
+		credentialsSet[n] = true
+	}
+
+	ssoSessionStartURLs := awsConfigFile.SSOSessionStartURLs()
+
+	// ssoURLToSessionName is the inverse of ssoSessionStartURLs. When two
+	// [sso-session] sections share the same sso_start_url, the winning name is
+	// non-deterministic (Go map iteration order is random) and one profile may
+	// display an incorrect session name in its label. This is a cosmetic edge
+	// case: the token itself (keyed by URL) is always correct.
+	ssoURLToSessionName := make(map[string]string, len(ssoSessionStartURLs))
+	for name, u := range ssoSessionStartURLs {
+		ssoURLToSessionName[u] = name
+	}
+
+	oidcTokenLabels := make(map[string]string, len(tokens))
+	for _, startURL := range tokens {
+		oidcTokenLabels[startURL] = oidcLabel(ssoURLToSessionName[startURL], startURL)
+	}
+
 	allSessionLabels := []string{}
-	for _, t := range tokens {
-		allSessionLabels = append(allSessionLabels, fmt.Sprintf("oidc:%s", t))
+	for _, startURL := range tokens {
+		if label, ok := oidcTokenLabels[startURL]; ok {
+			allSessionLabels = append(allSessionLabels, label)
+		}
 	}
 	for _, sess := range sessions {
 		allSessionLabels = append(allSessionLabels, sessionLabel(sess))
@@ -104,28 +148,28 @@ func ListCommand(input ListCommandInput, awsConfigFile *vault.ConfigFile, keyrin
 
 	if input.OnlyCredentials {
 		for _, c := range credentialsNames {
-			fmt.Println(c)
+			fmt.Fprintln(out, c)
 		}
 		return nil
 	}
 
 	if input.OnlyProfiles {
 		for _, profileName := range awsConfigFile.ProfileNames() {
-			fmt.Println(profileName)
+			fmt.Fprintln(out, profileName)
 		}
 		return nil
 	}
 
 	if input.OnlySessions {
 		for _, l := range allSessionLabels {
-			fmt.Println(l)
+			fmt.Fprintln(out, l)
 		}
 		return nil
 	}
 
 	displayedSessionLabels := []string{}
 
-	w := tabwriter.NewWriter(os.Stdout, 25, 4, 2, ' ', 0)
+	w := tabwriter.NewWriter(out, 25, 4, 2, ' ', 0)
 
 	fmt.Fprintln(w, "Profile\tCredentials\tSessions\t")
 	fmt.Fprintln(w, "=======\t===========\t========\t")
@@ -134,12 +178,7 @@ func ListCommand(input ListCommandInput, awsConfigFile *vault.ConfigFile, keyrin
 	for _, profileName := range awsConfigFile.ProfileNames() {
 		fmt.Fprintf(w, "%s\t", profileName)
 
-		hasCred, err := credentialKeyring.Has(profileName)
-		if err != nil {
-			return err
-		}
-
-		if hasCred {
+		if credentialsSet[profileName] {
 			fmt.Fprintf(w, "%s\t", profileName)
 		} else {
 			fmt.Fprintf(w, "-\t")
@@ -149,8 +188,14 @@ func ListCommand(input ListCommandInput, awsConfigFile *vault.ConfigFile, keyrin
 
 		// check oidc keyring
 		if profileSection, ok := awsConfigFile.ProfileSection(profileName); ok {
-			if exists, _ := oidcTokenKeyring.Has(profileSection.SSOStartURL); exists {
-				sessionLabels = append(sessionLabels, fmt.Sprintf("oidc:%s", profileSection.SSOStartURL))
+			startURL := profileSection.SSOStartURL
+			if startURL == "" && profileSection.SSOSession != "" {
+				startURL = ssoSessionStartURLs[profileSection.SSOSession]
+			}
+			if startURL != "" {
+				if label, ok := oidcTokenLabels[startURL]; ok {
+					sessionLabels = append(sessionLabels, label)
+				}
 			}
 		}
 
@@ -172,8 +217,7 @@ func ListCommand(input ListCommandInput, awsConfigFile *vault.ConfigFile, keyrin
 
 	// show credentials that don't have profiles
 	for _, credentialName := range credentialsNames {
-		_, ok := awsConfigFile.ProfileSection(credentialName)
-		if !ok {
+		if _, ok := awsConfigFile.ProfileSection(credentialName); !ok {
 			fmt.Fprintf(w, "-\t%s\t-\t\n", credentialName)
 		}
 	}

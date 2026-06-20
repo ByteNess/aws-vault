@@ -220,6 +220,24 @@ func (c *ConfigFile) ProfileSection(name string) (ProfileSection, bool) {
 	return profile, true
 }
 
+// SSOSessionStartURLs returns a map of sso-session name → sso_start_url for all
+// [sso-session] sections in the config file.
+func (c *ConfigFile) SSOSessionStartURLs() map[string]string {
+	result := make(map[string]string)
+	if c.iniFile == nil {
+		return result
+	}
+	for _, sectionName := range c.iniFile.SectionStrings() {
+		if strings.HasPrefix(sectionName, "sso-session ") {
+			name := strings.TrimPrefix(sectionName, "sso-session ")
+			if s, ok := c.SSOSessionSection(name); ok {
+				result[name] = s.SSOStartURL
+			}
+		}
+	}
+	return result
+}
+
 // SSOSessionSection returns the [sso-session] section with the matching name. If there isn't any,
 // an empty sso-session with the provided name is returned, along with false.
 func (c *ConfigFile) SSOSessionSection(name string) (SSOSessionSection, bool) {
