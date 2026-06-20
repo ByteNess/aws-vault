@@ -136,6 +136,20 @@ func ListCommand(input ListCommandInput, awsConfigFile *vault.ConfigFile, keyrin
 		oidcTokenLabels[startURL] = oidcLabel(ssoURLToSessionName[startURL], startURL)
 	}
 
+	// Pre-fetch all profile sections once to avoid a second per-profile
+	// GetSection()+MapTo() pass in the display loop below.
+	profileSections := awsConfigFile.ProfileSections()
+
+	profileNamesSet := make(map[string]bool, len(profileSections))
+	for _, ps := range profileSections {
+		profileNamesSet[ps.Name] = true
+	}
+
+	sessionsByProfile := make(map[string][]vault.SessionMetadata, len(sessions))
+	for _, sess := range sessions {
+		sessionsByProfile[sess.ProfileName] = append(sessionsByProfile[sess.ProfileName], sess)
+	}
+
 	allSessionLabels := []string{}
 	for _, startURL := range tokens {
 		if label, ok := oidcTokenLabels[startURL]; ok {
@@ -154,8 +168,8 @@ func ListCommand(input ListCommandInput, awsConfigFile *vault.ConfigFile, keyrin
 	}
 
 	if input.OnlyProfiles {
-		for _, profileName := range awsConfigFile.ProfileNames() {
-			fmt.Fprintln(out, profileName)
+		for _, ps := range profileSections {
+			fmt.Fprintln(out, ps.Name)
 		}
 		return nil
 	}
@@ -175,7 +189,8 @@ func ListCommand(input ListCommandInput, awsConfigFile *vault.ConfigFile, keyrin
 	fmt.Fprintln(w, "=======\t===========\t========\t")
 
 	// list out known profiles first
-	for _, profileName := range awsConfigFile.ProfileNames() {
+	for _, profileSection := range profileSections {
+		profileName := profileSection.Name
 		fmt.Fprintf(w, "%s\t", profileName)
 
 		if credentialsSet[profileName] {
@@ -187,23 +202,19 @@ func ListCommand(input ListCommandInput, awsConfigFile *vault.ConfigFile, keyrin
 		var sessionLabels []string
 
 		// check oidc keyring
-		if profileSection, ok := awsConfigFile.ProfileSection(profileName); ok {
-			startURL := profileSection.SSOStartURL
-			if startURL == "" && profileSection.SSOSession != "" {
-				startURL = ssoSessionStartURLs[profileSection.SSOSession]
-			}
-			if startURL != "" {
-				if label, ok := oidcTokenLabels[startURL]; ok {
-					sessionLabels = append(sessionLabels, label)
-				}
+		startURL := profileSection.SSOStartURL
+		if startURL == "" && profileSection.SSOSession != "" {
+			startURL = ssoSessionStartURLs[profileSection.SSOSession]
+		}
+		if startURL != "" {
+			if label, ok := oidcTokenLabels[startURL]; ok {
+				sessionLabels = append(sessionLabels, label)
 			}
 		}
 
 		// check session keyring
-		for _, sess := range sessions {
-			if profileName == sess.ProfileName {
-				sessionLabels = append(sessionLabels, sessionLabel(sess))
-			}
+		for _, sess := range sessionsByProfile[profileName] {
+			sessionLabels = append(sessionLabels, sessionLabel(sess))
 		}
 
 		if len(sessionLabels) > 0 {
@@ -217,7 +228,7 @@ func ListCommand(input ListCommandInput, awsConfigFile *vault.ConfigFile, keyrin
 
 	// show credentials that don't have profiles
 	for _, credentialName := range credentialsNames {
-		if _, ok := awsConfigFile.ProfileSection(credentialName); !ok {
+		if !profileNamesSet[credentialName] {
 			fmt.Fprintf(w, "-\t%s\t-\t\n", credentialName)
 		}
 	}
