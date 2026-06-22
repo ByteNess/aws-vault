@@ -1,0 +1,3 @@
+# Go source must use LF so `gofmt -l` (make check-fmt) doesn't flag every
+# file when the repo is checked out with CRLF on Windows CI runners.
+*.go text eol=lf
