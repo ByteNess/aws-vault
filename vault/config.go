@@ -9,8 +9,15 @@ import (
 	"strings"
 	"time"
 
-	ini "gopkg.in/ini.v1"
+	"github.com/byteness/aws-vault/v7/vault/configparser"
+	"github.com/byteness/aws-vault/v7/vault/configparser/custom"
+	"github.com/byteness/aws-vault/v7/vault/configparser/iniv1"
 )
+
+// ProfileSection and SSOSessionSection are type aliases so that existing
+// callers of vault.ProfileSection continue to work unchanged.
+type ProfileSection = configparser.ProfileSection
+type SSOSessionSection = configparser.SSOSessionSection
 
 const (
 	// DefaultSessionDuration is the default duration for GetSessionToken or AssumeRole sessions
@@ -22,17 +29,13 @@ const (
 	// RoleChainingMaximumDuration is the maximum duration for AssumeRole sessions when role chaining
 	RoleChainingMaximumDuration = time.Hour * 1
 
-	defaultSectionName = "default"
+	defaultSectionName = configparser.DefaultSectionName
 )
-
-func init() {
-	ini.PrettyFormat = false
-}
 
 // ConfigFile is an abstraction over what is in ~/.aws/config
 type ConfigFile struct {
-	Path    string
-	iniFile *ini.File
+	Path   string
+	parser configparser.Parser
 }
 
 // configPath returns either $AWS_CONFIG_FILE or ~/.aws/config
@@ -109,115 +112,37 @@ func LoadConfigFromEnv() (*ConfigFile, error) {
 	return LoadConfig(file)
 }
 
+// useCustomParser reports whether the custom bufio-based parser is enabled.
+// Set AWS_VAULT_USE_CUSTOM_INI_PARSER=true (or 1) to opt in.
+func useCustomParser() bool {
+	v := os.Getenv("AWS_VAULT_USE_CUSTOM_INI_PARSER")
+	return v == "1" || strings.EqualFold(v, "true")
+}
+
 func (c *ConfigFile) parseFile() error {
 	log.Printf("Parsing config file %s", c.Path)
-
-	f, err := ini.LoadSources(ini.LoadOptions{
-		AllowNestedValues:   true,
-		InsensitiveSections: false,
-		InsensitiveKeys:     true,
-		// Require a space before '#' to treat it as an inline comment.
-		// Without this, '#' in values like sso_start_url is stripped.
-		SpaceBeforeInlineComment: true,
-	}, c.Path)
-	if err != nil {
+	var p configparser.Parser
+	if useCustomParser() {
+		p = custom.New()
+	} else {
+		p = iniv1.New()
+	}
+	if err := p.Load(c.Path); err != nil {
 		return fmt.Errorf("Error parsing config file %s: %w", c.Path, err)
 	}
-	c.iniFile = f
+	c.parser = p
 	return nil
-}
-
-// ProfileSection is a profile section of the config file
-type ProfileSection struct {
-	Name                    string `ini:"-"`
-	MfaSerial               string `ini:"mfa_serial,omitempty"`
-	RoleARN                 string `ini:"role_arn,omitempty"`
-	ExternalID              string `ini:"external_id,omitempty"`
-	Region                  string `ini:"region,omitempty"`
-	RoleSessionName         string `ini:"role_session_name,omitempty"`
-	DurationSeconds         uint   `ini:"duration_seconds,omitempty"`
-	SourceProfile           string `ini:"source_profile,omitempty"`
-	IncludeProfile          string `ini:"include_profile,omitempty"`
-	SSOSession              string `ini:"sso_session,omitempty"`
-	SSOStartURL             string `ini:"sso_start_url,omitempty"`
-	SSORegion               string `ini:"sso_region,omitempty"`
-	SSOAccountID            string `ini:"sso_account_id,omitempty"`
-	SSORoleName             string `ini:"sso_role_name,omitempty"`
-	WebIdentityTokenFile    string `ini:"web_identity_token_file,omitempty"`
-	WebIdentityTokenProcess string `ini:"web_identity_token_process,omitempty"`
-	STSRegionalEndpoints    string `ini:"sts_regional_endpoints,omitempty"`
-	EndpointURL             string `ini:"endpoint_url,omitempty"`
-	SessionTags             string `ini:"session_tags,omitempty"`
-	TransitiveSessionTags   string `ini:"transitive_session_tags,omitempty"`
-	SourceIdentity          string `ini:"source_identity,omitempty"`
-	CredentialProcess       string `ini:"credential_process,omitempty"`
-	MfaProcess              string `ini:"mfa_process,omitempty"`
-}
-
-// SSOSessionSection is a [sso-session] section of the config file
-type SSOSessionSection struct {
-	Name                  string `ini:"-"`
-	SSOStartURL           string `ini:"sso_start_url,omitempty"`
-	SSORegion             string `ini:"sso_region,omitempty"`
-	SSORegistrationScopes string `ini:"sso_registration_scopes,omitempty"`
-}
-
-func (s ProfileSection) IsEmpty() bool {
-	s.Name = ""
-	return s == ProfileSection{}
 }
 
 // ProfileSections returns all the profile sections in the config
 func (c *ConfigFile) ProfileSections() []ProfileSection {
-	result := []ProfileSection{}
-
-	if c.iniFile == nil {
-		return result
-	}
-	for _, section := range c.iniFile.SectionStrings() {
-		if section == defaultSectionName || strings.HasPrefix(section, "profile ") {
-			profile, _ := c.ProfileSection(strings.TrimPrefix(section, "profile "))
-
-			// ignore the default profile if it's empty
-			if section == defaultSectionName && profile.IsEmpty() {
-				continue
-			}
-
-			result = append(result, profile)
-		} else if strings.HasPrefix(section, "sso-session ") {
-			// Not a profile
-			continue
-		} else {
-			log.Printf("Unrecognised ini file section: %s", section)
-			continue
-		}
-	}
-
-	return result
+	return c.parser.ProfileSections()
 }
 
 // ProfileSection returns the profile section with the matching name. If there isn't any,
 // an empty profile with the provided name is returned, along with false.
 func (c *ConfigFile) ProfileSection(name string) (ProfileSection, bool) {
-	profile := ProfileSection{
-		Name: name,
-	}
-	if c.iniFile == nil {
-		return profile, false
-	}
-	// default profile name has a slightly different section format
-	sectionName := "profile " + name
-	if name == defaultSectionName {
-		sectionName = defaultSectionName
-	}
-	section, err := c.iniFile.GetSection(sectionName)
-	if err != nil {
-		return profile, false
-	}
-	if err = section.MapTo(&profile); err != nil {
-		panic(err)
-	}
-	return profile, true
+	return c.parser.ProfileSection(name)
 }
 
 // SSOSessionStartURLs returns a map of sso-session name → sso_start_url for all
@@ -241,45 +166,16 @@ func (c *ConfigFile) SSOSessionStartURLs() map[string]string {
 // SSOSessionSection returns the [sso-session] section with the matching name. If there isn't any,
 // an empty sso-session with the provided name is returned, along with false.
 func (c *ConfigFile) SSOSessionSection(name string) (SSOSessionSection, bool) {
-	ssoSession := SSOSessionSection{
-		Name: name,
-	}
-	if c.iniFile == nil {
-		return ssoSession, false
-	}
-	sectionName := "sso-session " + name
-	section, err := c.iniFile.GetSection(sectionName)
-	if err != nil {
-		return ssoSession, false
-	}
-	if err = section.MapTo(&ssoSession); err != nil {
-		panic(err)
-	}
-	return ssoSession, true
+	return c.parser.SSOSessionSection(name)
 }
 
 func (c *ConfigFile) Save() error {
-	return c.iniFile.SaveTo(c.Path)
+	return c.parser.Save()
 }
 
-// Add the profile to the configuration file
+// Add the profile to the configuration file.
 func (c *ConfigFile) Add(profile ProfileSection) error {
-	if c.iniFile == nil {
-		return errors.New("No iniFile to add to")
-	}
-	// default profile name has a slightly different section format
-	sectionName := "profile " + profile.Name
-	if profile.Name == defaultSectionName {
-		sectionName = defaultSectionName
-	}
-	section, err := c.iniFile.NewSection(sectionName)
-	if err != nil {
-		return fmt.Errorf("Error creating section %q: %v", profile.Name, err)
-	}
-	if err = section.ReflectFrom(&profile); err != nil {
-		return fmt.Errorf("Error mapping profile to ini file: %v", err)
-	}
-	return c.Save()
+	return c.parser.Add(profile)
 }
 
 // ProfileNames returns a slice of profile names from the AWS config
