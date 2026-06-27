@@ -41,3 +41,28 @@ func TestClearCommandModernOIDC(t *testing.T) {
 		t.Error("ClearCommand did not remove OIDC token for modern sso-session profile")
 	}
 }
+
+// TestClearCommandBothSetPrefersSSOSession verifies that when a profile sets
+// both an inline sso_start_url and an sso_session, ClearCommand removes the
+// token keyed by the [sso-session] url (the one the login path creates).
+// Inline-first precedence would look up the wrong url and leave it behind.
+func TestClearCommandBothSetPrefersSSOSession(t *testing.T) {
+	const sessionURL = "https://session.awsapps.com/start"
+	configFile := writeTempConfig(t, listBothSetConfig)
+	kr := keyring.NewArrayKeyring([]keyring.Item{
+		{Key: "oidc:" + sessionURL, Data: []byte(`{}`)},
+	})
+	oidcKeyring := &vault.OIDCTokenKeyring{Keyring: kr}
+
+	if err := ClearCommand(ClearCommandInput{ProfileName: "both-profile"}, configFile, kr); err != nil {
+		t.Fatalf("ClearCommand error: %v", err)
+	}
+
+	has, err := oidcKeyring.Has(sessionURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if has {
+		t.Error("ClearCommand left the sso-session token behind; it resolved the inline url instead")
+	}
+}
