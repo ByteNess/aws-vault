@@ -62,12 +62,20 @@ func ClearCommand(input ClearCommandInput, awsConfigFile *vault.ConfigFile, keyr
 		}
 
 		if profileSection, ok := awsConfigFile.ProfileSection(input.ProfileName); ok {
-			if exists, _ := oidcTokens.Has(profileSection.SSOStartURL); exists {
-				err = oidcTokens.Remove(profileSection.SSOStartURL)
-				if err != nil {
-					return err
+			startURL := profileSection.SSOStartURL
+			if startURL == "" && profileSection.SSOSession != "" {
+				if s, ok := awsConfigFile.SSOSessionSection(profileSection.SSOSession); ok {
+					startURL = s.SSOStartURL
 				}
-				numTokensRemoved = 1
+			}
+			if startURL != "" {
+				if exists, _ := oidcTokens.Has(startURL); exists {
+					err = oidcTokens.Remove(startURL)
+					if err != nil {
+						return err
+					}
+					numTokensRemoved = 1
+				}
 			}
 		}
 	}
