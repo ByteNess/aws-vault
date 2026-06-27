@@ -201,13 +201,9 @@ func ListCommand(input ListCommandInput, awsConfigFile *vault.ConfigFile, keyrin
 
 		var sessionLabels []string
 
-		// check oidc keyring
-		startURL := profileSection.SSOStartURL
-		if profileSection.SSOSession != "" {
-			if u := ssoSessionStartURLs[profileSection.SSOSession]; u != "" {
-				startURL = u
-			}
-		}
+		// check oidc keyring. Resolve the start URL via the shared precedence
+		// rule, using the prefetched sso-session map to stay O(1) per profile.
+		startURL := vault.ResolveSSOStartURL(profileSection.SSOStartURL, ssoSessionStartURLs[profileSection.SSOSession])
 		if startURL != "" {
 			if label, ok := oidcTokenLabels[startURL]; ok {
 				sessionLabels = append(sessionLabels, label)

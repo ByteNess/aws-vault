@@ -623,3 +623,78 @@ source_profile = interim
 		t.Fatalf("Expected transitive_session_tags to be empty, got %+v", baseConfig.TransitiveSessionTags)
 	}
 }
+
+// TestResolveSSOStartURL covers the pure precedence rule shared by list, clear
+// and the config loader: the [sso-session] url wins, with the inline
+// sso_start_url as fallback only when the session url is empty.
+func TestResolveSSOStartURL(t *testing.T) {
+	const inline = "https://inline.awsapps.com/start"
+	const session = "https://session.awsapps.com/start"
+
+	cases := []struct {
+		name          string
+		inlineURL     string
+		ssoSessionURL string
+		want          string
+	}{
+		{"session wins over inline", inline, session, session},
+		{"inline used when no session url", inline, "", inline},
+		{"session used when no inline", "", session, session},
+		{"empty when neither set", "", "", ""},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := vault.ResolveSSOStartURL(tc.inlineURL, tc.ssoSessionURL); got != tc.want {
+				t.Errorf("ResolveSSOStartURL(%q, %q) = %q, want %q", tc.inlineURL, tc.ssoSessionURL, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestConfigFileResolvedSSOStartURL verifies the section-lookup convenience
+// resolves the [sso-session] url for modern profiles, the inline url for legacy
+// profiles, and gives the session url precedence when a profile sets both.
+func TestConfigFileResolvedSSOStartURL(t *testing.T) {
+	f := newConfigFile(t, []byte(`[sso-session my-sso]
+sso_start_url = https://session.awsapps.com/start
+sso_region = us-east-1
+
+[profile modern]
+sso_session = my-sso
+sso_account_id = 111122223333
+
+[profile legacy]
+sso_start_url = https://inline.awsapps.com/start
+sso_account_id = 222233334444
+
+[profile both]
+sso_session = my-sso
+sso_start_url = https://inline.awsapps.com/start
+sso_account_id = 333344445555
+
+[profile none]
+region = us-east-1
+`))
+	defer os.Remove(f)
+
+	configFile, err := vault.LoadConfig(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cases := map[string]string{
+		"modern": "https://session.awsapps.com/start",
+		"legacy": "https://inline.awsapps.com/start",
+		"both":   "https://session.awsapps.com/start",
+		"none":   "",
+	}
+	for profileName, want := range cases {
+		t.Run(profileName, func(t *testing.T) {
+			ps, _ := configFile.ProfileSection(profileName)
+			if got := configFile.ResolvedSSOStartURL(ps); got != want {
+				t.Errorf("ResolvedSSOStartURL(%q) = %q, want %q", profileName, got, want)
+			}
+		})
+	}
+}
