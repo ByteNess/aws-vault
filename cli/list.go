@@ -203,8 +203,10 @@ func ListCommand(input ListCommandInput, awsConfigFile *vault.ConfigFile, keyrin
 
 		// check oidc keyring
 		startURL := profileSection.SSOStartURL
-		if startURL == "" && profileSection.SSOSession != "" {
-			startURL = ssoSessionStartURLs[profileSection.SSOSession]
+		if profileSection.SSOSession != "" {
+			if u := ssoSessionStartURLs[profileSection.SSOSession]; u != "" {
+				startURL = u
+			}
 		}
 		if startURL != "" {
 			if label, ok := oidcTokenLabels[startURL]; ok {
