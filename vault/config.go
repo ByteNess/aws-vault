@@ -238,6 +238,35 @@ func (c *ConfigFile) SSOSessionStartURLs() map[string]string {
 	return result
 }
 
+// ResolveSSOStartURL applies the canonical precedence for a profile's SSO start
+// URL: the referenced [sso-session] section's sso_start_url wins, falling back
+// to the profile's inline sso_start_url only when the session url is empty.
+//
+// This mirrors how ConfigLoader.populateFromConfigFile resolves SSOStartURL and
+// is the single source of truth for that rule. Callers that have already
+// resolved the [sso-session] url (e.g. from a prefetched map) pass it directly;
+// see ConfigFile.ResolvedSSOStartURL for the section-lookup convenience.
+func ResolveSSOStartURL(inlineStartURL, ssoSessionStartURL string) string {
+	if ssoSessionStartURL != "" {
+		return ssoSessionStartURL
+	}
+	return inlineStartURL
+}
+
+// ResolvedSSOStartURL returns the SSO start URL for a profile section using the
+// precedence defined by ResolveSSOStartURL, looking up the referenced
+// [sso-session] section as needed. Returns "" when the profile has neither an
+// inline sso_start_url nor a resolvable sso-session url.
+func (c *ConfigFile) ResolvedSSOStartURL(p ProfileSection) string {
+	var ssoSessionStartURL string
+	if p.SSOSession != "" {
+		if s, ok := c.SSOSessionSection(p.SSOSession); ok {
+			ssoSessionStartURL = s.SSOStartURL
+		}
+	}
+	return ResolveSSOStartURL(p.SSOStartURL, ssoSessionStartURL)
+}
+
 // SSOSessionSection returns the [sso-session] section with the matching name. If there isn't any,
 // an empty sso-session with the provided name is returned, along with false.
 func (c *ConfigFile) SSOSessionSection(name string) (SSOSessionSection, bool) {
