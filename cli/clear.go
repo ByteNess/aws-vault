@@ -63,8 +63,8 @@ func ClearCommand(input ClearCommandInput, awsConfigFile *vault.ConfigFile, keyr
 
 		if profileSection, ok := awsConfigFile.ProfileSection(input.ProfileName); ok {
 			startURL := profileSection.SSOStartURL
-			if startURL == "" && profileSection.SSOSession != "" {
-				if s, ok := awsConfigFile.SSOSessionSection(profileSection.SSOSession); ok {
+			if profileSection.SSOSession != "" {
+				if s, ok := awsConfigFile.SSOSessionSection(profileSection.SSOSession); ok && s.SSOStartURL != "" {
 					startURL = s.SSOStartURL
 				}
 			}

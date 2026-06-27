@@ -196,6 +196,23 @@ sso_role_name = ReadOnly
 region = us-east-1
 `)
 
+// listBothSetConfig has a profile with BOTH an inline sso_start_url and an
+// sso_session whose section resolves to a DIFFERENT url. The canonical
+// resolver (ConfigLoader) gives the sso-session url precedence, so the OIDC
+// token is keyed by the session url. list/clear must use the same precedence.
+var listBothSetConfig = []byte(`[sso-session my-sso]
+sso_start_url = https://session.awsapps.com/start
+sso_region = us-east-1
+sso_registration_scopes = sso:account:access
+
+[profile both-profile]
+sso_session = my-sso
+sso_start_url = https://inline.awsapps.com/start
+sso_account_id = 111122223333
+sso_role_name = ReadOnly
+region = us-east-1
+`)
+
 // captureListOutput calls ListCommand into a bytes.Buffer and returns the output.
 func captureListOutput(t *testing.T, input ListCommandInput, configFile *vault.ConfigFile, kr keyring.Keyring) string {
 	t.Helper()
@@ -304,5 +321,34 @@ func TestListCommandOnlySessionsIncludesOIDC(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("OIDC label not found in --sessions output; got:\n%s", output)
+	}
+}
+
+// TestListCommandBothSetPrefersSSOSession verifies that when a profile sets
+// both an inline sso_start_url and an sso_session, ListCommand resolves the
+// start URL the same way ConfigLoader does: the [sso-session] url wins. The
+// token is stored under the session url, so inline-first precedence would
+// fail to display it.
+func TestListCommandBothSetPrefersSSOSession(t *testing.T) {
+	const sessionURL = "https://session.awsapps.com/start"
+	configFile := writeTempConfig(t, listBothSetConfig)
+	kr := keyring.NewArrayKeyring([]keyring.Item{
+		{Key: "oidc:" + sessionURL, Data: []byte(`{}`)},
+	})
+
+	output := captureListOutput(t, ListCommandInput{}, configFile, kr)
+
+	// sso-session takes precedence, so the label uses the session name.
+	const label = "oidc:my-sso"
+	found := false
+	for _, line := range strings.Split(output, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) > 0 && fields[0] == "both-profile" && strings.Contains(line, label) {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected %q under both-profile (sso-session url has the token); "+
+			"inline-first precedence hides it. output:\n%s", label, output)
 	}
 }
