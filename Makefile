@@ -9,9 +9,13 @@ ifeq ($(shell uname), Darwin)
 aws-vault: $(SRC)
 	go build -ldflags="-s -w -X main.Version=$(VERSION)" -o $@ .
 	codesign --options runtime --timestamp --sign "$(CERT_ID)" $@
+
+build: aws-vault
 else
 aws-vault: $(SRC)
 	go build -ldflags="-s -w -X main.Version=$(VERSION)" -o $@ .
+
+build: aws-vault
 endif
 
 install: aws-vault
