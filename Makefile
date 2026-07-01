@@ -3,20 +3,30 @@ BUILD_FLAGS=-ldflags="-s -w -X main.Version=$(VERSION)" -trimpath
 CERT_ID ?= Developer ID Application: ByteNess (R)
 SRC=$(shell find . -name '*.go') go.mod
 INSTALL_DIR ?= ~/bin
-.PHONY: binaries clean release install snapshot run
+.PHONY: binaries clean release install snapshot run check-fmt
 
 ifeq ($(shell uname), Darwin)
-aws-vault: $(SRC)
+aws-vault: $(SRC) | check-fmt
 	go build -ldflags="-s -w -X main.Version=$(VERSION)" -o $@ .
 	codesign --options runtime --timestamp --sign "$(CERT_ID)" $@
 
 build: aws-vault
 else
-aws-vault: $(SRC)
+aws-vault: $(SRC) | check-fmt
 	go build -ldflags="-s -w -X main.Version=$(VERSION)" -o $@ .
 
 build: aws-vault
 endif
+
+check-fmt: ## Fail if any Go files need gofmt
+	@out=$$(gofmt -l .); \
+	if [ -n "$$out" ]; then \
+		echo "The following files are not gofmt'd:"; \
+		echo "$$out"; \
+		echo; \
+		echo "Run 'make fmt' to fix."; \
+		exit 1; \
+	fi
 
 install: aws-vault
 	mkdir -p $(INSTALL_DIR)
