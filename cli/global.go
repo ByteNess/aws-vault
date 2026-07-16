@@ -30,6 +30,7 @@ var keyringConfigDefaults = keyring.Config{
 	OPTokenEnv:               "AWS_VAULT_OP_SERVICE_ACCOUNT_TOKEN",
 	OPDesktopAccountID:       "AWS_VAULT_OP_DESKTOP_ACCOUNT_ID",
 	OPTokenFunc:              keyringPassphrasePrompt,
+	ProtonPassTokenFunc:      keyringPassphrasePrompt,
 }
 
 type AwsVault struct {
@@ -196,6 +197,22 @@ func ConfigureGlobals(app *kingpin.Application) *AwsVault {
 	app.Flag("op-desktop-account-id", "1Password Desktop App account name or account UUID").
 		Envar("AWS_VAULT_OP_DESKTOP_ACCOUNT_ID").
 		StringVar(&a.KeyringConfig.OPDesktopAccountID)
+
+	app.Flag("proton-pass-share-id", "Share ID of the Proton Pass vault to use").
+		Envar("AWS_VAULT_PROTON_PASS_SHARE_ID").
+		StringVar(&a.KeyringConfig.ProtonPassShareID)
+
+	app.Flag("proton-pass-item-title-prefix", "Prefix to prepend to Proton Pass item titles (default inherited from keyring)").
+		Envar("AWS_VAULT_PROTON_PASS_ITEM_TITLE_PREFIX").
+		StringVar(&a.KeyringConfig.ProtonPassItemTitlePrefix)
+
+	app.Flag("proton-pass-api-base", "Proton API base URL (default inherited from keyring)").
+		Envar("AWS_VAULT_PROTON_PASS_API_BASE").
+		StringVar(&a.KeyringConfig.ProtonPassAPIBase)
+
+	app.Flag("proton-pass-timeout", "Timeout for Proton Pass API operations (default inherited from keyring)").
+		Envar("AWS_VAULT_PROTON_PASS_TIMEOUT").
+		DurationVar(&a.KeyringConfig.ProtonPassTimeout)
 
 	app.Flag("biometrics", "Use biometric authentication if supported").
 		Envar("AWS_VAULT_BIOMETRICS").
