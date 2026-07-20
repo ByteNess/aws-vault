@@ -43,10 +43,11 @@ The supported vaulting backends are:
 | `op-connect` | [1Password Connect](https://developer.1password.com/docs/connect/) | Stores credentials as concealed fields in 1Password items through a 1Password Connect server and token. | Windows, macOS, Linux |
 | `op` | [1Password Service Accounts](https://developer.1password.com/docs/service-accounts) | Stores credentials as concealed fields in 1Password items through the 1Password SDK using a service account token. | Windows, macOS, Linux |
 | `op-desktop` | [1Password Desktop App](https://developer.1password.com/docs/sdks/desktop-app-integrations/) | Stores credentials as concealed fields in 1Password items through the local 1Password desktop app integration. | Windows, macOS, Linux |
+| `proton-pass`* | [Proton Pass](https://proton.me/pass) | Stores credentials as items in a Proton Pass vault, accessed directly via Proton's HTTPS API using a scoped Personal Access Token. See [USAGE.md#proton-pass](./USAGE.md#proton-pass) for setup. **Experimental**| Windows, macOS, Linux |
 
 Use the `--backend` flag or `AWS_VAULT_BACKEND` environment variable to specify a backend. Run `aws-vault --help` to see the backends available in your build and environment.
 
-By default, `aws-vault` selects the first available backend for the platform: `wincred` on Windows, `keychain` on macOS, and `secret-service` on Linux when Secret Service is available. On Linux, automatic selection then falls back through `kwallet`, `keyctl`, `pass`, `passage`, and `file`. The 1Password backends are opt-in and are listed after `file`, so choose them explicitly with `--backend` or `AWS_VAULT_BACKEND`.
+By default, `aws-vault` selects the first available backend for the platform: `wincred` on Windows, `keychain` on macOS, and `secret-service` on Linux when Secret Service is available. On Linux, automatic selection then falls back through `kwallet`, `keyctl`, `pass`, `passage`, and `file`. The 1Password and Proton Pass backends are opt-in and are listed after `file`, so choose them explicitly with `--backend` or `AWS_VAULT_BACKEND`.
 
 ## Quick start
 
