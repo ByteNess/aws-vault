@@ -82,10 +82,11 @@ func (o OIDCTokenKeyring) Set(startURL string, token *ssooidc.CreateTokenOutput)
 	}
 
 	return o.Keyring.Set(keyring.Item{
-		Key:         o.fmtKey(startURL),
-		Data:        valJSON,
-		Label:       fmt.Sprintf("aws-vault oidc token for %s (expires %s)", startURL, val.Expiration.Format(time.RFC3339)),
-		Description: "aws-vault oidc token",
+		Key:                         o.fmtKey(startURL),
+		Data:                        valJSON,
+		Label:                       fmt.Sprintf("aws-vault oidc token for %s (expires %s)", startURL, val.Expiration.Format(time.RFC3339)),
+		Description:                 "aws-vault oidc token",
+		KeychainNotTrustApplication: true,
 	})
 }
 
