@@ -44,7 +44,7 @@ jobs:
     steps:
       - name: Label PRs
         id: label-prs
-        uses: actions/labeler@v6
+        uses: actions/labeler@v7
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           sync-labels: true
