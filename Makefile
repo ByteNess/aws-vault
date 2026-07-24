@@ -69,9 +69,15 @@ macos-latest: aws-vault-darwin-amd64 aws-vault-darwin-arm64
 
 aws-vault-darwin-amd64: $(SRC)
 	GOOS=darwin GOARCH=amd64 CGO_ENABLED=1 SDKROOT=$(shell xcrun --sdk macosx --show-sdk-path) go build $(BUILD_FLAGS) -o $@ .
+ifdef CERT_ID
+	codesign --options runtime --timestamp --sign "$(CERT_ID)" $@
+endif
 
 aws-vault-darwin-arm64: $(SRC)
 	GOOS=darwin GOARCH=arm64 CGO_ENABLED=1 SDKROOT=$(shell xcrun --sdk macosx --show-sdk-path) go build $(BUILD_FLAGS) -o $@ .
+ifdef CERT_ID
+	codesign --options runtime --timestamp --sign "$(CERT_ID)" $@
+endif
 
 aws-vault-freebsd-amd64: $(SRC)
 	GOOS=freebsd GOARCH=amd64 go build $(BUILD_FLAGS) -o $@ .
