@@ -100,7 +100,7 @@ params:
     enable: true
     displayCopyright: true
     displayPoweredBy: true
-    width: normal
+    width: wide
 
   displayUpdatedDate: true
   dateFormat: "January 2, 2006"
@@ -121,8 +121,18 @@ params:
       enable: true
       display: hover
 
+  # Layout widths. Accepted values are normal (80rem), wide (90rem) and
+  # full (100%). Keep navbar, page and footer in step so the header, content
+  # and footer edges line up.
+  #
+  # Note the content column has its own cap of 72rem, hardcoded in the theme as
+  # --hextra-max-content-width and not exposed as a site parameter. With the
+  # sidebar and table of contents taking roughly 32rem, `wide` leaves the
+  # content about 58rem, so that cap is not yet the binding constraint. Going
+  # to `full` would hit it on large monitors -- see docs/README.md for how to
+  # lift it.
   page:
-    width: normal
+    width: wide
 
   imageZoom:
     enable: true

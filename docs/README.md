@@ -53,6 +53,46 @@ reference then fails the build instead of shipping a dead link.
 GitHub-style alerts (`> [!NOTE]`, `> [!TIP]`, …) render as styled callouts natively — no
 shortcode conversion needed, so the same Markdown renders on GitHub too.
 
+## Layout width
+
+Three independent knobs in `hugo.yaml`, each accepting `normal` (80rem), `wide` (90rem) or
+`full` (100%). All three are set to `wide` so the header, content and footer edges line up:
+
+```yaml
+params:
+  navbar:
+    width: wide
+  page:
+    width: wide
+  footer:
+    width: wide
+```
+
+There is a fourth width the theme does **not** expose as a parameter: the content column is
+capped by `--hextra-max-content-width`, hardcoded to `72rem` in Hextra's
+`assets/css/variables.css`. The page width bounds the whole three-column shell (sidebar +
+content + table of contents), so with the sidebar and ToC taking roughly `32rem`:
+
+| `page.width` | Shell | Content column gets | Content cap reached? |
+| --- | --- | --- | --- |
+| `normal` | 80rem | ~48rem | no |
+| `wide` | 90rem | ~58rem | no |
+| `full` | 100% | viewport − 32rem | yes, past ~104rem viewport |
+
+So `full` keeps widening the content only until it hits `72rem`; beyond that the surplus
+becomes empty gutter, because `<article>` centres its `<main>`. To go wider than that, raise
+the cap yourself in `assets/css/custom.css` (Hextra loads it automatically):
+
+```css
+:root {
+  --hextra-max-content-width: 90rem;
+}
+```
+
+Bear in mind long measure hurts readability — much past `72rem` and body text becomes hard to
+track from line to line. Prefer widening only if pages are dominated by wide tables or code
+blocks.
+
 ## Footer, copyright and attribution
 
 Footer strings live in [`i18n/en.yaml`](./i18n/en.yaml). The copyright line mirrors the

@@ -106,53 +106,68 @@ WARNING: Use of this option runs against security best practices. It is recommen
 ## Environment variables
 
 To configure the default flag values of `aws-vault` and its subcommands:
-* `AWS_VAULT_BACKEND`: Secret backend to use (see the flag `--backend`)
-* `AWS_VAULT_BIOMETRICS`: Use biometric authentication using TouchID, if supported (see the flag `--biometrics`)
-* `AWS_VAULT_KEYCHAIN_NAME`: Name of macOS keychain to use (see the flag `--keychain`)
-* `AWS_VAULT_AUTO_LOGOUT`: Enable auto-logout when doing `login` (see the flag `--auto-logout`)
-* `AWS_VAULT_PROMPT`: Prompt driver to use (see the flag `--prompt`)
-* `AWS_VAULT_PASS_PASSWORD_STORE_DIR`: Pass password store directory (see the flag `--pass-dir`)
-* `AWS_VAULT_PASS_CMD`: Name of the pass executable (see the flag `--pass-cmd`)
-* `AWS_VAULT_PASS_PREFIX`: Prefix to prepend to the item path stored in pass (see the flag `--pass-prefix`)
-* `AWS_VAULT_FILE_DIR`: Directory for the "file" password store (see the flag `--file-dir`)
-* `AWS_VAULT_FILE_PASSPHRASE`: Password for the "file" password store
-* `AWS_VAULT_OP_TIMEOUT`: Timeout for 1Password Service Account operations (see the flag `--op-timeout`)
-* `AWS_VAULT_OP_VAULT_ID`: UUID of the 1Password vault (see the flag `--op-vault-id`)
-* `AWS_VAULT_OP_ITEM_TITLE_PREFIX`: Prefix to prepend to 1Password item titles (see the flag `--op-item-title-prefix`)
-* `AWS_VAULT_OP_ITEM_TAG`: Tag to apply to 1Password items (see the flag `--op-item-tag`)
-* `AWS_VAULT_OP_CONNECT_HOST`: 1Password Connect server HTTP(S) URI (see the flag `--op-connect-host`)
-* `AWS_VAULT_OP_CONNECT_TOKEN`: 1Password Connect server access token
-* `AWS_VAULT_OP_SERVICE_ACCOUNT_TOKEN`: 1Password service account token
-* `AWS_VAULT_OP_DESKTOP_ACCOUNT_ID`: 1Password Desktop App account name or account UUID (see the flag `--op-desktop-account-id`)
-* `AWS_VAULT_PROTON_PASS_SHARE_ID`: Share ID of the Proton Pass vault to use (see the flag `--proton-pass-share-id`)
-* `AWS_VAULT_PROTON_PASS_ITEM_TITLE_PREFIX`: Prefix to prepend to Proton Pass item titles (see the flag `--proton-pass-item-title-prefix`)
-* `AWS_VAULT_PROTON_PASS_API_BASE`: Proton API base URL (see the flag `--proton-pass-api-base`)
-* `AWS_VAULT_PROTON_PASS_TIMEOUT`: Timeout for Proton Pass API operations (see the flag `--proton-pass-timeout`)
-* `AWS_VAULT_PROFILE_ENV`: Set `AWS_PROFILE` instead of injecting `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` to allow profile-based SDK auth (see the flag `profile-env` for `exec`)
-* `AWS_CONFIG_FILE`: The location of the AWS config file
-* `AWS_VAULT_STDOUT`: Print login URL to stdout instead of opening in default browser (see the flag `--stdout`)
+
+| Variable | Description | Flag |
+| --- | --- | --- |
+| `AWS_VAULT_BACKEND` | Secret backend to use | `--backend` |
+| `AWS_VAULT_BIOMETRICS` | Use biometric authentication using TouchID, if supported | `--biometrics` |
+| `AWS_VAULT_KEYCHAIN_NAME` | Name of macOS keychain to use | `--keychain` |
+| `AWS_VAULT_AUTO_LOGOUT` | Enable auto-logout when doing `login` | `--auto-logout` |
+| `AWS_VAULT_PROMPT` | Prompt driver to use | `--prompt` |
+| `AWS_VAULT_PASS_PASSWORD_STORE_DIR` | Pass password store directory | `--pass-dir` |
+| `AWS_VAULT_PASS_CMD` | Name of the pass executable | `--pass-cmd` |
+| `AWS_VAULT_PASS_PREFIX` | Prefix to prepend to the item path stored in pass | `--pass-prefix` |
+| `AWS_VAULT_FILE_DIR` | Directory for the "file" password store | `--file-dir` |
+| `AWS_VAULT_FILE_PASSPHRASE` | Password for the "file" password store | — |
+| `AWS_VAULT_OP_TIMEOUT` | Timeout for 1Password Service Account operations | `--op-timeout` |
+| `AWS_VAULT_OP_VAULT_ID` | UUID of the 1Password vault | `--op-vault-id` |
+| `AWS_VAULT_OP_ITEM_TITLE_PREFIX` | Prefix to prepend to 1Password item titles | `--op-item-title-prefix` |
+| `AWS_VAULT_OP_ITEM_TAG` | Tag to apply to 1Password items | `--op-item-tag` |
+| `AWS_VAULT_OP_CONNECT_HOST` | 1Password Connect server HTTP(S) URI | `--op-connect-host` |
+| `AWS_VAULT_OP_CONNECT_TOKEN` | 1Password Connect server access token | — |
+| `AWS_VAULT_OP_SERVICE_ACCOUNT_TOKEN` | 1Password service account token | — |
+| `AWS_VAULT_OP_DESKTOP_ACCOUNT_ID` | 1Password Desktop App account name or account UUID | `--op-desktop-account-id` |
+| `AWS_VAULT_PROTON_PASS_SHARE_ID` | Share ID of the Proton Pass vault to use | `--proton-pass-share-id` |
+| `AWS_VAULT_PROTON_PASS_ITEM_TITLE_PREFIX` | Prefix to prepend to Proton Pass item titles | `--proton-pass-item-title-prefix` |
+| `AWS_VAULT_PROTON_PASS_API_BASE` | Proton API base URL | `--proton-pass-api-base` |
+| `AWS_VAULT_PROTON_PASS_TIMEOUT` | Timeout for Proton Pass API operations | `--proton-pass-timeout` |
+| `AWS_VAULT_PROFILE_ENV` | Set `AWS_PROFILE` instead of injecting `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` to allow profile-based SDK auth | `profile-env` (for `exec`) |
+| `AWS_CONFIG_FILE` | The location of the AWS config file | — |
+| `AWS_VAULT_STDOUT` | Print login URL to stdout instead of opening in default browser | `--stdout` |
 
 To override the AWS config file (used in the `exec`, `login` and `rotate` subcommands):
-* `AWS_REGION`: The AWS region
-* `AWS_DEFAULT_REGION`: The AWS region, applied only if `AWS_REGION` isn't set
-* `AWS_STS_REGIONAL_ENDPOINTS`: STS endpoint resolution logic, must be "regional" or "legacy"
-* `AWS_ENDPOINT_URL`: The AWS endpoint URL to use
-* `AWS_MFA_SERIAL`: The identification number of the MFA device to use
-* `AWS_ROLE_ARN`: Specifies the ARN of an IAM role in the active profile
-* `AWS_ROLE_SESSION_NAME`: Specifies the name to attach to the role session in the active profile
+
+| Variable | Description |
+| --- | --- |
+| `AWS_REGION` | The AWS region |
+| `AWS_DEFAULT_REGION` | The AWS region, applied only if `AWS_REGION` isn't set |
+| `AWS_STS_REGIONAL_ENDPOINTS` | STS endpoint resolution logic, must be "regional" or "legacy" |
+| `AWS_ENDPOINT_URL` | The AWS endpoint URL to use |
+| `AWS_MFA_SERIAL` | The identification number of the MFA device to use |
+| `AWS_ROLE_ARN` | Specifies the ARN of an IAM role in the active profile |
+| `AWS_ROLE_SESSION_NAME` | Specifies the name to attach to the role session in the active profile |
 
 To override session durations (used in `exec` and `login`):
-* `AWS_SESSION_TOKEN_TTL`: Expiration time for the `GetSessionToken` credentials. Defaults to 1h
-* `AWS_CHAINED_SESSION_TOKEN_TTL`: Expiration time for the `GetSessionToken` credentials when chaining profiles. Defaults to 8h
-* `AWS_ASSUME_ROLE_TTL`: Expiration time for the `AssumeRole` credentials. Defaults to 1h
-* `AWS_FEDERATION_TOKEN_TTL`: Expiration time for the `GetFederationToken` credentials. Defaults to 1h
-* `AWS_MIN_TTL`: The minimum expiration time allowed for a credential. Defaults to 5m
+
+| Variable | Description | Default |
+| --- | --- | --- |
+| `AWS_SESSION_TOKEN_TTL` | Expiration time for the `GetSessionToken` credentials | `1h` |
+| `AWS_CHAINED_SESSION_TOKEN_TTL` | Expiration time for the `GetSessionToken` credentials when chaining profiles | `8h` |
+| `AWS_ASSUME_ROLE_TTL` | Expiration time for the `AssumeRole` credentials | `1h` |
+| `AWS_FEDERATION_TOKEN_TTL` | Expiration time for the `GetFederationToken` credentials | `1h` |
+| `AWS_MIN_TTL` | The minimum expiration time allowed for a credential | `5m` |
 
 Note that the session durations above expect a unit after the number (e.g. 12h or 43200s).
 
 To override or set session tagging (used in `exec`):
-* `AWS_SESSION_TAGS`: Comma separated key-value list of tags passed with the `AssumeRole` call, overrides `session_tags` profile config variable
-* `AWS_TRANSITIVE_TAGS`: Comma separated list of transitive tags passed with the `AssumeRole` call, overrides `transitive_session_tags` profile config variable
+
+| Variable | Description |
+| --- | --- |
+| `AWS_SESSION_TAGS` | Comma separated key-value list of tags passed with the `AssumeRole` call, overrides `session_tags` profile config variable |
+| `AWS_TRANSITIVE_TAGS` | Comma separated list of transitive tags passed with the `AssumeRole` call, overrides `transitive_session_tags` profile config variable |
 
 To override or set the source identity (used in `exec` and `login`):
-* `AWS_SOURCE_IDENTITY`: Specifies the source identity for assumed role sessions
+
+| Variable | Description |
+| --- | --- |
+| `AWS_SOURCE_IDENTITY` | Specifies the source identity for assumed role sessions |
