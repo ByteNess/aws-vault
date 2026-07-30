@@ -28,3 +28,8 @@ go.work.sum
 build/
 dist/
 vendor/
+
+# Hugo docs site
+docs/public/
+docs/resources/_gen/
+docs/.hugo_build.lock

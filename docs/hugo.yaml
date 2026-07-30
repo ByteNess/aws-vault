@@ -1,0 +1,131 @@
+# Hugo + Hextra configuration for the aws-vault documentation site.
+#
+#   Local preview:  cd docs && hugo server
+#   Production:     cd docs && hugo --gc --minify
+#
+# baseURL is deliberately root-relative and NOT hardcoded to the production
+# host. CI injects the real value from actions/configure-pages, so the site
+# builds correctly for whichever repo or fork publishes it. To build for a
+# subpath by hand:
+#
+#   hugo --baseURL "https://<user>.github.io/aws-vault/"
+baseURL: "/"
+title: "AWS Vault"
+
+enableRobotsTXT: true
+enableGitInfo: true # powers "Last updated"; needs fetch-depth 0 in CI
+enableEmoji: true
+enableInlineShortcodes: true # required for {{% relref %}} inside link destinations
+
+module:
+  hugoVersion:
+    extended: true
+    min: "0.146.0"
+  imports:
+    - path: github.com/imfing/hextra
+
+defaultContentLanguage: en
+languages:
+  en:
+    label: English
+    weight: 1
+    title: AWS Vault
+
+# `llms` and `markdown` are output formats defined by the Hextra module itself.
+# The FlexSearch index is an asset resource, not an output format, so search
+# needs nothing here.
+outputs:
+  home: [html, llms]
+  page: [html, markdown]
+  section: [html, rss, markdown]
+
+markup:
+  goldmark:
+    renderer:
+      unsafe: true # required: the home page hero emits raw <div>/<br>
+    parser:
+      # Default since Hugo 0.62, pinned so the anchor IDs the migrated
+      # cross-links depend on (#include_profile, #mfa_process,
+      # #temporary-credentials-limitations-with-sts-iam) stay
+      # GitHub-compatible.
+      autoHeadingIDType: github
+  highlight:
+    noClasses: false # required for Hextra's syntax highlighting
+  tableOfContents:
+    startLevel: 2
+    endLevel: 3
+
+menu:
+  main:
+    - identifier: home
+      name: Home
+      pageRef: /
+      weight: 1
+    - identifier: getting-started
+      name: Quick start
+      pageRef: /getting-started
+      weight: 2
+    - identifier: docs
+      name: Docs
+      pageRef: /docs
+      weight: 3
+    # Renders as a search box rather than a text link. Removing this entry
+    # removes the only search UI on the site, in which case also set
+    # params.search.enable to false so the config does not lie.
+    - name: Search
+      weight: 4
+      params:
+        type: search
+    - identifier: github
+      name: GitHub
+      url: "https://github.com/ByteNess/aws-vault"
+      weight: 5
+      params:
+        icon: github
+
+params:
+  description: "AWS Vault is a tool to securely store and access AWS credentials in a development environment."
+  externalLinkDecoration: true
+
+  navbar:
+    displayTitle: true
+    displayLogo: false # no logo assets exist in the repo
+    width: wide
+
+  theme:
+    default: system
+    displayToggle: true
+
+  footer:
+    enable: true
+    displayCopyright: true
+    displayPoweredBy: true
+    width: normal
+
+  displayUpdatedDate: true
+  dateFormat: "January 2, 2006"
+
+  search:
+    enable: true
+    type: flexsearch
+    flexsearch:
+      index: content
+      tokenize: forward
+
+  editURL:
+    enable: true
+    base: "https://github.com/ByteNess/aws-vault/edit/main/docs/content"
+
+  highlight:
+    copy:
+      enable: true
+      display: hover
+
+  page:
+    width: normal
+
+  imageZoom:
+    enable: true
+
+  comments:
+    enable: false

@@ -3,7 +3,7 @@ BUILD_FLAGS=-ldflags="-s -w -X main.Version=$(VERSION)" -trimpath
 CERT_ID ?= Developer ID Application: ByteNess (R)
 SRC=$(shell find . -name '*.go') go.mod
 INSTALL_DIR ?= ~/bin
-.PHONY: binaries clean release install snapshot run
+.PHONY: binaries clean release install snapshot run docs-serve docs-build
 
 ifeq ($(shell uname), Darwin)
 aws-vault: $(SRC)
@@ -46,6 +46,12 @@ lint:
 
 vet:
 	go vet -all ./...
+
+docs-serve: ## Serve the documentation site locally on http://localhost:1313/
+	cd docs && hugo server --disableFastRender
+
+docs-build: ## Build the documentation site into docs/public/
+	cd docs && hugo --gc --minify
 
 release: binaries SHA256SUMS
 
