@@ -12,6 +12,8 @@ updates:
       interval: "weekly"
       day: "thursday"
       time: "11:00"
+    cooldown:
+      default-days: 1
     # Group minor and patch updates
     groups:
       go-dependencies:
@@ -30,6 +32,8 @@ updates:
       interval: "weekly"
       day: "thursday"
       time: "11:00"
+    cooldown:
+      default-days: 1
     # Group minor and patch updates
     groups:
       github-actions-dependencies:
