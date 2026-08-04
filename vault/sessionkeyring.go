@@ -166,15 +166,18 @@ func (sk *SessionKeyring) Set(key SessionMetadata, creds *ststypes.Credentials) 
 		}
 	}
 
+	// Sessions are a cache, and deliberately trust aws-vault to read them back
+	// without a keychain authorization prompt. Setting
+	// KeychainNotTrustApplication here makes macOS prompt on every read, which
+	// defeats the point of caching: each `aws-vault exec` or credential_process
+	// invocation would require user interaction even when the cached session is
+	// still valid. Long-lived master credentials are the item that stays
+	// untrusted, see CredentialKeyring.Set.
 	return sk.Keyring.Set(keyring.Item{
 		Key:         key.String(),
 		Data:        valJSON,
 		Label:       fmt.Sprintf("aws-vault session for %s (expires %s)", key.ProfileName, creds.Expiration.Format(time.RFC3339)),
 		Description: "aws-vault session",
-		// KeychainNotTrustApplication ensures macOS prompts for
-		// keychain access on every read, consistent with master
-		// credentials stored via CredentialKeyring.
-		KeychainNotTrustApplication: true,
 	})
 }
 

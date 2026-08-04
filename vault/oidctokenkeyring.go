@@ -81,12 +81,13 @@ func (o OIDCTokenKeyring) Set(startURL string, token *ssooidc.CreateTokenOutput)
 		return err
 	}
 
+	// Like sessions, the OIDC token is a cache and trusts aws-vault to read it
+	// back without a keychain authorization prompt. See SessionKeyring.Set.
 	return o.Keyring.Set(keyring.Item{
-		Key:                         o.fmtKey(startURL),
-		Data:                        valJSON,
-		Label:                       fmt.Sprintf("aws-vault oidc token for %s (expires %s)", startURL, val.Expiration.Format(time.RFC3339)),
-		Description:                 "aws-vault oidc token",
-		KeychainNotTrustApplication: true,
+		Key:         o.fmtKey(startURL),
+		Data:        valJSON,
+		Label:       fmt.Sprintf("aws-vault oidc token for %s (expires %s)", startURL, val.Expiration.Format(time.RFC3339)),
+		Description: "aws-vault oidc token",
 	})
 }
 
