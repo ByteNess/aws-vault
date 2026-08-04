@@ -1,6 +1,9 @@
-<!-- What does this PR change and why? Link any related issue. -->
-<!--
-Thanks for contributing to aws-vault!
+<!-- What does this PR change and why? Link any related issue - required
+for anything beyond a typo, doc clarification, or obvious bug fix - and
+ALWAYS required if AI was involved (see AI_POLICY.md).
+
+Drive-by AI PRs are closed!
+
 Before opening this PR, please make sure you've read:
   - .github/CONTRIBUTING.md
   - AI_POLICY.md  (required if you used ANY AI assistance)
@@ -9,16 +12,9 @@ PR title must follow Conventional Commits, e.g.
   feat: add 1Password Service Accounts backend
   fix(server): handle EC2 metadata timeouts cleanly
   docs: clarify pass backend setup on Fedora
+
+Thanks for contributing to aws-vault!
 -->
-
-## Related issue
-
-<!--
-Required for anything beyond a typo, doc clarification, or obvious bug fix — and
-ALWAYS required if AI was involved (see AI_POLICY.md). Drive-by AI PRs are closed.
--->
-
-Closes #
 
 ### Checklist
 
