@@ -1,0 +1,17 @@
+# markdownlint configuration for the Hugo documentation site.
+
+# Hugo shortcodes are opaque text to markdownlint, so a URL passed as a shortcode parameter looks like a bare URL:
+#
+#   {{< hextra/hero-badge link="https://github.com/ByteNess/aws-vault" >}}
+#
+# MD034's autofix rewrites it to link="<https://github.com/ByteNess/aws-vault>", which Hugo renders as a broken link.
+MD034: false
+
+# Hextra layouts rely on raw HTML in content (<div>, <br>, <img>, …), so flagging inline HTML is pure noise here.
+MD033: false
+
+# 80 columns is too narrow for prose and for URLs in shortcode parameters.
+# Table rows are exempt: they cannot be wrapped without breaking the table.
+MD013:
+  line_length: 120
+  tables: false

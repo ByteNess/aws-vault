@@ -15,14 +15,21 @@ title: "AWS Vault"
 enableRobotsTXT: true
 enableGitInfo: true # powers "Last updated"; needs fetch-depth 0 in CI
 enableEmoji: true
-enableInlineShortcodes: true # required for {{% relref %}} inside link destinations
 
 module:
   hugoVersion:
     extended: true
-    min: "0.146.0"
+    # 0.150.0 is the real floor: the import's `version` key below is only honoured from
+    # that release onwards, and on older Hugo the theme silently resolves to
+    # whatever is latest instead. Set to the current release, kept in step with
+    # HUGO_VERSION in .github/workflows/pages.yaml.
+    min: "0.164.0"
   imports:
+    # `version` takes a Go version query and makes this a direct dependency,
+    # which means it -- not the `require` in go.mod -- decides the theme
+    # version actually built. Bump the theme here.
     - path: github.com/imfing/hextra
+      version: v0.12.3
 
 defaultContentLanguage: en
 languages:
@@ -34,10 +41,15 @@ languages:
 # `llms` and `markdown` are output formats defined by the Hextra module itself.
 # The FlexSearch index is an asset resource, not an output format, so search
 # needs nothing here.
+#
+# The `markdown` format emits page source verbatim, so anything Hugo-specific in
+# the source ships as-is to the LLM/copy-as-markdown surface. Content pages are
+# plain Markdown and survive that; section landing pages are nothing but
+# {{< cards >}} shortcodes, so they get no `markdown` output.
 outputs:
   home: [html, llms]
   page: [html, markdown]
-  section: [html, rss, markdown]
+  section: [html, rss]
 
 markup:
   goldmark:

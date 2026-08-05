@@ -47,8 +47,15 @@ Sidebar order is set by `weight` in each page's front matter. Pages with an imag
 [page bundles](https://gohugo.io/content-management/page-bundles/) (`<name>/index.md` with
 the image alongside), so the image resolves correctly under any `baseURL`.
 
-Cross-page links use `{{% relref %}}` rather than hand-written paths, because a broken
-reference then fails the build instead of shipping a dead link.
+Cross-page links are written as site-relative paths without the `.md` suffix
+(`/docs/config#include_profile`). Hextra's `render-link` hook resolves those through the
+target page's `RelPermalink`, so they pick up whatever `baseURL` the build was given — no
+`{{% relref %}}` needed. This keeps the `markdown` output format (see `outputs` in
+`hugo.yaml`) free of raw shortcodes, which relref did leak. The trade-off: a mistyped path
+no longer fails the build, it just renders a dead link.
+
+Plain relative links (`config.md`) do *not* work: the hook only rewrites destinations
+starting with `/`, so they would be emitted verbatim and 404 against the pretty URLs.
 
 GitHub-style alerts (`> [!NOTE]`, `> [!TIP]`, …) render as styled callouts natively — no
 shortcode conversion needed, so the same Markdown renders on GitHub too.

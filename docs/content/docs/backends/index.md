@@ -3,7 +3,8 @@ title: Backends
 weight: 4
 ---
 
-You can choose among different pluggable secret storage backends. You can set the backend using the `--backend` flag or the `AWS_VAULT_BACKEND` environment variable. Run `aws-vault --help` to see what your `--backend` flag supports.
+You can choose among different pluggable secret storage backends. You can set the backend using the `--backend` flag or
+the `AWS_VAULT_BACKEND` environment variable. Run `aws-vault --help` to see what your `--backend` flag supports.
 
 The supported vaulting backends are:
 
@@ -21,36 +22,48 @@ The supported vaulting backends are:
 | `op-connect` | [1Password Connect](https://developer.1password.com/docs/connect/) | Stores credentials as concealed fields in 1Password items through a 1Password Connect server and token. | Windows, macOS, Linux |
 | `op` | [1Password Service Accounts](https://developer.1password.com/docs/service-accounts) | Stores credentials as concealed fields in 1Password items through the 1Password SDK using a service account token. | Windows, macOS, Linux |
 | `op-desktop` | [1Password Desktop App](https://developer.1password.com/docs/sdks/desktop-app-integrations/) | Stores credentials as concealed fields in 1Password items through the local 1Password desktop app integration. | Windows, macOS, Linux |
-| `proton-pass`* | [Proton Pass](https://proton.me/pass) | Stores credentials as items in a Proton Pass vault, accessed directly via Proton's HTTPS API using a scoped Personal Access Token. See [USAGE.md#proton-pass](#proton-pass) for setup. **Experimental**| Windows, macOS, Linux |
+| `proton-pass`* | [Proton Pass](https://proton.me/pass) | Stores credentials as items in a Proton Pass vault, accessed directly via Proton's HTTPS API using a scoped Personal Access Token. See [below](#proton-pass) for setup. **Experimental**| Windows, macOS, Linux |
 
-Use the `--backend` flag or `AWS_VAULT_BACKEND` environment variable to specify a backend. Run `aws-vault --help` to see the backends available in your build and environment.
+Use the `--backend` flag or `AWS_VAULT_BACKEND` environment variable to specify a backend. Run `aws-vault --help` to see
+the backends available in your build and environment.
 
-By default, `aws-vault` selects the first available backend for the platform: `wincred` on Windows, `keychain` on macOS, and `secret-service` on Linux when Secret Service is available. On Linux, automatic selection then falls back through `kwallet`, `keyctl`, `pass`, `passage`, and `file`. The 1Password and Proton Pass backends are opt-in and are listed after `file`, so choose them explicitly with `--backend` or `AWS_VAULT_BACKEND`.
+By default, `aws-vault` selects the first available backend for the platform: `wincred` on Windows, `keychain` on macOS,
+and `secret-service` on Linux when Secret Service is available. On Linux, automatic selection then falls back through
+`kwallet`, `keyctl`, `pass`, `passage`, and `file`. The 1Password and Proton Pass backends are opt-in and are listed
+after `file`, so choose them explicitly with `--backend` or `AWS_VAULT_BACKEND`.
 
 ## Keychain
 
-If you're looking to configure the amount of time between having to enter your Keychain password for each usage of a particular profile, you can do so through Keychain:
+If you're looking to configure the amount of time between having to enter your Keychain password for each usage of a
+particular profile, you can do so through Keychain:
 
 1. Open "Keychain Access"
-2. Open the aws-vault keychain. If you do not have "aws-vault" in the sidebar of the Keychain app, then you can do "File -> Add Keychain" and select the `aws-vault.keychain-db`. This is typically created in `Users/{USER}/Library/Keychains`.
+2. Open the aws-vault keychain. If you do not have "aws-vault" in the sidebar of the Keychain app,
+    then you can do "File -> Add Keychain" and select the `aws-vault.keychain-db`. This is typically created in
+   `Users/{USER}/Library/Keychains`.
 3. Right click on aws-vault keychain, and select "Change Settings for Keychain 'aws-vault"
 4. Update "Lock after X minutes of inactivity" to your desired value.
 5. Hit save.
 
 ![keychain-image](keychain-settings.png)
 
-
 ## Proton Pass
 
-> ⚠️ Experimental. The `proton-pass` backend talks to an undocumented, internal Proton API and depends on a credential model that may change. Review the Terms of Service note below before using it for anything unattended.
+> ⚠️ Experimental. The `proton-pass` backend talks to an undocumented, internal Proton API and depends on a credential
+> model that may change. Review the Terms of Service note below before using it for anything unattended.
 
-The `proton-pass` backend stores each profile's credentials as an item in a [Proton Pass](https://proton.me/pass) vault, reached directly over Proton's HTTPS API. It does not shell out to the Proton Pass CLI at runtime — you only use the CLI once, to mint and scope the access token.
+The `proton-pass` backend stores each profile's credentials as an item in a [Proton Pass](https://proton.me/pass) vault,
+reached directly over Proton's HTTPS API. It does not shell out to the Proton Pass CLI at runtime — you only use the CLI
+once, to mint and scope the access token.
 
-aws-vault authenticates with a Proton Pass **Personal Access Token (PAT)**, a scoped, Proton-issued automation credential of the form `pst_<token>::<key>`. The whole string is the credential: the `pst_<token>` half is exchanged for a session, and the `::<key>` half is the key that decrypts the vault.
+aws-vault authenticates with a Proton Pass **Personal Access Token (PAT)**, a scoped, Proton-issued automation
+credential of the form `pst_<token>::<key>`. The whole string is the credential: the `pst_<token>` half is exchanged for
+a session, and the `::<key>` half is the key that decrypts the vault.
 
 ### 1. Mint and scope a PAT
 
-Install the [Proton Pass CLI](https://github.com/protonpass/pass-cli) and log in, then create a token and grant it access. A dedicated vault keeps aws-vault's items isolated:
+Install the [Proton Pass CLI](https://github.com/protonpass/pass-cli) and log in, then create a token and grant it
+access. A dedicated vault keeps aws-vault's items isolated:
 
 ```shell
 # Optional: a dedicated vault for aws-vault items
@@ -80,11 +93,15 @@ The grant determines what aws-vault can do, and Proton's role model (`viewer` < 
 | `aws-vault exec`, `list` | read | per-item grant (read-only `viewer` is enough) |
 | `aws-vault remove` | delete | per-item grant with a writable role (`editor`) |
 
-The `add`-needs-a-vault-level-grant constraint is the one that bites in practice; the read/update/delete rows follow Proton's role model. The simplest setup is a single vault-level `editor` grant, which covers every command. Use a per-item token only when the profile already exists and you want least privilege (for example a read-only `viewer` token on a CI runner that only runs `exec`).
+The `add`-needs-a-vault-level-grant constraint is the one that bites in practice; the read/update/delete rows follow
+Proton's role model. The simplest setup is a single vault-level `editor` grant, which covers every command. Use a
+per-item token only when the profile already exists and you want least privilege (for example a read-only `viewer` token
+on a CI runner that only runs `exec`).
 
 ### 2. Find the Share ID
 
-A grant creates a recipient share for the PAT with its own Share ID. That ID — not the vault owner's — is what aws-vault needs:
+A grant creates a recipient share for the PAT with its own Share ID. That ID — not the vault owner's — is what aws-vault
+needs:
 
 ```shell
 pass-cli pat access list-access --pat-id <ID>
@@ -100,20 +117,39 @@ aws-vault --backend=proton-pass \
   add my-profile
 ```
 
-Set `AWS_VAULT_BACKEND=proton-pass` and `AWS_VAULT_PROTON_PASS_SHARE_ID=<SHARE_ID>` to avoid repeating the flags. If `PROTON_PASS_PERSONAL_ACCESS_TOKEN` is unset, aws-vault prompts for the token. The token is never accepted as a command-line flag, which would leak it into the process list and shell history.
+Set `AWS_VAULT_BACKEND=proton-pass` and `AWS_VAULT_PROTON_PASS_SHARE_ID=<SHARE_ID>` to avoid repeating the flags. If
+`PROTON_PASS_PERSONAL_ACCESS_TOKEN` is unset, aws-vault prompts for the token. The token is never accepted as a
+command-line flag, which would leak it into the process list and shell history.
 
-The backend also reads the Proton Pass CLI's own `PROTON_PASS_SHARE_ID` and `PROTON_PASS_API_BASE` variables as a fallback, so an existing CLI environment works unchanged. The aws-vault-specific `AWS_VAULT_PROTON_PASS_*` variables (and their flags) take precedence when both are set.
+The backend also reads the Proton Pass CLI's own `PROTON_PASS_SHARE_ID` and `PROTON_PASS_API_BASE` variables as a
+fallback, so an existing CLI environment works unchanged. The aws-vault-specific `AWS_VAULT_PROTON_PASS_*` variables
+(and their flags) take precedence when both are set.
 
 ### Session caching and rate limits
 
-The first command exchanges your PAT for a Proton session and caches that session in your **OS keychain** (macOS Keychain, Secret Service, KWallet, or Windows Credential Manager), under a dedicated `aws-vault-proton-pass-session` entry. Subsequent commands reuse it, so a normal `add` → `list` → `exec` sequence performs a single login. The cache entry is keyed to your token, so rotating the PAT invalidates it automatically; a session that Proton has expired or revoked is detected and the PAT re-exchanged on the next call.
+The first command exchanges your PAT for a Proton session and caches that session in your **OS keychain** (macOS
+Keychain, Secret Service, KWallet, or Windows Credential Manager), under a dedicated `aws-vault-proton-pass-session`
+entry. Subsequent commands reuse it, so a normal `add` → `list` → `exec` sequence performs a single login. The cache
+entry is keyed to your token, so rotating the PAT invalidates it automatically; a session that Proton has expired or
+revoked is detected and the PAT re-exchanged on the next call.
 
-This caching is what keeps the backend under Proton's login rate limit. Without it, every command re-runs the full exchange, and a few commands in quick succession trip `HTTP 429 / code 2028 "Too many recent logins"`. On a host with **no OS keychain available** (for example a headless Linux box with no Secret Service), the session cannot be cached and every operation re-exchanges the PAT — space your commands out, or expect the occasional rate-limit error.
+This caching is what keeps the backend under Proton's login rate limit. Without it, every command re-runs the full
+exchange, and a few commands in quick succession trip `HTTP 429 / code 2028 "Too many recent logins"`. On a host with
+**no OS keychain available** (for example a headless Linux box with no Secret Service), the session cannot be cached and
+every operation re-exchanges the PAT — space your commands out, or expect the occasional rate-limit error.
 
-`--proton-pass-timeout` (default `30s`, env `AWS_VAULT_PROTON_PASS_TIMEOUT`) bounds each operation, including the several HTTP calls a single command makes.
+`--proton-pass-timeout` (default `30s`, env `AWS_VAULT_PROTON_PASS_TIMEOUT`) bounds each operation, including the
+several HTTP calls a single command makes.
 
-Errors are reported plainly: a rate-limit response tells you to wait and retry; a rejected PAT tells you to mint or re-grant a token; and a demand for human verification (CAPTCHA / 2FA), which this client cannot satisfy, asks you to re-authenticate with the Proton Pass app or CLI to clear it.
+Errors are reported plainly: a rate-limit response tells you to wait and retry; a rejected PAT tells you to mint or
+re-grant a token; and a demand for human verification (CAPTCHA / 2FA), which this client cannot satisfy, asks you to
+re-authenticate with the Proton Pass app or CLI to clear it.
 
 ### Terms of Service
 
-Proton's [Terms of Service](https://proton.me/legal/terms) (Section 2, "Authorized use of the Services") prohibit accessing the Services "through automated means (including but not limited to bots, scripts, or similar technologies)". Interactive use — running `aws-vault exec` yourself, with you present — reads as an unofficial client acting on your behalf. **Unattended or CI use is the gray area for that clause and is at your own risk.** A PAT is the most clearly authorized automation credential Proton offers, but it does not exempt you from the automated-access clause. This is an engineering reading, not legal advice; get sign-off before relying on it for unattended access.
+Proton's [Terms of Service](https://proton.me/legal/terms) (Section 2, "Authorized use of the Services") prohibit
+accessing the Services "through automated means (including but not limited to bots, scripts, or similar technologies)".
+Interactive use — running `aws-vault exec` yourself, with you present — reads as an unofficial client acting on your
+behalf. **Unattended or CI use is the gray area for that clause and is at your own risk.** A PAT is the most clearly
+authorized automation credential Proton offers, but it does not exempt you from the automated-access clause. This is an
+engineering reading, not legal advice; get sign-off before relying on it for unattended access.

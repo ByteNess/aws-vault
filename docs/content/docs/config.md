@@ -5,17 +5,20 @@ weight: 3
 
 ## AWS config file
 
-aws-vault uses your `~/.aws/config` to load AWS config. This should work identically to the config specified by the [aws-cli docs](https://docs.aws.amazon.com/cli/latest/topic/config-vars.html).
+aws-vault uses your `~/.aws/config` to load AWS config. This should work identically to the config specified by the
+[aws-cli docs](https://docs.aws.amazon.com/cli/latest/topic/config-vars.html).
 
 ### `include_profile`
 
 (Note: aws-vault v5 calls this `parent_profile`)
 
-AWS Vault also recognises an extra config variable, `include_profile`, which is not recognised by the aws-cli. This variable allows a profile to load configuration horizontally from another profile.
+AWS Vault also recognises an extra config variable, `include_profile`, which is not recognised by the aws-cli. This
+variable allows a profile to load configuration horizontally from another profile.
 
 This is a flexible mechanism for more complex configurations.
 
-For example you can use it in "mixin" style where you import a common fragment. In this example, the `root`, `order-dev` and `order-staging-admin` profiles include the `region`, `mfa_serial` and `source_profile` configuration from `common`.
+For example you can use it in "mixin" style where you import a common fragment. In this example, the `root`, `order-dev`
+and `order-staging-admin` profiles include the `region`, `mfa_serial` and `source_profile` configuration from `common`.
 
 ```ini
 ; The "common" profile here operates as a "config fragment" rather than a profile
@@ -36,7 +39,10 @@ include_profile = common
 role_arn=arn:aws:iam::123456789:role/administrators
 ```
 
-Or you could use it in "parent" style where you conflate the fragment with the profile. In this example the `order-dev` and `order-staging-admin` profiles include the `region`, `mfa_serial` and `source_profile` configuration from `root`, while also using the credentials stored against the `root` profile as the source credentials `source_profile = root`
+Or you could use it in "parent" style where you conflate the fragment with the profile. In this example the `order-dev`
+and `order-staging-admin` profiles include the `region`, `mfa_serial` and `source_profile` configuration from `root`,
+while also using the credentials stored against the `root` profile as the source credentials `source_profile = root`
+
 ```ini
 ; The "root" profile here operates as a profile, a config fragment as well as a source_profile
 [profile root]
@@ -55,7 +61,10 @@ role_arn=arn:aws:iam::123456789:role/administrators
 
 ### `session_tags` and `transitive_session_tags`
 
-It is possible to set [session tags](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_session-tags.html) when `AssumeRole` is used. Two custom config variables could be defined for that: `session_tags` and `transitive_session_tags`. The former defines a comma separated key=value list of tags and the latter is a comma separated list of tags that should be persisted during role chaining:
+It is possible to set [session tags](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_session-tags.html) when
+`AssumeRole` is used. Two custom config variables could be defined for that: `session_tags` and
+`transitive_session_tags`. The former defines a comma separated key=value list of tags and the latter is a comma
+separated list of tags that should be persisted during role chaining:
 
 ```ini
 [profile root]
@@ -70,7 +79,9 @@ transitive_session_tags = key1,key2
 
 ### `source_identity`
 
-It is possible to set [source identity](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_temp_control-access_monitor.html) when `AssumeRole` is used. Custom config variable `source_identity` allows you to set the value.
+It is possible to set
+[source identity](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_temp_control-access_monitor.html)
+when `AssumeRole` is used. Custom config variable `source_identity` allows you to set the value.
 
 ```ini
 [profile root]
@@ -83,7 +94,10 @@ source_identity=your_user_name
 ```
 
 ### `mfa_process`
-If you have a method to generate an MFA token, you can use it with `aws-vault` by specifying the `mfa_process` option in a profile of your `~/.aws/config` file. The value of `mfa_process` should be a command that will output the MFA token to stdout.
+
+If you have a method to generate an MFA token, you can use it with `aws-vault` by specifying the `mfa_process` option in
+a profile of your `~/.aws/config` file. The value of `mfa_process` should be a command that will output the MFA token to
+stdout.
 
 For example, to use `pass` to retrieve an MFA token from a password store entry, you could use the following:
 

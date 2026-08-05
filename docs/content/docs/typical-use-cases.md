@@ -27,14 +27,17 @@ AWS_PROFILE=my_profile_master ./my-command      # Not expected to be functional
 AWS_PROFILE=my_profile_role ./my-command        # Not expected to be functional
 ```
 
-In this scenario, the profile name and aws config is used exclusively by aws-vault, which provides the environment for the command to run in.
+In this scenario, the profile name and aws config is used exclusively by aws-vault, which provides the environment for
+the command to run in.
 
-This is a very unix-y and 12-factor approach. It's the original and the primary use-case of aws-vault - it's why `aws-vault exec` exists.
+This is a very unix-y and 12-factor approach. It's the original and the primary use-case of aws-vault - it's why
+`aws-vault exec` exists.
 
 
 ## Use-case 2: aws-vault is a "master credentials vault" for AWS SDK
 
-aws-vault can be used in `credential_process` in the AWS config to provide master creds. This is more in-line with the AWS SDK way of approaching the problem via `credential_process` and `AWS_PROFILE`
+aws-vault can be used in `credential_process` in the AWS config to provide master creds. This is more in-line with the
+AWS SDK way of approaching the problem via `credential_process` and `AWS_PROFILE`
 
 ```ini
 ; master creds added with 'aws-vault add my_profile_master'
@@ -56,7 +59,8 @@ AWS_PROFILE=my_profile_role ./my-command       # success (SDK role)
 
 ## Use-case 3: aws-vault is a "MFA session cache" for AWS SDK
 
-Very similar to Use-case 2, aws-vault can be used to cache STS MFA credentials between profiles. This means you are not forced to re-authenticate with MFA every time you switch profiles
+Very similar to Use-case 2, aws-vault can be used to cache STS MFA credentials between profiles. This means you are not
+forced to re-authenticate with MFA every time you switch profiles
 
 ```ini
 ; master creds added with 'aws-vault add my_profile_master'
@@ -86,7 +90,8 @@ AWS_PROFILE=my_profile_role ./my-command        # success (uses aws-vault sessio
 
 ## Use-case 4: aws-vault caches alternative credential sources
 
-aws-vault caches credentials from alternative credential sources like `sso_start_url`, `web_identity_token_process`, `credential_process`
+aws-vault caches credentials from alternative credential sources like `sso_start_url`, `web_identity_token_process`,
+`credential_process`
 
 ```ini
 [profile my_profile_using_sso]

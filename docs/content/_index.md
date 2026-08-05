@@ -3,7 +3,7 @@ title: AWS Vault
 layout: hextra-home
 ---
 
-{{< hextra/hero-badge link="<https://github.com/ByteNess/aws-vault>" >}}
+{{< hextra/hero-badge link="https://github.com/ByteNess/aws-vault" >}}
   <div class="hx:w-2 hx:h-2 hx:rounded-full hx:bg-primary-400"></div>
   <span>Free, open source</span>
   {{< icon name="arrow-circle-right" attributes="height=14" >}}
@@ -17,7 +17,8 @@ layout: hextra-home
 
 <div class="hx:mb-12">
 {{< hextra/hero-subtitle >}}
-  AWS Vault stores IAM credentials in your operating system's secure keystore&nbsp;<br class="hx:sm:block hx:hidden" />and then generates temporary credentials from those to expose to your shell and applications.
+  AWS Vault stores IAM credentials in your operating system's secure keystore
+  <br class="hx:sm:block hx:hidden"/>and then generates temporary credentials from those to expose to your shell and applications.
 {{< /hextra/hero-subtitle >}}
 </div>
 
