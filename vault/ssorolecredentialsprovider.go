@@ -336,8 +336,9 @@ func (p *SSORoleCredentialsProvider) openOrPrintURL(url string) {
 // port to serve the OAuth2 callback. It serves a single oauth callback endpoint
 // and sends the authorization code received via a channel.
 func newOauthCallbackServer() (*oauthCallbackServer, error) {
-	// select a random port for the callback server
-	ln, err := net.Listen("tcp", ":0")
+	// select a random port for the callback server, bound to loopback only so
+	// the ephemeral server is never exposed on non-loopback interfaces.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create listener: %w", err)
 	}
@@ -374,11 +375,22 @@ func (s *oauthCallbackServer) handleCallback(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// constant time string comparison of want vs got state
+	// constant time string comparison of want vs got state. A mismatched or
+	// missing state (e.g. a stray port probe) is not treated as terminal: we
+	// reject the request but keep listening for a valid callback, mirroring the
+	// AWS CLI. The main goroutine stays blocked on resultChan/ctx.Done().
 	state := r.URL.Query().Get("state")
 	if subtle.ConstantTimeCompare([]byte(state), []byte(s.state)) != 1 {
 		http.Error(w, "Invalid state", http.StatusBadRequest)
-		s.resultChan <- oauthCallbackResult{err: errors.New("invalid state")}
+		return
+	}
+
+	// the authorize endpoint may redirect back with an OAuth2 error instead of
+	// a code (e.g. the user denied the request); surface it as a terminal error.
+	if errCode := r.URL.Query().Get("error"); errCode != "" {
+		errDesc := r.URL.Query().Get("error_description")
+		io.WriteString(w, "Authorization failed, you can close this tab now.")
+		s.resultChan <- oauthCallbackResult{err: fmt.Errorf("authorization error: %s: %s", errCode, errDesc)}
 		return
 	}
 
