@@ -13,7 +13,7 @@ updates:
       day: "thursday"
       time: "11:00"
     cooldown:
-      default-days: 1
+      default-days: 0
     # Group minor and patch updates
     groups:
       go-dependencies:
