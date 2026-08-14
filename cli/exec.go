@@ -36,6 +36,7 @@ type ExecCommandInput struct {
 	UseStdout        bool
 	ShowHelpMessages bool
 	UseProfileEnv    bool
+	ParallelSafe     bool
 }
 
 func (input ExecCommandInput) validate() error {
@@ -127,6 +128,7 @@ func ConfigureExecCommand(app *kingpin.Application, a *AwsVault) {
 		StringsVar(&input.Args)
 
 	cmd.Action(func(c *kingpin.ParseContext) (err error) {
+		input.ParallelSafe = a.ParallelSafe
 		input.Config.MfaPromptMethod = a.PromptDriver(hasBackgroundServer(input))
 		input.Config.NonChainedGetSessionTokenDuration = input.SessionDuration
 		input.Config.ChainedGetSessionTokenDuration = input.SessionDuration
@@ -162,6 +164,7 @@ func ConfigureExecCommand(app *kingpin.Application, a *AwsVault) {
 				Config:          input.Config,
 				SessionDuration: input.SessionDuration,
 				NoSession:       input.NoSession,
+				ParallelSafe:    input.ParallelSafe,
 			}
 
 			err = ExportCommand(exportCommandInput, f, keyring)
@@ -196,7 +199,13 @@ func ExecCommand(input ExecCommandInput, f *vault.ConfigFile, keyring keyring.Ke
 		return 0, fmt.Errorf("Error loading config: %w", err)
 	}
 
-	credsProvider, err := vault.NewTempCredentialsProvider(config, &vault.CredentialKeyring{Keyring: keyring}, input.NoSession, false)
+	credsProvider, err := vault.NewTempCredentialsProviderWithOptions(
+		config,
+		&vault.CredentialKeyring{Keyring: keyring},
+		input.NoSession,
+		false,
+		vault.TempCredentialsOptions{ParallelSafe: input.ParallelSafe},
+	)
 	if err != nil {
 		return 0, fmt.Errorf("Error getting temporary credentials: %w", err)
 	}
