@@ -25,6 +25,7 @@ import (
 type LoginCommandInput struct {
 	ProfileName     string
 	UseStdout       bool
+	UseDeviceCode   bool
 	Path            string
 	Config          vault.ProfileConfig
 	SessionDuration time.Duration
@@ -65,6 +66,10 @@ func ConfigureLoginCommand(app *kingpin.Application, a *AwsVault) {
 		Short('s').
 		BoolVar(&input.UseStdout)
 
+	cmd.Flag("device-code", "Use the device-code OAuth2 flow for SSO instead of the default PKCE browser flow").
+		OverrideDefaultFromEnvar("AWS_VAULT_DEVICE_CODE").
+		BoolVar(&input.UseDeviceCode)
+
 	cmd.Arg("profile", "Name of the profile. If none given, credentials will be sourced from env vars").
 		Default(os.Getenv("AWS_PROFILE")).
 		HintAction(a.MustGetProfileNames).
@@ -76,6 +81,8 @@ func ConfigureLoginCommand(app *kingpin.Application, a *AwsVault) {
 		input.Config.ChainedGetSessionTokenDuration = input.SessionDuration
 		input.Config.AssumeRoleDuration = input.SessionDuration
 		input.Config.GetFederationTokenDuration = input.SessionDuration
+		input.Config.SSOUseStdout = input.UseStdout
+		input.Config.SSOUseDeviceCode = input.UseDeviceCode
 		keyring, err := a.Keyring()
 		if err != nil {
 			return err

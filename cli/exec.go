@@ -34,6 +34,7 @@ type ExecCommandInput struct {
 	SessionDuration  time.Duration
 	NoSession        bool
 	UseStdout        bool
+	UseDeviceCode    bool
 	ShowHelpMessages bool
 	UseProfileEnv    bool
 }
@@ -110,6 +111,10 @@ func ConfigureExecCommand(app *kingpin.Application, a *AwsVault) {
 		OverrideDefaultFromEnvar("AWS_VAULT_STDOUT").
 		BoolVar(&input.UseStdout)
 
+	cmd.Flag("device-code", "Use the device-code OAuth2 flow for SSO instead of the default PKCE browser flow").
+		OverrideDefaultFromEnvar("AWS_VAULT_DEVICE_CODE").
+		BoolVar(&input.UseDeviceCode)
+
 	cmd.Flag("profile-env", "Set AWS_PROFILE instead of injecting AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY").
 		OverrideDefaultFromEnvar("AWS_VAULT_PROFILE_ENV").
 		BoolVar(&input.UseProfileEnv)
@@ -132,6 +137,7 @@ func ConfigureExecCommand(app *kingpin.Application, a *AwsVault) {
 		input.Config.ChainedGetSessionTokenDuration = input.SessionDuration
 		input.Config.AssumeRoleDuration = input.SessionDuration
 		input.Config.SSOUseStdout = input.UseStdout
+		input.Config.SSOUseDeviceCode = input.UseDeviceCode
 		input.ShowHelpMessages = !a.Debug && input.Command == "" && isATerminal() && os.Getenv("AWS_VAULT_DISABLE_HELP_MESSAGE") != "1"
 
 		f, err := a.AwsConfigFile()

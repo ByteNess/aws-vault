@@ -297,6 +297,7 @@ To configure the default flag values of `aws-vault` and its subcommands:
 * `AWS_VAULT_PROFILE_ENV`: Set `AWS_PROFILE` instead of injecting `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` to allow profile-based SDK auth (see the flag `profile-env` for `exec`)
 * `AWS_CONFIG_FILE`: The location of the AWS config file
 * `AWS_VAULT_STDOUT`: Print login URL to stdout instead of opening in default browser (see the flag `--stdout`)
+* `AWS_VAULT_DEVICE_CODE`: Use the device-code OAuth2 flow for SSO instead of the default PKCE browser flow (see the flag `--device-code`)
 
 To override the AWS config file (used in the `exec`, `login` and `rotate` subcommands):
 * `AWS_REGION`: The AWS region
@@ -728,6 +729,21 @@ sso_region=eu-west-1
 sso_account_id=123456789012
 sso_role_name=Administrator
 ```
+
+By default aws-vault authenticates SSO profiles using the OAuth2 "authorization
+code" flow with [PKCE](https://datatracker.ietf.org/doc/html/rfc7636). aws-vault
+opens your browser to the SSO authorization page and starts an ephemeral callback
+server on `127.0.0.1`; once you confirm the login, the browser is redirected back
+to that local server and the authorization code is exchanged for a token
+automatically. AWS requires the callback to be a `127.0.0.1` address, so a remote
+attacker who tricks you into confirming a malicious login cannot receive the
+resulting code as the redirect only ever reaches your own machine.
+
+If aws-vault cannot open a browser (for example on a headless or remote host, or
+when `--stdout` is set), pass `--device-code` (or set `AWS_VAULT_DEVICE_CODE=1`) to
+fall back to the legacy device-code flow, which prints URLs for you to open
+manually. These options are available on `aws-vault exec`, `aws-vault export` and
+`aws-vault login`.
 
 ### Assuming a role with SSO
 
