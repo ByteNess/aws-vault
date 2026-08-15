@@ -1,0 +1,153 @@
+# Hugo + Hextra configuration for the aws-vault documentation site.
+#
+#   Local preview:  cd docs && hugo server
+#   Production:     cd docs && hugo --gc --minify
+#
+# baseURL is deliberately root-relative and NOT hardcoded to the production
+# host. CI injects the real value from actions/configure-pages, so the site
+# builds correctly for whichever repo or fork publishes it. To build for a
+# subpath by hand:
+#
+#   hugo --baseURL "https://<user>.github.io/aws-vault/"
+baseURL: "/"
+title: "AWS Vault"
+
+enableRobotsTXT: true
+enableGitInfo: true # powers "Last updated"; needs fetch-depth 0 in CI
+enableEmoji: true
+
+module:
+  hugoVersion:
+    extended: true
+    # 0.150.0 is the real floor: the import's `version` key below is only honoured from
+    # that release onwards, and on older Hugo the theme silently resolves to
+    # whatever is latest instead. Set to the current release, kept in step with
+    # HUGO_VERSION in .github/workflows/pages.yaml.
+    min: "0.165.0"
+  imports:
+    # `version` takes a Go version query and makes this a direct dependency,
+    # which means it -- not the `require` in go.mod -- decides the theme
+    # version actually built. Bump the theme here.
+    - path: github.com/imfing/hextra
+      version: v0.12.3
+
+defaultContentLanguage: en
+languages:
+  en:
+    label: English
+    weight: 1
+    title: AWS Vault
+
+# `llms` and `markdown` are output formats defined by the Hextra module itself.
+# The FlexSearch index is an asset resource, not an output format, so search
+# needs nothing here.
+#
+# The `markdown` format emits page source verbatim, so anything Hugo-specific in
+# the source ships as-is to the LLM/copy-as-markdown surface. Content pages are
+# plain Markdown and survive that; section landing pages are nothing but
+# {{< cards >}} shortcodes, so they get no `markdown` output.
+outputs:
+  home: [html, llms]
+  page: [html, markdown]
+  section: [html, rss]
+
+markup:
+  goldmark:
+    renderer:
+      unsafe: true # required: the home page hero emits raw <div>/<br>
+    parser:
+      # Default since Hugo 0.62, pinned so the anchor IDs the migrated
+      # cross-links depend on (#include_profile, #mfa_process,
+      # #temporary-credentials-limitations-with-sts-iam) stay
+      # GitHub-compatible.
+      autoHeadingIDType: github
+  highlight:
+    noClasses: false # required for Hextra's syntax highlighting
+  tableOfContents:
+    startLevel: 2
+    endLevel: 3
+
+menu:
+  main:
+    - identifier: home
+      name: Home
+      pageRef: /
+      weight: 1
+    - identifier: getting-started
+      name: Quick start
+      pageRef: /getting-started
+      weight: 2
+    - identifier: docs
+      name: Docs
+      pageRef: /docs
+      weight: 3
+    # Renders as a search box rather than a text link. Removing this entry
+    # removes the only search UI on the site, in which case also set
+    # params.search.enable to false so the config does not lie.
+    - name: Search
+      weight: 4
+      params:
+        type: search
+    - identifier: github
+      name: GitHub
+      url: "https://github.com/ByteNess/aws-vault"
+      weight: 5
+      params:
+        icon: github
+
+params:
+  description: "AWS Vault is a tool to securely store and access AWS credentials in a development environment."
+  externalLinkDecoration: true
+
+  navbar:
+    displayTitle: true
+    displayLogo: false # no logo assets exist in the repo
+    width: wide
+
+  theme:
+    default: system
+    displayToggle: true
+
+  footer:
+    enable: true
+    displayCopyright: true
+    displayPoweredBy: true
+    width: wide
+
+  displayUpdatedDate: true
+  dateFormat: "January 2, 2006"
+
+  search:
+    enable: true
+    type: flexsearch
+    flexsearch:
+      index: content
+      tokenize: forward
+
+  editURL:
+    enable: true
+    base: "https://github.com/ByteNess/aws-vault/edit/main/docs/content"
+
+  highlight:
+    copy:
+      enable: true
+      display: hover
+
+  # Layout widths. Accepted values are normal (80rem), wide (90rem) and
+  # full (100%). Keep navbar, page and footer in step so the header, content
+  # and footer edges line up.
+  #
+  # Note the content column has its own cap of 72rem, hardcoded in the theme as
+  # --hextra-max-content-width and not exposed as a site parameter. With the
+  # sidebar and table of contents taking roughly 32rem, `wide` leaves the
+  # content about 58rem, so that cap is not yet the binding constraint. Going
+  # to `full` would hit it on large monitors -- see docs/README.md for how to
+  # lift it.
+  page:
+    width: wide
+
+  imageZoom:
+    enable: true
+
+  comments:
+    enable: false

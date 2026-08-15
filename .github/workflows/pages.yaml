@@ -1,0 +1,79 @@
+name: Deploy docs to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'docs/**'
+      - '.github/workflows/pages.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow one concurrent deployment, without cancelling an in-flight one.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+    working-directory: docs
+
+jobs:
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    env:
+      HUGO_VERSION: 0.165.0
+      HUGO_ENVIRONMENT: production
+      TZ: UTC
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # required by enableGitInfo for "Last updated"
+      # Hugo shells out to `go` to fetch the theme module, so the toolchain is
+      # still required even though docs/ is no longer a Go module. There is no
+      # go.sum to key a cache on -- the theme version is pinned in
+      # docs/hugo.yaml -- so dependency caching is off.
+      - uses: actions/setup-go@v7
+        with:
+          go-version: 'stable'
+          check-latest: true
+          cache: false
+      - name: Install Hugo extended
+        working-directory: .
+        run: |
+          wget -q -O "${RUNNER_TEMP}/hugo.deb" \
+            "https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/hugo_extended_${HUGO_VERSION}_linux-amd64.deb"
+          sudo dpkg -i "${RUNNER_TEMP}/hugo.deb"
+          hugo version
+      - name: Configure Pages
+        id: pages
+        uses: actions/configure-pages@v6
+        with:
+          # Lets a fork publish a test copy without touching repo settings.
+          enablement: true
+      # baseURL comes from the Pages API rather than hugo.yaml, so the site
+      # builds correctly for whichever repo or fork is publishing it.
+      - name: Build with Hugo
+        run: hugo --gc --minify --baseURL "${{ steps.pages.outputs.base_url }}/"
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: docs/public
+
+  deploy:
+    name: deploy
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

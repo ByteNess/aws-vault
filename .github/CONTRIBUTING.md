@@ -50,14 +50,16 @@ When you're ready to send a PR:
 3. Write a clear description: what problem you're solving and how. For example:
    > "Add `--auto-logout` flag" is fine as a title, but the description should say *why* — e.g. "Users repeatedly hit the existing SSO session when switching profiles; this flag makes `login` clear it first."
 4. Use [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit messages and the PR title. Examples:
+
    ```
    feat: add 1Password Service Accounts backend
    fix(server): handle EC2 metadata timeouts cleanly
    docs: clarify pass backend setup on Fedora
    chore(deps): bump aws-sdk-go-v2
    ```
+
 5. Make sure CI is green. The repo runs `go vet`, `golangci-lint`, and the test suite on every PR.
-6. If your change is user-visible, update the relevant section of `README.md` or `USAGE.md` in the same PR.
+6. If your change is user-visible, update the relevant section of the documentations in `/docs/content/` in the same PR.
 
 ### What we look for when reviewing
 
@@ -75,6 +77,7 @@ When you're ready to send a PR:
 - Go (see `go.mod` for the minimum version)
 - `make`
 - `golangci-lint` — install via the [official instructions](https://golangci-lint.run/welcome/install/) or:
+
   ```shell
   go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
   ```

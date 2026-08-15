@@ -5,7 +5,8 @@ on:
       - main
     paths-ignore:
       - '.github/**'
-      - '.gitgnore'
+      - '.gitignore'
+      - 'docs/**'
   pull_request:
     branches:
       - main

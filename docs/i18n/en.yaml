@@ -1,0 +1,5 @@
+# Overrides Hextra's default footer strings.
+#
+# The copyright below mirrors the repository LICENSE (MIT, Copyright (c) 2015
+# ByteNess) rather than asserting anything new.
+copyright: "© 2015 ByteNess · Released under the [MIT License](https://github.com/ByteNess/aws-vault/blob/main/LICENSE)."
