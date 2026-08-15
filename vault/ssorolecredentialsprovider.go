@@ -270,19 +270,27 @@ func (p *SSORoleCredentialsProvider) newOIDCTokenPKCE(ctx context.Context) (*sso
 		"code_challenge":        {codeChallenge},
 		"scopes":                {"sso:account:access"},
 	}
-	// prefer the base endpoint from client options, otherwise use a default
-	var host string
-	if p.OIDCClient.Options().BaseEndpoint != nil && *p.OIDCClient.Options().BaseEndpoint != "" {
-		host = *p.OIDCClient.Options().BaseEndpoint
-	} else {
-		host = fmt.Sprintf("oidc.%s.amazonaws.com", p.OIDCClient.Options().Region)
+	// /authorize is not part of the modeled API, so the URL is built by hand.
+	// Prefer the client's configured base endpoint, which is a full URL and so
+	// must be parsed rather than used as a bare host, and fall back to the
+	// regional OIDC host.
+	authorizeURL := &url.URL{
+		Scheme: "https",
+		Host:   fmt.Sprintf("oidc.%s.amazonaws.com", p.OIDCClient.Options().Region),
 	}
-	authorizeURL := url.URL{
-		Scheme:   "https",
-		Host:     host,
-		Path:     "/authorize",
-		RawQuery: args.Encode(),
+	if base := aws.ToString(p.OIDCClient.Options().BaseEndpoint); base != "" {
+		u, err := url.Parse(base)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse OIDC base endpoint %q: %w", base, err)
+		}
+		if u.Scheme == "" || u.Host == "" {
+			return nil, fmt.Errorf("OIDC base endpoint %q is not an absolute URL", base)
+		}
+		authorizeURL = u
 	}
+	// JoinPath so a base endpoint carrying a path prefix is preserved
+	authorizeURL = authorizeURL.JoinPath("authorize")
+	authorizeURL.RawQuery = args.Encode()
 	log.Printf("Authorize URL: %s", authorizeURL.String())
 
 	p.openOrPrintURL(authorizeURL.String())
@@ -346,8 +354,10 @@ func newOauthCallbackServer() (*oauthCallbackServer, error) {
 
 	// create a 32 byte state for CSRF protection
 	state := make([]byte, 32)
-	n, err := crand.Read(state)
-	if err != nil || n != 32 {
+	if _, err := crand.Read(state); err != nil {
+		// the listener is already bound at this point, so close it rather than
+		// leaking the socket on the error path
+		_ = ln.Close()
 		return nil, fmt.Errorf("failed to generate state: %w", err)
 	}
 
