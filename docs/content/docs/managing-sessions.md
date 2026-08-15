@@ -72,7 +72,7 @@ You can also specify a profile to remove sessions for this profile only.
 aws-vault clear [profile]
 ```
 
-## Using --no-session
+## Using `--no-session`
 
 AWS Vault will typically create temporary credentials using a combination of `GetSessionToken` and `AssumeRole`,
 depending on the config. The `GetSessionToken` call is made with MFA if available, and the resulting session is cached
@@ -163,6 +163,6 @@ $ aws-vault exec <iam_user_profile> -- aws iam get-user
 An error occurred (InvalidClientTokenId) when calling the GetUser operation: The security token included in the request is invalid
 ```
 
-For restricted IAM operation you can add MFA to the IAM User and update your `~/.aws/config`` file with
+For restricted IAM operation you can add MFA to the IAM User and update your `~/.aws/config` file with
 [MFA configuration](/docs/mfa). Alternately you may avoid the temporary session entirely by using
 `--no-session`.
