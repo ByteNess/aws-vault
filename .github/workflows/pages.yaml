@@ -16,7 +16,7 @@ permissions:
 
 # Allow one concurrent deployment, without cancelling an in-flight one.
 concurrency:
-  group: pages
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
 defaults:
