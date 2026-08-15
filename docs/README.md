@@ -5,7 +5,7 @@ The source for <https://byteness.github.io/aws-vault/>, built with
 
 ## Prerequisites
 
-- **Hugo extended**, v0.146.0 or newer — `brew install hugo`
+- **Hugo extended**, v0.165.0 or newer — `brew install hugo`
 - **Go** — Hextra is installed as a Hugo Module, which uses the Go toolchain to fetch it
 
 ## Preview locally

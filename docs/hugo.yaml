@@ -23,7 +23,7 @@ module:
     # that release onwards, and on older Hugo the theme silently resolves to
     # whatever is latest instead. Set to the current release, kept in step with
     # HUGO_VERSION in .github/workflows/pages.yaml.
-    min: "0.164.0"
+    min: "0.165.0"
   imports:
     # `version` takes a Go version query and makes this a direct dependency,
     # which means it -- not the `require` in go.mod -- decides the theme
