@@ -77,7 +77,7 @@ jobs:
             exit 1
           fi
           # Markdown link syntax surviving into rendered HTML means the source
-          # markup broke -- e.g. an unbalanced backtick swallowing the link.
+          # markup broke, e.g. an unbalanced backtick swallowing the link.
           # Only *.html: the `markdown` and `llms` output formats contain
           # markdown links legitimately, as does the search index.
           if grep -rlE '\[[^]]+\]\([^)]+\)' public --include='*.html'; then
