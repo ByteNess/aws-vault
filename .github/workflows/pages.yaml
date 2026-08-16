@@ -7,17 +7,21 @@ on:
     paths:
       - 'docs/**'
       - '.github/workflows/pages.yaml'
-  workflow_dispatch:
+  # This repo uses required status checks, therefore always run to satisfy checks.
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch: {}
 
+# Deploy scopes live on the deploy job. A `pull_request` run from a fork gets a
+# read-only token regardless of what is declared here, so keeping it aligned.
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
-# Allow one concurrent deployment, without cancelling an in-flight one.
+# Never cancel an in-flight deployment, but only supersede stale PR builds.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 defaults:
   run:
@@ -38,8 +42,7 @@ jobs:
           fetch-depth: 0 # required by enableGitInfo for "Last updated"
       # Hugo shells out to `go` to fetch the theme module, so the toolchain is
       # still required even though docs/ is no longer a Go module. There is no
-      # go.sum to key a cache on -- the theme version is pinned in
-      # docs/hugo.yaml -- so dependency caching is off.
+      # go.sum to key a cache on - the theme version is pinned in docs/hugo.yaml
       - uses: actions/setup-go@v7
         with:
           go-version: 'stable'
@@ -52,8 +55,11 @@ jobs:
             "https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/hugo_extended_${HUGO_VERSION}_linux-amd64.deb"
           sudo dpkg -i "${RUNNER_TEMP}/hugo.deb"
           hugo version
+      # Needs the `pages` scope, which a fork pull_request token cannot have,
+      # so it is skipped on PRs and the build falls back to a root baseURL.
       - name: Configure Pages
         id: pages
+        if: github.event_name != 'pull_request'
         uses: actions/configure-pages@v6
         with:
           # Lets a fork publish a test copy without touching repo settings.
@@ -61,15 +67,36 @@ jobs:
       # baseURL comes from the Pages API rather than hugo.yaml, so the site
       # builds correctly for whichever repo or fork is publishing it.
       - name: Build with Hugo
-        run: hugo --gc --minify --baseURL "${{ steps.pages.outputs.base_url }}/"
+        run: hugo --gc --minify --baseURL "${{ steps.pages.outputs.base_url || '/' }}"
+      # Hugo exits 0 on content that renders wrong, so assert on the output.
+      # Both of these have shipped in this repo's docs already.
+      - name: Check rendered output
+        run: |
+          if grep -rl 'ZgotmplZ' public --include='*.html'; then
+            echo "::error::Go template rejected a URL (see files above); check shortcode link= parameters"
+            exit 1
+          fi
+          # Markdown link syntax surviving into rendered HTML means the source
+          # markup broke -- e.g. an unbalanced backtick swallowing the link.
+          # Only *.html: the `markdown` and `llms` output formats contain
+          # markdown links legitimately, as does the search index.
+          if grep -rlE '\[[^]]+\]\([^)]+\)' public --include='*.html'; then
+            echo "::error::Raw markdown link syntax in rendered HTML (see files above)"
+            exit 1
+          fi
       - uses: actions/upload-pages-artifact@v5
+        if: github.event_name != 'pull_request'
         with:
           path: docs/public
 
   deploy:
     name: deploy
+    if: github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
