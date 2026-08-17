@@ -133,6 +133,7 @@ To configure the default flag values of `aws-vault` and its subcommands:
 | `AWS_VAULT_PASS_PREFIX` | Prefix to prepend to the item path stored in pass | `--pass-prefix` |
 | `AWS_VAULT_FILE_DIR` | Directory for the "file" password store | `--file-dir` |
 | `AWS_VAULT_FILE_PASSPHRASE` | Password for the "file" password store | — |
+| `AWS_VAULT_DURATION` | Duration of the temporary or assume-role session | `--duration` |
 | `AWS_VAULT_OP_TIMEOUT` | Timeout for 1Password Service Account operations | `--op-timeout` |
 | `AWS_VAULT_OP_VAULT_ID` | UUID of the 1Password vault | `--op-vault-id` |
 | `AWS_VAULT_OP_ITEM_TITLE_PREFIX` | Prefix to prepend to 1Password item titles | `--op-item-title-prefix` |
