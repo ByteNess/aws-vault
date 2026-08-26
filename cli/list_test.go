@@ -217,7 +217,7 @@ region = us-east-1
 func captureListOutput(t *testing.T, input ListCommandInput, configFile *vault.ConfigFile, kr keyring.Keyring) string {
 	t.Helper()
 	var buf bytes.Buffer
-	if err := ListCommand(input, configFile, kr, &buf); err != nil {
+	if err := ListCommand(input, configFile, kr, kr, &buf); err != nil {
 		t.Fatalf("ListCommand error: %v", err)
 	}
 	return buf.String()

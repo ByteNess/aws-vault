@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/alecthomas/kingpin/v2"
 	"github.com/byteness/aws-vault/v7/vault"
 	"github.com/byteness/keyring"
 )
@@ -79,6 +80,78 @@ func TestProfileResolvable(t *testing.T) {
 	}
 }
 
+func TestSessionKeyringDefaultsToPrimaryKeyring(t *testing.T) {
+	primary := keyring.NewArrayKeyring(nil)
+	a := &AwsVault{keyringImpl: primary}
+
+	sessions, err := a.SessionKeyring()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sessions != primary {
+		t.Fatal("expected sessions to use the primary keyring by default")
+	}
+}
+
+func TestSessionKeyringOverridesInheritPrimaryConfig(t *testing.T) {
+	primary := keyring.Config{
+		PassDir:                 "/primary/store",
+		PassPrefix:              "credentials",
+		PassageIdentitiesFile:   "/primary/identities",
+		LibSecretCollectionName: "primary",
+	}
+	overrides := keyringConfigOverrides{
+		PassPrefix:            "sessions",
+		PassageIdentitiesFile: "/session/identities",
+	}
+
+	sessions := overrides.apply(primary)
+	if sessions.PassDir != primary.PassDir {
+		t.Fatalf("PassDir = %q, want inherited value %q", sessions.PassDir, primary.PassDir)
+	}
+	if sessions.LibSecretCollectionName != primary.LibSecretCollectionName {
+		t.Fatalf("LibSecretCollectionName = %q, want inherited value %q", sessions.LibSecretCollectionName, primary.LibSecretCollectionName)
+	}
+	if sessions.PassPrefix != overrides.PassPrefix {
+		t.Fatalf("PassPrefix = %q, want override %q", sessions.PassPrefix, overrides.PassPrefix)
+	}
+	if sessions.PassageIdentitiesFile != overrides.PassageIdentitiesFile {
+		t.Fatalf("PassageIdentitiesFile = %q, want override %q", sessions.PassageIdentitiesFile, overrides.PassageIdentitiesFile)
+	}
+	if primary.PassPrefix != "credentials" || primary.PassageIdentitiesFile != "/primary/identities" {
+		t.Fatal("applying session overrides modified the primary config")
+	}
+}
+
+func TestSessionKeyringEnvironmentConfiguration(t *testing.T) {
+	backend := string(keyring.AvailableBackends()[0])
+	t.Setenv("AWS_VAULT_BACKEND", backend)
+	t.Setenv("AWS_VAULT_PASSAGE_IDENTITIES_FILE", "/primary/identities")
+	t.Setenv("AWS_VAULT_SESSION_BACKEND", backend)
+	t.Setenv("AWS_VAULT_SESSION_PASS_PREFIX", "sessions")
+	t.Setenv("AWS_VAULT_SESSION_PASSAGE_IDENTITIES_FILE", "/session/identities")
+
+	app := kingpin.New("aws-vault", "")
+	a := ConfigureGlobals(app)
+	app.Command("noop", "")
+	if _, err := app.Parse([]string{"noop"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if a.KeyringConfig.PassageIdentitiesFile != "/primary/identities" {
+		t.Fatalf("primary PassageIdentitiesFile = %q", a.KeyringConfig.PassageIdentitiesFile)
+	}
+	if a.SessionKeyringBackend != backend {
+		t.Fatalf("session backend = %q, want %q", a.SessionKeyringBackend, backend)
+	}
+	if a.sessionKeyringOverrides.PassPrefix != "sessions" {
+		t.Fatalf("session PassPrefix = %q", a.sessionKeyringOverrides.PassPrefix)
+	}
+	if a.sessionKeyringOverrides.PassageIdentitiesFile != "/session/identities" {
+		t.Fatalf("session PassageIdentitiesFile = %q", a.sessionKeyringOverrides.PassageIdentitiesFile)
+	}
+}
+
 // TestExecCommandRejectsMissingProfile is the regression test for issue #377:
 // exec must error on a non-existent profile rather than silently inheriting
 // [default]. The guard fires before any config load or execve, so calling
@@ -88,7 +161,7 @@ func TestExecCommandRejectsMissingProfile(t *testing.T) {
 	configFile := writeTempConfig(t, issue377Config)
 	kr := keyring.NewArrayKeyring([]keyring.Item{})
 
-	_, err := ExecCommand(ExecCommandInput{ProfileName: "invalid-profile", NoSession: true}, configFile, kr)
+	_, err := ExecCommand(ExecCommandInput{ProfileName: "invalid-profile", NoSession: true}, configFile, kr, kr)
 	if err == nil {
 		t.Fatal("ExecCommand accepted a non-existent profile; expected an error (issue #377)")
 	}
@@ -104,7 +177,7 @@ func TestExportCommandRejectsMissingProfile(t *testing.T) {
 	configFile := writeTempConfig(t, issue377Config)
 	kr := keyring.NewArrayKeyring([]keyring.Item{})
 
-	err := ExportCommand(ExportCommandInput{ProfileName: "invalid-profile", Format: FormatTypeEnv, NoSession: true}, configFile, kr)
+	err := ExportCommand(ExportCommandInput{ProfileName: "invalid-profile", Format: FormatTypeEnv, NoSession: true}, configFile, kr, kr)
 	if err == nil {
 		t.Fatal("ExportCommand accepted a non-existent profile; expected an error (issue #377)")
 	}
@@ -119,7 +192,7 @@ func TestRotateCommandRejectsMissingProfile(t *testing.T) {
 	configFile := writeTempConfig(t, issue377Config)
 	kr := keyring.NewArrayKeyring([]keyring.Item{})
 
-	err := RotateCommand(RotateCommandInput{ProfileName: "invalid-profile", NoSession: true}, configFile, kr)
+	err := RotateCommand(RotateCommandInput{ProfileName: "invalid-profile", NoSession: true}, configFile, kr, kr)
 	if err == nil {
 		t.Fatal("RotateCommand accepted a non-existent profile; expected an error (issue #377)")
 	}

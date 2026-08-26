@@ -22,7 +22,7 @@ func ConfigureClearCommand(app *kingpin.Application, a *AwsVault) {
 		StringVar(&input.ProfileName)
 
 	cmd.Action(func(c *kingpin.ParseContext) (err error) {
-		keyring, err := a.Keyring()
+		keyring, sessionKeyring, err := a.Keyrings()
 		if err != nil {
 			return err
 		}
@@ -31,14 +31,14 @@ func ConfigureClearCommand(app *kingpin.Application, a *AwsVault) {
 			return err
 		}
 
-		err = ClearCommand(input, awsConfigFile, keyring)
+		err = ClearCommand(input, awsConfigFile, keyring, sessionKeyring)
 		app.FatalIfError(err, "clear")
 		return nil
 	})
 }
 
-func ClearCommand(input ClearCommandInput, awsConfigFile *vault.ConfigFile, keyring keyring.Keyring) error {
-	sessions := &vault.SessionKeyring{Keyring: keyring}
+func ClearCommand(input ClearCommandInput, awsConfigFile *vault.ConfigFile, keyring, sessionKeyring keyring.Keyring) error {
+	sessions := &vault.SessionKeyring{Keyring: sessionKeyring}
 	oidcTokens := &vault.OIDCTokenKeyring{Keyring: keyring}
 	var oldSessionsRemoved, numSessionsRemoved, numTokensRemoved int
 	var err error

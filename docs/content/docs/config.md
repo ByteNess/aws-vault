@@ -155,14 +155,24 @@ To configure the default flag values of `aws-vault` and its subcommands:
 | Variable | Description | Flag |
 | --- | --- | --- |
 | `AWS_VAULT_BACKEND` | Secret backend to use | `--backend` |
+| `AWS_VAULT_SESSION_BACKEND` | Secret backend to use for sessions | `--session-backend` |
 | `AWS_VAULT_BIOMETRICS` | Use biometric authentication using TouchID, if supported | `--biometrics` |
 | `AWS_VAULT_KEYCHAIN_NAME` | Name of macOS keychain to use | `--keychain` |
+| `AWS_VAULT_SESSION_KEYCHAIN_NAME` | Name of macOS keychain to use for sessions | `--session-keychain` |
 | `AWS_VAULT_AUTO_LOGOUT` | Enable auto-logout when doing `login` | `--auto-logout` |
 | `AWS_VAULT_PROMPT` | Prompt driver to use | `--prompt` |
+| `AWS_VAULT_SECRET_SERVICE_COLLECTION_NAME` | Name of secret-service collection to use | `--secret-service-collection` |
+| `AWS_VAULT_SESSION_SECRET_SERVICE_COLLECTION_NAME` | Name of secret-service collection to use for sessions | `--session-secret-service-collection` |
 | `AWS_VAULT_PASS_PASSWORD_STORE_DIR` | Pass password store directory | `--pass-dir` |
+| `AWS_VAULT_SESSION_PASS_PASSWORD_STORE_DIR` | Pass password store directory to use for sessions | `--session-pass-dir` |
 | `AWS_VAULT_PASS_CMD` | Name of the pass executable | `--pass-cmd` |
+| `AWS_VAULT_SESSION_PASS_CMD` | Name of the pass executable to use for sessions | `--session-pass-cmd` |
 | `AWS_VAULT_PASS_PREFIX` | Prefix to prepend to the item path stored in pass | `--pass-prefix` |
+| `AWS_VAULT_SESSION_PASS_PREFIX` | Prefix to prepend to session item paths stored in pass | `--session-pass-prefix` |
+| `AWS_VAULT_PASSAGE_IDENTITIES_FILE` | Passage identities file | `--passage-identities-file` |
+| `AWS_VAULT_SESSION_PASSAGE_IDENTITIES_FILE` | Passage identities file to use for sessions | `--session-passage-identities-file` |
 | `AWS_VAULT_FILE_DIR` | Directory for the "file" password store | `--file-dir` |
+| `AWS_VAULT_SESSION_FILE_DIR` | Directory for the session "file" password store | `--session-file-dir` |
 | `AWS_VAULT_FILE_PASSPHRASE` | Password for the "file" password store | — |
 | `AWS_VAULT_DURATION` | Duration of the temporary or assume-role session | `--duration` |
 | `AWS_VAULT_OP_TIMEOUT` | Timeout for 1Password Service Account operations | `--op-timeout` |
