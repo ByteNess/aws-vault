@@ -246,7 +246,7 @@ func TestDeviceCodeReason(t *testing.T) {
 
 func TestNewSSORoleCredentialsProvider_EndpointURL(t *testing.T) {
 	for _, endpoint := range []string{"", "https://oidc.example.internal"} {
-		cp, err := NewSSORoleCredentialsProvider(nil, &ProfileConfig{SSORegion: "eu-west-1", EndpointURL: endpoint}, false)
+		cp, err := NewSSORoleCredentialsProvider(nil, nil, &ProfileConfig{SSORegion: "eu-west-1", EndpointURL: endpoint}, false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -319,7 +319,7 @@ func TestAuthorizeURL(t *testing.T) {
 		{"eu-west-1", "https://proxy.example.com/oidc", "https://proxy.example.com/oidc/authorize"},
 		{"eu-west-1", "oidc.example.com", ""}, // not an absolute URL
 	} {
-		cp, err := NewSSORoleCredentialsProvider(nil, &ProfileConfig{SSORegion: c.region, EndpointURL: c.endpoint}, false)
+		cp, err := NewSSORoleCredentialsProvider(nil, nil, &ProfileConfig{SSORegion: c.region, EndpointURL: c.endpoint}, false)
 		if err != nil {
 			t.Fatal(err)
 		}

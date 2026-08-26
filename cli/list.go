@@ -37,7 +37,7 @@ func ConfigureListCommand(app *kingpin.Application, a *AwsVault) {
 		BoolVar(&input.OnlyCredentials)
 
 	cmd.Action(func(_ *kingpin.ParseContext) (err error) {
-		keyring, err := a.Keyring()
+		keyring, sessionKeyring, err := a.Keyrings()
 		if err != nil {
 			return err
 		}
@@ -45,7 +45,7 @@ func ConfigureListCommand(app *kingpin.Application, a *AwsVault) {
 		if err != nil {
 			return err
 		}
-		err = listCommand(input, awsConfigFile, keyring, os.Stdout)
+		err = listCommand(input, awsConfigFile, keyring, sessionKeyring, os.Stdout)
 		app.FatalIfError(err, "list")
 		return nil
 	})
@@ -95,10 +95,10 @@ func oidcLabel(sessionName, startURL string) string {
 	return fmt.Sprintf("oidc:%s", id)
 }
 
-func listCommand(input listCommandInput, awsConfigFile *vault.ConfigFile, keyring keyring.Keyring, out io.Writer) (err error) {
+func listCommand(input listCommandInput, awsConfigFile *vault.ConfigFile, keyring, sessionKeyringImpl keyring.Keyring, out io.Writer) (err error) {
 	credentialKeyring := &vault.CredentialKeyring{Keyring: keyring}
 	oidcTokenKeyring := &vault.OIDCTokenKeyring{Keyring: credentialKeyring.Keyring}
-	sessionKeyring := &vault.SessionKeyring{Keyring: credentialKeyring.Keyring}
+	sessionKeyring := &vault.SessionKeyring{Keyring: sessionKeyringImpl}
 
 	credentialsNames, err := credentialKeyring.Keys()
 	if err != nil {

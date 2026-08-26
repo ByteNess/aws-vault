@@ -72,6 +72,28 @@ You can also specify a profile to remove sessions for this profile only.
 aws-vault clear [profile]
 ```
 
+## Using a separate session keyring
+
+Cached sessions can use a different keyring backend or backend configuration from long-lived credentials. If no
+session setting is specified, both use the same keyring instance as before. Session settings inherit the corresponding
+primary settings unless explicitly overridden. OIDC tokens remain in the primary keyring.
+
+Environment variables keep the configuration consistent across commands. For example, Passage can use a
+passphrase-protected identity for long-lived credentials and a separate identity without a passphrase for cached
+sessions:
+
+```bash
+export AWS_VAULT_BACKEND=passage
+export AWS_VAULT_PASS_PASSWORD_STORE_DIR="$HOME/.passage/store"
+export AWS_VAULT_PASS_PREFIX=aws
+export AWS_VAULT_PASSAGE_IDENTITIES_FILE="$HOME/.passage/identities-with-passphrase"
+
+export AWS_VAULT_SESSION_PASS_PREFIX=aws-sessions
+export AWS_VAULT_SESSION_PASSAGE_IDENTITIES_FILE="$HOME/.passage/identities-without-passphrase"
+```
+
+The [configuration reference](/docs/config#environment-variables) lists the corresponding command-line options.
+
 ## Using `--no-session`
 
 AWS Vault will typically create temporary credentials using a combination of `GetSessionToken` and `AssumeRole`,
