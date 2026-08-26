@@ -41,18 +41,25 @@ func ConfigureRemoveCommand(app *kingpin.Application, a *AwsVault) {
 		if err != nil {
 			return err
 		}
-		err = RemoveCommand(input, keyring)
+		sessionKeyring := keyring
+		if input.SessionsOnly {
+			sessionKeyring, err = a.SessionKeyring()
+			if err != nil {
+				return err
+			}
+		}
+		err = RemoveCommand(input, keyring, sessionKeyring)
 		app.FatalIfError(err, "remove")
 		return nil
 	})
 }
 
-func RemoveCommand(input RemoveCommandInput, keyring keyring.Keyring) error {
+func RemoveCommand(input RemoveCommandInput, keyring, sessionKeyring keyring.Keyring) error {
 	ckr := &vault.CredentialKeyring{Keyring: keyring}
 
 	// Legacy --sessions-only option for backwards compatibility, use aws-vault clear instead
 	if input.SessionsOnly {
-		sk := &vault.SessionKeyring{Keyring: ckr.Keyring}
+		sk := &vault.SessionKeyring{Keyring: sessionKeyring}
 		n, err := sk.RemoveForProfile(input.ProfileName)
 		if err != nil {
 			return err

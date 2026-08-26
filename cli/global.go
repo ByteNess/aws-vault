@@ -33,15 +33,63 @@ var keyringConfigDefaults = keyring.Config{
 	ProtonPassTokenFunc:      keyringPassphrasePrompt,
 }
 
-type AwsVault struct {
-	Debug          bool
-	KeyringConfig  keyring.Config
-	KeyringBackend string
-	promptDriver   string
+type keyringConfigOverrides struct {
+	KeychainName            string
+	LibSecretCollectionName string
+	PassDir                 string
+	PassCmd                 string
+	PassPrefix              string
+	PassageIdentitiesFile   string
+	FileDir                 string
+}
 
-	keyringImpl   keyring.Keyring
-	awsConfigFile *vault.ConfigFile
-	UseBiometrics bool
+func (o keyringConfigOverrides) configured() bool {
+	return o.KeychainName != "" ||
+		o.LibSecretCollectionName != "" ||
+		o.PassDir != "" ||
+		o.PassCmd != "" ||
+		o.PassPrefix != "" ||
+		o.PassageIdentitiesFile != "" ||
+		o.FileDir != ""
+}
+
+func (o keyringConfigOverrides) apply(config keyring.Config) keyring.Config {
+	if o.KeychainName != "" {
+		config.KeychainName = o.KeychainName
+	}
+	if o.LibSecretCollectionName != "" {
+		config.LibSecretCollectionName = o.LibSecretCollectionName
+	}
+	if o.PassDir != "" {
+		config.PassDir = o.PassDir
+	}
+	if o.PassCmd != "" {
+		config.PassCmd = o.PassCmd
+	}
+	if o.PassPrefix != "" {
+		config.PassPrefix = o.PassPrefix
+	}
+	if o.PassageIdentitiesFile != "" {
+		config.PassageIdentitiesFile = o.PassageIdentitiesFile
+	}
+	if o.FileDir != "" {
+		config.FileDir = o.FileDir
+	}
+	return config
+}
+
+type AwsVault struct {
+	Debug                   bool
+	KeyringConfig           keyring.Config
+	KeyringBackend          string
+	SessionKeyringBackend   string
+	promptDriver            string
+	sessionKeyringOverrides keyringConfigOverrides
+
+	keyringImpl        keyring.Keyring
+	sessionKeyringImpl keyring.Keyring
+	awsConfigFile      *vault.ConfigFile
+	UseBiometrics      bool
 }
 
 func isATerminal() bool {
@@ -81,6 +129,43 @@ func (a *AwsVault) Keyring() (keyring.Keyring, error) {
 	}
 
 	return a.keyringImpl, nil
+}
+
+func (a *AwsVault) SessionKeyring() (keyring.Keyring, error) {
+	if a.SessionKeyringBackend == "" && !a.sessionKeyringOverrides.configured() {
+		return a.Keyring()
+	}
+
+	if a.sessionKeyringImpl == nil {
+		config := a.sessionKeyringOverrides.apply(a.KeyringConfig)
+		backend := a.KeyringBackend
+		if a.SessionKeyringBackend != "" {
+			backend = a.SessionKeyringBackend
+		}
+		if backend != "" {
+			config.AllowedBackends = []keyring.BackendType{keyring.BackendType(backend)}
+		}
+
+		var err error
+		a.sessionKeyringImpl, err = keyring.Open(config)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return a.sessionKeyringImpl, nil
+}
+
+func (a *AwsVault) Keyrings() (keyring.Keyring, keyring.Keyring, error) {
+	credentials, err := a.Keyring()
+	if err != nil {
+		return nil, nil, err
+	}
+	sessions, err := a.SessionKeyring()
+	if err != nil {
+		return nil, nil, err
+	}
+	return credentials, sessions, nil
 }
 
 func (a *AwsVault) AwsConfigFile() (*vault.ConfigFile, error) {
@@ -123,6 +208,10 @@ func ConfigureGlobals(app *kingpin.Application) *AwsVault {
 		Envar("AWS_VAULT_BACKEND").
 		EnumVar(&a.KeyringBackend, backendsAvailable...)
 
+	app.Flag("session-backend", fmt.Sprintf("Secret backend to use for sessions %v", backendsAvailable)).
+		Envar("AWS_VAULT_SESSION_BACKEND").
+		EnumVar(&a.SessionKeyringBackend, backendsAvailable...)
+
 	app.Flag("prompt", fmt.Sprintf("Prompt driver to use %v", promptsAvailable)).
 		Envar("AWS_VAULT_PROMPT").
 		StringVar(&a.promptDriver)
@@ -149,27 +238,59 @@ func ConfigureGlobals(app *kingpin.Application) *AwsVault {
 		Envar("AWS_VAULT_KEYCHAIN_NAME").
 		StringVar(&a.KeyringConfig.KeychainName)
 
+	app.Flag("session-keychain", "Name of macOS keychain to use for sessions").
+		Envar("AWS_VAULT_SESSION_KEYCHAIN_NAME").
+		StringVar(&a.sessionKeyringOverrides.KeychainName)
+
 	app.Flag("secret-service-collection", "Name of secret-service collection to use, if it doesn't exist it will be created").
 		Default("awsvault").
 		Envar("AWS_VAULT_SECRET_SERVICE_COLLECTION_NAME").
 		StringVar(&a.KeyringConfig.LibSecretCollectionName)
 
+	app.Flag("session-secret-service-collection", "Name of secret-service collection to use for sessions").
+		Envar("AWS_VAULT_SESSION_SECRET_SERVICE_COLLECTION_NAME").
+		StringVar(&a.sessionKeyringOverrides.LibSecretCollectionName)
+
 	app.Flag("pass-dir", "Pass password store directory").
 		Envar("AWS_VAULT_PASS_PASSWORD_STORE_DIR").
 		StringVar(&a.KeyringConfig.PassDir)
+
+	app.Flag("session-pass-dir", "Pass password store directory to use for sessions").
+		Envar("AWS_VAULT_SESSION_PASS_PASSWORD_STORE_DIR").
+		StringVar(&a.sessionKeyringOverrides.PassDir)
 
 	app.Flag("pass-cmd", "Name of the pass executable").
 		Envar("AWS_VAULT_PASS_CMD").
 		StringVar(&a.KeyringConfig.PassCmd)
 
+	app.Flag("session-pass-cmd", "Name of the pass executable to use for sessions").
+		Envar("AWS_VAULT_SESSION_PASS_CMD").
+		StringVar(&a.sessionKeyringOverrides.PassCmd)
+
 	app.Flag("pass-prefix", "Prefix to prepend to the item path stored in pass").
 		Envar("AWS_VAULT_PASS_PREFIX").
 		StringVar(&a.KeyringConfig.PassPrefix)
+
+	app.Flag("session-pass-prefix", "Prefix to prepend to session item paths stored in pass").
+		Envar("AWS_VAULT_SESSION_PASS_PREFIX").
+		StringVar(&a.sessionKeyringOverrides.PassPrefix)
+
+	app.Flag("passage-identities-file", "Passage identities file").
+		Envar("AWS_VAULT_PASSAGE_IDENTITIES_FILE").
+		StringVar(&a.KeyringConfig.PassageIdentitiesFile)
+
+	app.Flag("session-passage-identities-file", "Passage identities file to use for sessions").
+		Envar("AWS_VAULT_SESSION_PASSAGE_IDENTITIES_FILE").
+		StringVar(&a.sessionKeyringOverrides.PassageIdentitiesFile)
 
 	app.Flag("file-dir", "Directory for the \"file\" password store").
 		Default("~/.awsvault/keys/").
 		Envar("AWS_VAULT_FILE_DIR").
 		StringVar(&a.KeyringConfig.FileDir)
+
+	app.Flag("session-file-dir", "Directory for the session \"file\" password store").
+		Envar("AWS_VAULT_SESSION_FILE_DIR").
+		StringVar(&a.sessionKeyringOverrides.FileDir)
 
 	app.Flag("op-timeout", "Timeout for 1Password API operations (1Password Service Accounts only)").
 		Default("15s").
