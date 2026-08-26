@@ -36,7 +36,7 @@ func ConfigureAddCommand(app *kingpin.Application, a *AwsVault) {
 		BoolVar(&input.AddConfig)
 
 	cmd.Action(func(_ *kingpin.ParseContext) error {
-		keyring, err := a.Keyring()
+		keyring, sessionKeyring, err := a.Keyrings()
 		if err != nil {
 			return err
 		}
@@ -44,13 +44,13 @@ func ConfigureAddCommand(app *kingpin.Application, a *AwsVault) {
 		if err != nil {
 			return err
 		}
-		err = addCommand(input, keyring, awsConfigFile)
+		err = addCommand(input, keyring, sessionKeyring, awsConfigFile)
 		app.FatalIfError(err, "add")
 		return nil
 	})
 }
 
-func addCommand(input addCommandInput, keyring keyring.Keyring, awsConfigFile *vault.ConfigFile) error {
+func addCommand(input addCommandInput, keyring, sessionKeyring keyring.Keyring, awsConfigFile *vault.ConfigFile) error {
 	var accessKeyID, secretKey, mfaSerial string
 
 	p, _ := awsConfigFile.ProfileSection(input.ProfileName)
@@ -88,7 +88,7 @@ func addCommand(input addCommandInput, keyring keyring.Keyring, awsConfigFile *v
 
 	fmt.Printf("Added credentials to profile %q in vault\n", input.ProfileName)
 
-	sk := &vault.SessionKeyring{Keyring: keyring}
+	sk := &vault.SessionKeyring{Keyring: sessionKeyring}
 	if n, _ := sk.RemoveForProfile(input.ProfileName); n > 0 {
 		fmt.Printf("Deleted %d existing sessions.\n", n)
 	}
