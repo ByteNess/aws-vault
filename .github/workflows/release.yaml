@@ -152,6 +152,16 @@ jobs:
             out: aws-vault-darwin-amd64
           - goarch: arm64
             out: aws-vault-darwin-arm64
+    # CI secrets are mapped to env vars once at the job level.
+    # CERT_ID is deliberately NOT here — it is written to GITHUB_ENV
+    # by the import step only after a successful certificate import.
+    # This way, CERT_ID in the environment doubles as a signal that
+    # the certificate is present in the keychain and ready for signing.
+    env:
+      CERTIFICATE_OSX_P12: ${{ secrets.CERTIFICATE_OSX_P12 }}
+      CERTIFICATE_PASSWORD: ${{ secrets.CERTIFICATE_PASSWORD }}
+      KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+      KEYCHAIN_PROFILE: ${{ secrets.KEYCHAIN_PROFILE }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -166,17 +176,65 @@ jobs:
           check-latest: true
         id: go
 
-      - name: Build
+      # Import the Apple Developer ID certificate (.p12) into a
+      # temporary keychain so codesign can find it by Common Name.
+      # Extract CERT_ID from the .p12 file itself (not the keychain)
+      # to avoid picking up unrelated certificates on the runner.
+      # On success, write CERT_ID to GITHUB_ENV so downstream steps
+      # can use it. If secrets are not configured (forks, local
+      # testing), this step is skipped and signing is disabled.
+      - name: Import signing certificate
+        if: env.CERTIFICATE_OSX_P12 != '' && env.CERTIFICATE_PASSWORD != '' && env.KEYCHAIN_PASSWORD != ''
+        run: |
+          echo "$CERTIFICATE_OSX_P12" | base64 --decode > certificate.p12
+          security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security import certificate.p12 -k build.keychain -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" build.keychain
+          # Extract the Common Name from the .p12 file only after
+          # a successful import, so CERT_ID in env implies the cert
+          # is ready in the keychain.
+          # e.g. "Developer ID Application: ByteNess (R)"
+          CERT_ID=$(openssl pkcs12 -in certificate.p12 -nokeys -passin pass:"$CERTIFICATE_PASSWORD" \
+            | openssl x509 -noout -subject -nameopt sep_multiline \
+            | awk -F' = ' '/CN=/ { print $2; exit }')
+          echo "CERT_ID=$CERT_ID" >> $GITHUB_ENV
+          rm certificate.p12
+
+      # Build delegates to Makefile, which handles signing:
+      #   ifdef CERT_ID → codesign --options runtime --timestamp --sign "$CERT_ID" $@
+      #   else          → skip (unsigned, for local dev / forks without secrets)
+      # No CI guard needed here — Makefile's ifdef is the sole gate.
+      - name: Build & sign
         env:
           GOOS: darwin
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 1
         run: |
           make ${{ matrix.out }}
+
+      # Create a notarized DMG via the existing bin/create-dmg script.
+      # Only runs when both the certificate was imported (CERT_ID is set)
+      # and a notarytool keychain profile is configured.
+      - name: Package DMG & notarize
+        if: env.CERT_ID != '' && env.KEYCHAIN_PROFILE != ''
+        run: |
+          ./bin/create-dmg ${{ matrix.out }} ${{ matrix.out }}.dmg
+
+      # Always upload the raw binary (Homebrew consumes this).
+      # When signing is active, this is a signed binary.
       - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.out }}
           path: ${{ matrix.out }}
+
+      # Optionally upload the notarized DMG for manual downloads.
+      - uses: actions/upload-artifact@v7
+        if: env.CERT_ID != '' && env.KEYCHAIN_PROFILE != ''
+        with:
+          name: ${{ matrix.out }}.dmg
+          path: ${{ matrix.out }}.dmg
 
   release:
     name: Release
