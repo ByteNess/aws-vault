@@ -70,33 +70,38 @@ func TestClearCommandBothSetPrefersSSOSession(t *testing.T) {
 	}
 }
 
-func TestClearCommandUsesSeparateSessionKeyring(t *testing.T) {
+func TestClearCommandClearsSessionsFromBothKeyrings(t *testing.T) {
 	const startURL = "https://example.awsapps.com/start"
 	configFile := writeTempConfig(t, listTestConfig)
 	primary := keyring.NewArrayKeyring([]keyring.Item{
 		{Key: "oidc:" + startURL, Data: []byte(`{}`)},
 	})
 	sessions := keyring.NewArrayKeyring(nil)
-	sessionKeyring := &vault.SessionKeyring{Keyring: sessions}
 	expires := time.Now().Add(time.Hour)
-	if err := sessionKeyring.Set(vault.SessionMetadata{
-		Type:        "sts.GetSessionToken",
-		ProfileName: "sso-profile",
-	}, &ststypes.Credentials{
-		AccessKeyId:     aws.String("AKIAEXAMPLE"),
-		SecretAccessKey: aws.String("secret"),
-		SessionToken:    aws.String("token"),
-		Expiration:      &expires,
-	}); err != nil {
-		t.Fatal(err)
+	for _, kr := range []keyring.Keyring{primary, sessions} {
+		sessionKeyring := &vault.SessionKeyring{Keyring: kr}
+		if err := sessionKeyring.Set(vault.SessionMetadata{
+			Type:        "sts.GetSessionToken",
+			ProfileName: "sso-profile",
+		}, &ststypes.Credentials{
+			AccessKeyId:     aws.String("AKIAEXAMPLE"),
+			SecretAccessKey: aws.String("secret"),
+			SessionToken:    aws.String("token"),
+			Expiration:      &expires,
+		}); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	if err := ClearCommand(ClearCommandInput{ProfileName: "sso-profile"}, configFile, primary, sessions); err != nil {
 		t.Fatalf("ClearCommand error: %v", err)
 	}
 
-	if keys, err := sessions.Keys(); err != nil || len(keys) != 0 {
-		t.Fatalf("session keyring still contains %v, err: %v", keys, err)
+	for _, kr := range []keyring.Keyring{primary, sessions} {
+		keys, err := (&vault.SessionKeyring{Keyring: kr}).Keys()
+		if err != nil || len(keys) != 0 {
+			t.Fatalf("keyring still contains sessions %v, err: %v", keys, err)
+		}
 	}
 	if has, err := (&vault.OIDCTokenKeyring{Keyring: primary}).Has(startURL); err != nil || has {
 		t.Fatalf("OIDC token was not removed from primary keyring, has: %v, err: %v", has, err)
