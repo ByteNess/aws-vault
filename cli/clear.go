@@ -39,29 +39,19 @@ func ConfigureClearCommand(app *kingpin.Application, a *AwsVault) {
 }
 
 func clearCommand(input clearCommandInput, awsConfigFile *vault.ConfigFile, keyring, sessionKeyring keyring.Keyring) error {
-	sessions := &vault.SessionKeyring{Keyring: sessionKeyring}
+	numSessionsRemoved, err := clearSessions(input, keyring)
+	if err != nil {
+		return err
+	}
+
 	oidcTokens := &vault.OIDCTokenKeyring{Keyring: keyring}
-	var oldSessionsRemoved, numSessionsRemoved, numTokensRemoved int
-	var err error
+	var numTokensRemoved int
 	if input.ProfileName == "" {
-		oldSessionsRemoved, err = sessions.RemoveOldSessions()
-		if err != nil {
-			return err
-		}
-		numSessionsRemoved, err = sessions.RemoveAll()
-		if err != nil {
-			return err
-		}
 		numTokensRemoved, err = oidcTokens.RemoveAll()
 		if err != nil {
 			return err
 		}
 	} else {
-		numSessionsRemoved, err = sessions.RemoveForProfile(input.ProfileName)
-		if err != nil {
-			return err
-		}
-
 		if profileSection, ok := awsConfigFile.ProfileSection(input.ProfileName); ok {
 			startURL := awsConfigFile.ResolvedSSOStartURL(profileSection)
 			if startURL != "" {
@@ -75,7 +65,30 @@ func clearCommand(input clearCommandInput, awsConfigFile *vault.ConfigFile, keyr
 			}
 		}
 	}
-	fmt.Printf("Cleared %d sessions.\n", oldSessionsRemoved+numSessionsRemoved+numTokensRemoved)
+
+	if keyring != sessionKeyring {
+		n, err := clearSessions(input, sessionKeyring)
+		if err != nil {
+			return err
+		}
+		numSessionsRemoved += n
+	}
+
+	fmt.Printf("Cleared %d sessions.\n", numSessionsRemoved+numTokensRemoved)
 
 	return nil
+}
+
+func clearSessions(input clearCommandInput, keyring keyring.Keyring) (int, error) {
+	sessions := &vault.SessionKeyring{Keyring: keyring}
+	if input.ProfileName != "" {
+		return sessions.RemoveForProfile(input.ProfileName)
+	}
+
+	oldSessionsRemoved, err := sessions.RemoveOldSessions()
+	if err != nil {
+		return 0, err
+	}
+	numSessionsRemoved, err := sessions.RemoveAll()
+	return oldSessionsRemoved + numSessionsRemoved, err
 }
