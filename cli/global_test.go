@@ -93,16 +93,47 @@ func TestSessionKeyringDefaultsToPrimaryKeyring(t *testing.T) {
 	}
 }
 
+func TestSessionKeyringOverridesConfigured(t *testing.T) {
+	tests := []struct {
+		name      string
+		overrides keyringConfigOverrides
+	}{
+		{"1Password vault ID", keyringConfigOverrides{OPVaultID: "session-vault"}},
+		{"1Password item title prefix", keyringConfigOverrides{OPItemTitlePrefix: "sessions"}},
+		{"1Password item tag", keyringConfigOverrides{OPItemTag: "sessions"}},
+		{"Proton Pass share ID", keyringConfigOverrides{ProtonPassShareID: "session-share"}},
+		{"Proton Pass item title prefix", keyringConfigOverrides{ProtonPassItemTitlePrefix: "sessions"}},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if !tc.overrides.configured() {
+				t.Fatal("session override was not detected")
+			}
+		})
+	}
+}
+
 func TestSessionKeyringOverridesInheritPrimaryConfig(t *testing.T) {
 	primary := keyring.Config{
-		PassDir:                 "/primary/store",
-		PassPrefix:              "credentials",
-		PassageIdentitiesFile:   "/primary/identities",
-		LibSecretCollectionName: "primary",
+		PassDir:                   "/primary/store",
+		PassPrefix:                "credentials",
+		PassageIdentitiesFile:     "/primary/identities",
+		LibSecretCollectionName:   "primary",
+		OPVaultID:                 "primary-vault",
+		OPItemTitlePrefix:         "primary",
+		OPItemTag:                 "primary",
+		ProtonPassShareID:         "primary-share",
+		ProtonPassItemTitlePrefix: "primary",
 	}
 	overrides := keyringConfigOverrides{
-		PassPrefix:            "sessions",
-		PassageIdentitiesFile: "/session/identities",
+		PassPrefix:                "sessions",
+		PassageIdentitiesFile:     "/session/identities",
+		OPVaultID:                 "session-vault",
+		OPItemTitlePrefix:         "sessions",
+		OPItemTag:                 "sessions",
+		ProtonPassShareID:         "session-share",
+		ProtonPassItemTitlePrefix: "sessions",
 	}
 
 	sessions := overrides.apply(primary)
@@ -118,7 +149,19 @@ func TestSessionKeyringOverridesInheritPrimaryConfig(t *testing.T) {
 	if sessions.PassageIdentitiesFile != overrides.PassageIdentitiesFile {
 		t.Fatalf("PassageIdentitiesFile = %q, want override %q", sessions.PassageIdentitiesFile, overrides.PassageIdentitiesFile)
 	}
-	if primary.PassPrefix != "credentials" || primary.PassageIdentitiesFile != "/primary/identities" {
+	if sessions.OPVaultID != overrides.OPVaultID || sessions.OPItemTitlePrefix != overrides.OPItemTitlePrefix || sessions.OPItemTag != overrides.OPItemTag {
+		t.Fatal("1Password session overrides were not applied")
+	}
+	if sessions.ProtonPassShareID != overrides.ProtonPassShareID || sessions.ProtonPassItemTitlePrefix != overrides.ProtonPassItemTitlePrefix {
+		t.Fatal("Proton Pass session overrides were not applied")
+	}
+	if primary.PassPrefix != "credentials" ||
+		primary.PassageIdentitiesFile != "/primary/identities" ||
+		primary.OPVaultID != "primary-vault" ||
+		primary.OPItemTitlePrefix != "primary" ||
+		primary.OPItemTag != "primary" ||
+		primary.ProtonPassShareID != "primary-share" ||
+		primary.ProtonPassItemTitlePrefix != "primary" {
 		t.Fatal("applying session overrides modified the primary config")
 	}
 }
@@ -130,6 +173,11 @@ func TestSessionKeyringEnvironmentConfiguration(t *testing.T) {
 	t.Setenv("AWS_VAULT_SESSION_BACKEND", backend)
 	t.Setenv("AWS_VAULT_SESSION_PASS_PREFIX", "sessions")
 	t.Setenv("AWS_VAULT_SESSION_PASSAGE_IDENTITIES_FILE", "/session/identities")
+	t.Setenv("AWS_VAULT_SESSION_OP_VAULT_ID", "session-vault")
+	t.Setenv("AWS_VAULT_SESSION_OP_ITEM_TITLE_PREFIX", "sessions")
+	t.Setenv("AWS_VAULT_SESSION_OP_ITEM_TAG", "sessions")
+	t.Setenv("AWS_VAULT_SESSION_PROTON_PASS_SHARE_ID", "session-share")
+	t.Setenv("AWS_VAULT_SESSION_PROTON_PASS_ITEM_TITLE_PREFIX", "sessions")
 
 	app := kingpin.New("aws-vault", "")
 	a := ConfigureGlobals(app)
@@ -149,6 +197,15 @@ func TestSessionKeyringEnvironmentConfiguration(t *testing.T) {
 	}
 	if a.sessionKeyringOverrides.PassageIdentitiesFile != "/session/identities" {
 		t.Fatalf("session PassageIdentitiesFile = %q", a.sessionKeyringOverrides.PassageIdentitiesFile)
+	}
+	if a.sessionKeyringOverrides.OPVaultID != "session-vault" ||
+		a.sessionKeyringOverrides.OPItemTitlePrefix != "sessions" ||
+		a.sessionKeyringOverrides.OPItemTag != "sessions" {
+		t.Fatal("1Password session environment configuration was not applied")
+	}
+	if a.sessionKeyringOverrides.ProtonPassShareID != "session-share" ||
+		a.sessionKeyringOverrides.ProtonPassItemTitlePrefix != "sessions" {
+		t.Fatal("Proton Pass session environment configuration was not applied")
 	}
 }
 
