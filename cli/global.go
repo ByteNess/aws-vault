@@ -34,13 +34,18 @@ var keyringConfigDefaults = keyring.Config{
 }
 
 type keyringConfigOverrides struct {
-	KeychainName            string
-	LibSecretCollectionName string
-	PassDir                 string
-	PassCmd                 string
-	PassPrefix              string
-	PassageIdentitiesFile   string
-	FileDir                 string
+	KeychainName              string
+	LibSecretCollectionName   string
+	PassDir                   string
+	PassCmd                   string
+	PassPrefix                string
+	PassageIdentitiesFile     string
+	FileDir                   string
+	OPVaultID                 string
+	OPItemTitlePrefix         string
+	OPItemTag                 string
+	ProtonPassShareID         string
+	ProtonPassItemTitlePrefix string
 }
 
 func (o keyringConfigOverrides) configured() bool {
@@ -50,7 +55,12 @@ func (o keyringConfigOverrides) configured() bool {
 		o.PassCmd != "" ||
 		o.PassPrefix != "" ||
 		o.PassageIdentitiesFile != "" ||
-		o.FileDir != ""
+		o.FileDir != "" ||
+		o.OPVaultID != "" ||
+		o.OPItemTitlePrefix != "" ||
+		o.OPItemTag != "" ||
+		o.ProtonPassShareID != "" ||
+		o.ProtonPassItemTitlePrefix != ""
 }
 
 func (o keyringConfigOverrides) apply(config keyring.Config) keyring.Config {
@@ -74,6 +84,21 @@ func (o keyringConfigOverrides) apply(config keyring.Config) keyring.Config {
 	}
 	if o.FileDir != "" {
 		config.FileDir = o.FileDir
+	}
+	if o.OPVaultID != "" {
+		config.OPVaultID = o.OPVaultID
+	}
+	if o.OPItemTitlePrefix != "" {
+		config.OPItemTitlePrefix = o.OPItemTitlePrefix
+	}
+	if o.OPItemTag != "" {
+		config.OPItemTag = o.OPItemTag
+	}
+	if o.ProtonPassShareID != "" {
+		config.ProtonPassShareID = o.ProtonPassShareID
+	}
+	if o.ProtonPassItemTitlePrefix != "" {
+		config.ProtonPassItemTitlePrefix = o.ProtonPassItemTitlePrefix
 	}
 	return config
 }
@@ -301,15 +326,27 @@ func ConfigureGlobals(app *kingpin.Application) *AwsVault {
 		Envar("AWS_VAULT_OP_VAULT_ID").
 		StringVar(&a.KeyringConfig.OPVaultID)
 
+	app.Flag("session-op-vault-id", "UUID of the 1Password vault to use for sessions").
+		Envar("AWS_VAULT_SESSION_OP_VAULT_ID").
+		StringVar(&a.sessionKeyringOverrides.OPVaultID)
+
 	app.Flag("op-item-title-prefix", "Prefix to prepend to 1Password item titles").
 		Default("aws-vault").
 		Envar("AWS_VAULT_OP_ITEM_TITLE_PREFIX").
 		StringVar(&a.KeyringConfig.OPItemTitlePrefix)
 
+	app.Flag("session-op-item-title-prefix", "Prefix to prepend to 1Password session item titles").
+		Envar("AWS_VAULT_SESSION_OP_ITEM_TITLE_PREFIX").
+		StringVar(&a.sessionKeyringOverrides.OPItemTitlePrefix)
+
 	app.Flag("op-item-tag", "Tag to apply to 1Password items").
 		Default("aws-vault").
 		Envar("AWS_VAULT_OP_ITEM_TAG").
 		StringVar(&a.KeyringConfig.OPItemTag)
+
+	app.Flag("session-op-item-tag", "Tag to apply to 1Password session items").
+		Envar("AWS_VAULT_SESSION_OP_ITEM_TAG").
+		StringVar(&a.sessionKeyringOverrides.OPItemTag)
 
 	app.Flag("op-connect-host", "1Password Connect server HTTP(S) URI").
 		Envar("AWS_VAULT_OP_CONNECT_HOST").
@@ -323,9 +360,17 @@ func ConfigureGlobals(app *kingpin.Application) *AwsVault {
 		Envar("AWS_VAULT_PROTON_PASS_SHARE_ID").
 		StringVar(&a.KeyringConfig.ProtonPassShareID)
 
+	app.Flag("session-proton-pass-share-id", "Share ID of the Proton Pass vault to use for sessions").
+		Envar("AWS_VAULT_SESSION_PROTON_PASS_SHARE_ID").
+		StringVar(&a.sessionKeyringOverrides.ProtonPassShareID)
+
 	app.Flag("proton-pass-item-title-prefix", "Prefix to prepend to Proton Pass item titles (default inherited from keyring)").
 		Envar("AWS_VAULT_PROTON_PASS_ITEM_TITLE_PREFIX").
 		StringVar(&a.KeyringConfig.ProtonPassItemTitlePrefix)
+
+	app.Flag("session-proton-pass-item-title-prefix", "Prefix to prepend to Proton Pass session item titles").
+		Envar("AWS_VAULT_SESSION_PROTON_PASS_ITEM_TITLE_PREFIX").
+		StringVar(&a.sessionKeyringOverrides.ProtonPassItemTitlePrefix)
 
 	app.Flag("proton-pass-api-base", "Proton API base URL (default inherited from keyring)").
 		Envar("AWS_VAULT_PROTON_PASS_API_BASE").
