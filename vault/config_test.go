@@ -260,7 +260,7 @@ func TestIncludeProfile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	configLoader := &vault.ConfigLoader{File: configFile}
+	configLoader := vault.NewConfigLoader(vault.ProfileConfig{}, configFile, "")
 	config, err := configLoader.GetProfileConfig("testincludeprofile2")
 	if err != nil {
 		t.Fatalf("Should have found a profile: %v", err)
@@ -280,7 +280,7 @@ func TestIncludeSsoSession(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	configLoader := &vault.ConfigLoader{File: configFile}
+	configLoader := vault.NewConfigLoader(vault.ProfileConfig{}, configFile, "")
 	config, err := configLoader.GetProfileConfig("with-sso-session")
 	if err != nil {
 		t.Fatalf("Should have found a profile: %v", err)
@@ -375,7 +375,7 @@ source_profile=foo
 		t.Fatalf("Expected '%s', got '%s'", expectedSourceProfile, def.SourceProfile)
 	}
 
-	configLoader := &vault.ConfigLoader{File: configFile}
+	configLoader := vault.NewConfigLoader(vault.ProfileConfig{}, configFile, "")
 	config, err := configLoader.GetProfileConfig("foo")
 	if err != nil {
 		t.Fatalf("Should have found a profile: %v", err)
@@ -412,7 +412,7 @@ source_profile=root
 		t.Fatalf("Expected '%s', got '%s'", expectedSourceProfile, def.SourceProfile)
 	}
 
-	configLoader := &vault.ConfigLoader{File: configFile}
+	configLoader := vault.NewConfigLoader(vault.ProfileConfig{}, configFile, "")
 	config, err := configLoader.GetProfileConfig("foo")
 	if err != nil {
 		t.Fatalf("Should have found a profile: %v", err)
@@ -502,7 +502,7 @@ transitive_session_tags = tagOne ,tagTwo,tagThree
 	if err != nil {
 		t.Fatal(err)
 	}
-	configLoader := &vault.ConfigLoader{File: configFile, ActiveProfile: "tagged"}
+	configLoader := vault.NewConfigLoader(vault.ProfileConfig{}, configFile, "tagged")
 	config, err := configLoader.GetProfileConfig("tagged")
 	if err != nil {
 		t.Fatalf("Should have found a profile: %v", err)
@@ -539,7 +539,7 @@ transitive_session_tags = tagOne ,tagTwo,tagThree
 	if err != nil {
 		t.Fatal(err)
 	}
-	configLoader := &vault.ConfigLoader{File: configFile, ActiveProfile: "tagged"}
+	configLoader := vault.NewConfigLoader(vault.ProfileConfig{}, configFile, "tagged")
 	config, err := configLoader.GetProfileConfig("tagged")
 	if err != nil {
 		t.Fatalf("Should have found a profile: %v", err)
@@ -584,7 +584,7 @@ source_profile = interim
 	if err != nil {
 		t.Fatal(err)
 	}
-	configLoader := &vault.ConfigLoader{File: configFile, ActiveProfile: "target"}
+	configLoader := vault.NewConfigLoader(vault.ProfileConfig{}, configFile, "target")
 	config, err := configLoader.GetProfileConfig("target")
 	if err != nil {
 		t.Fatalf("Should have found a profile: %v", err)
