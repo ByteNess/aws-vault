@@ -125,6 +125,7 @@ To configure the default flag values of `aws-vault` and its subcommands:
 | --- | --- | --- |
 | `AWS_VAULT_BACKEND` | Secret backend to use | `--backend` |
 | `AWS_VAULT_BIOMETRICS` | Use biometric authentication using TouchID, if supported | `--biometrics` |
+| `AWS_VAULT_PARALLEL_SAFE` | Enable cross-process locking for keychain and cached credentials | `--parallel-safe` |
 | `AWS_VAULT_KEYCHAIN_NAME` | Name of macOS keychain to use | `--keychain` |
 | `AWS_VAULT_AUTO_LOGOUT` | Enable auto-logout when doing `login` | `--auto-logout` |
 | `AWS_VAULT_PROMPT` | Prompt driver to use | `--prompt` |
