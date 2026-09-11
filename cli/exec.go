@@ -197,9 +197,15 @@ func ExecCommand(input ExecCommandInput, f *vault.ConfigFile, keyring keyring.Ke
 		return 0, fmt.Errorf("Error loading config: %w", err)
 	}
 
-	credsProvider, err := vault.NewTempCredentialsProvider(config, &vault.CredentialKeyring{Keyring: keyring}, input.NoSession, false)
+	ckr := &vault.CredentialKeyring{Keyring: keyring}
+	credsProvider, err := vault.NewTempCredentialsProvider(config, ckr, input.NoSession, false)
 	if err != nil {
 		return 0, fmt.Errorf("Error getting temporary credentials: %w", err)
+	}
+
+	accountID, err := vault.AccountIDForProfile(config, ckr)
+	if err != nil {
+		return 0, fmt.Errorf("Error determining account ID: %w", err)
 	}
 
 	subshellHelp := ""
@@ -208,7 +214,7 @@ func ExecCommand(input ExecCommandInput, f *vault.ConfigFile, keyring keyring.Ke
 		subshellHelp = fmt.Sprintf("Starting subshell %s, use `exit` to exit the subshell", input.Command)
 	}
 
-	cmdEnv := createEnv(input.ProfileName, config.Region, config.EndpointURL)
+	cmdEnv := createEnv(input.ProfileName, config.Region, config.EndpointURL, accountID)
 
 	if input.StartEc2Server {
 		if server.IsProxyRunning() {
@@ -275,7 +281,7 @@ func printToStderr(helpMsg string) {
 	fmt.Fprint(os.Stderr, helpMsg, "\n")
 }
 
-func createEnv(profileName string, region string, endpointURL string) environ {
+func createEnv(profileName string, region string, endpointURL string, accountID string) environ {
 	env := environ(os.Environ())
 	env.Unset("AWS_ACCESS_KEY_ID")
 	env.Unset("AWS_SECRET_ACCESS_KEY")
@@ -285,6 +291,9 @@ func createEnv(profileName string, region string, endpointURL string) environ {
 	env.Unset("AWS_DEFAULT_PROFILE")
 	env.Unset("AWS_PROFILE")
 	env.Unset("AWS_SDK_LOAD_CONFIG")
+	// SDKs pair AWS_ACCOUNT_ID with the static credentials in the environment, so an inherited
+	// value must not outlive the credentials it described.
+	env.Unset("AWS_ACCOUNT_ID")
 
 	env.Set("AWS_VAULT", profileName)
 
@@ -299,6 +308,11 @@ func createEnv(profileName string, region string, endpointURL string) environ {
 	if endpointURL != "" {
 		log.Printf("Setting subprocess env: AWS_ENDPOINT_URL=%s", endpointURL)
 		env.Set("AWS_ENDPOINT_URL", endpointURL)
+	}
+
+	if accountID != "" {
+		log.Printf("Setting subprocess env: AWS_ACCOUNT_ID=%s", accountID)
+		env.Set("AWS_ACCOUNT_ID", accountID)
 	}
 
 	return env

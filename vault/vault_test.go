@@ -658,6 +658,99 @@ role_session_name=user
 	}
 }
 
+func TestAccountIDForProfile(t *testing.T) {
+	f := newConfigFile(t, []byte(`
+[default]
+aws_account_id=999999999999
+
+[profile sso]
+sso_start_url=https://xxxx.awsapps.com/start
+sso_region=eu-west-1
+sso_account_id=111111111111
+sso_role_name=Administrator
+
+[profile role-from-sso]
+role_arn=arn:aws:iam::222222222222:role/Other
+source_profile=sso
+
+[profile chained-no-role]
+source_profile=sso
+
+[profile stored]
+region=eu-west-1
+
+[profile stored-with-explicit-id]
+aws_account_id=333333333333
+
+[profile role-from-stored]
+role_arn=arn:aws:iam::444444444444:role/Admin
+source_profile=stored
+
+[profile webidentity]
+role_arn=arn:aws:iam::555555555555:role/Web
+web_identity_token_file=/tmp/token
+
+[profile credproc]
+credential_process=/bin/true
+aws_account_id=666666666666
+
+[profile inherits-sso-but-stored]
+include_profile=sso
+
+[profile includes-default]
+include_profile=default
+
+[profile unknown]
+region=eu-west-1
+`))
+	defer os.Remove(f)
+
+	configFile, err := vault.LoadConfig(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cases := []struct {
+		profile string
+		stored  string // profile that has long-term credentials in the keyring
+		want    string
+	}{
+		{profile: "sso", want: "111111111111"},
+		{profile: "role-from-sso", want: "222222222222"},
+		{profile: "chained-no-role", want: "111111111111"},
+		{profile: "stored-with-explicit-id", stored: "stored-with-explicit-id", want: "333333333333"},
+		{profile: "role-from-stored", stored: "stored", want: "444444444444"},
+		{profile: "webidentity", want: "555555555555"},
+		{profile: "credproc", want: "666666666666"},
+		// sso_account_id inherited via include_profile must not apply to keyring credentials.
+		{profile: "inherits-sso-but-stored", stored: "inherits-sso-but-stored", want: ""},
+		// aws_account_id in [default] applies only to the default profile and explicit includes.
+		{profile: "default", stored: "default", want: "999999999999"},
+		{profile: "includes-default", stored: "includes-default", want: "999999999999"},
+		{profile: "stored", stored: "stored", want: ""},
+		{profile: "unknown", want: ""},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.profile, func(t *testing.T) {
+			configLoader := &vault.ConfigLoader{File: configFile, ActiveProfile: tc.profile}
+			config, err := configLoader.GetProfileConfig(tc.profile)
+			if err != nil {
+				t.Fatalf("Should have found a profile: %v", err)
+			}
+
+			ckr := newSeededKeyring(t, tc.stored)
+			got, err := vault.AccountIDForProfile(config, ckr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != tc.want {
+				t.Fatalf("AccountIDForProfile(%s) = %q, want %q", tc.profile, got, tc.want)
+			}
+		})
+	}
+}
+
 // newSeededKeyring returns a CredentialKeyring with a single set of stub
 // credentials stored under the given profile name. Pass an empty name to get
 // an empty keyring.

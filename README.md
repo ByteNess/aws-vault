@@ -89,6 +89,8 @@ AWS Vault then exposes the temporary credentials to the sub-process in one of tw
    AWS_CREDENTIAL_EXPIRATION=2020-04-16T11:16:27Z
    ```
 
+   When the account the credentials belong to is known from the profile config (`role_arn`, `sso_account_id` or `aws_account_id`), `AWS_ACCOUNT_ID` is exposed too.
+
 2. **Local metadata server** is started. This approach has the advantage that anything that uses Amazon's SDKs will automatically refresh credentials as needed, so session times can be as short as possible.
 
    ```shell

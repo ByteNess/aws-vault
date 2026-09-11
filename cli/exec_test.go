@@ -93,6 +93,37 @@ func TestExecCommand(t *testing.T) {
 	}
 }
 
+func TestCreateEnvAccountID(t *testing.T) {
+	t.Setenv("AWS_ACCOUNT_ID", "stale")
+
+	env := createEnv("llamas", "us-east-1", "", "123456789012")
+	if got := envValue(env, "AWS_ACCOUNT_ID"); got != "123456789012" {
+		t.Fatalf("AWS_ACCOUNT_ID = %q, want %q", got, "123456789012")
+	}
+	if got := envValue(env, "AWS_VAULT"); got != "llamas" {
+		t.Fatalf("AWS_VAULT = %q, want %q", got, "llamas")
+	}
+
+	env = createEnv("llamas", "us-east-1", "", "")
+	if _, ok := lookupEnv(env, "AWS_ACCOUNT_ID"); ok {
+		t.Fatalf("AWS_ACCOUNT_ID should be unset when the account is unknown, env: %v", env)
+	}
+}
+
+func envValue(env []string, key string) string {
+	v, _ := lookupEnv(env, key)
+	return v
+}
+
+func lookupEnv(env []string, key string) (string, bool) {
+	for _, entry := range env {
+		if strings.HasPrefix(entry, key+"=") {
+			return strings.TrimPrefix(entry, key+"="), true
+		}
+	}
+	return "", false
+}
+
 // TestExecCommandHelper is the child-process entry point. It is invoked by
 // TestExecCommand via os.Args[0] with AWS_VAULT_EXEC_TEST_HELPER=1. When that
 // variable is absent (normal test run) the function returns immediately and has
