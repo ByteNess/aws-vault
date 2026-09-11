@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/aws/arn"
 	"github.com/aws/aws-sdk-go-v2/credentials/ssocreds"
 	"github.com/aws/aws-sdk-go-v2/service/sso"
 	"github.com/aws/aws-sdk-go-v2/service/ssooidc"
@@ -508,6 +509,52 @@ func (t *TempCredentialsCreator) GetProviderForProfile(config *ProfileConfig) (a
 	}
 
 	return nil, fmt.Errorf("profile %s: credentials missing", config.ProfileName)
+}
+
+// AccountIDForProfile returns the AWS account ID the credentials for config will belong to, or ""
+// when it cannot be determined from configuration. It mirrors the provider selection in
+// GetProviderForProfile so the result always matches the credentials actually issued:
+//   - AssumeRole and AssumeRoleWithWebIdentity: the role_arn account
+//   - source_profile without role_arn: the source profile's account
+//   - SSO: sso_account_id
+//   - otherwise the explicit aws_account_id setting
+func AccountIDForProfile(config *ProfileConfig, keyring *CredentialKeyring) (string, error) {
+	hasStoredCredentials, err := keyring.Has(config.ProfileName)
+	if err != nil {
+		return "", err
+	}
+
+	accountID := ""
+	switch {
+	case hasStoredCredentials || config.HasSourceProfile():
+		if config.HasRole() {
+			accountID = accountIDFromARN(config.RoleARN)
+		} else if !hasStoredCredentials {
+			accountID, err = AccountIDForProfile(config.SourceProfile, keyring)
+			if err != nil {
+				return "", err
+			}
+		}
+	case config.HasSSOStartURL():
+		accountID = config.SSOAccountID
+	case config.HasWebIdentity():
+		accountID = accountIDFromARN(config.RoleARN)
+	}
+
+	if accountID == "" {
+		accountID = config.AccountID
+	}
+
+	return accountID, nil
+}
+
+// accountIDFromARN returns the account ID component of an ARN, or "" if it cannot be parsed.
+func accountIDFromARN(s string) string {
+	parsed, err := arn.Parse(s)
+	if err != nil {
+		return ""
+	}
+	return parsed.AccountID
 }
 
 // canUseGetSessionToken determines if GetSessionToken should be used, and if not returns a reason

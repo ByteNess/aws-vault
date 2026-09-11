@@ -143,6 +143,7 @@ type ProfileSection struct {
 	SSORegion               string `ini:"sso_region,omitempty"`
 	SSOAccountID            string `ini:"sso_account_id,omitempty"`
 	SSORoleName             string `ini:"sso_role_name,omitempty"`
+	AccountID               string `ini:"aws_account_id,omitempty"`
 	WebIdentityTokenFile    string `ini:"web_identity_token_file,omitempty"`
 	WebIdentityTokenProcess string `ini:"web_identity_token_process,omitempty"`
 	STSRegionalEndpoints    string `ini:"sts_regional_endpoints,omitempty"`
@@ -425,6 +426,9 @@ func (cl *ConfigLoader) populateFromConfigFile(config *ProfileConfig, profileNam
 	if config.SSORoleName == "" {
 		config.SSORoleName = psection.SSORoleName
 	}
+	if config.AccountID == "" {
+		config.AccountID = psection.AccountID
+	}
 	if config.WebIdentityTokenFile == "" {
 		config.WebIdentityTokenFile = psection.WebIdentityTokenFile
 	}
@@ -462,10 +466,14 @@ func (cl *ConfigLoader) populateFromConfigFile(config *ProfileConfig, profileNam
 			return err
 		}
 	} else if profileName != defaultSectionName {
+		// aws_account_id is not inherited from [default]: an account ID is specific to one set of
+		// credentials, so a default would mislabel every profile that does not set its own.
+		accountID := config.AccountID
 		err := cl.populateFromConfigFile(config, defaultSectionName)
 		if err != nil {
 			return err
 		}
+		config.AccountID = accountID
 	}
 
 	// Ignore source_profile if it recursively refers to the profile
@@ -677,6 +685,9 @@ type ProfileConfig struct {
 
 	// SSORoleName specifies the AWS IAM Role name to target.
 	SSORoleName string
+
+	// AccountID specifies the AWS account ID of the profile's credentials (aws_account_id).
+	AccountID string
 
 	// SSOUseStdout specifies that the system browser should not be automatically opened
 	SSOUseStdout bool

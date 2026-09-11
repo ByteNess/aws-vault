@@ -117,6 +117,37 @@ mfa_process=op item get my_aws_mfa --otp
 
 WARNING: Use of this option runs against security best practices. It is recommended that you use a dedicated MFA device.
 
+### `aws_account_id`
+
+`exec` and `export` expose the AWS account ID of the credentials as the `AWS_ACCOUNT_ID` environment variable (and as
+`AccountId` / `aws_account_id` in the `json` and `ini` export formats) whenever it can be determined from the profile
+config:
+
+* the account in `role_arn` when a role is assumed (including `web_identity_token_file` / `web_identity_token_process`
+  profiles),
+* `sso_account_id` for SSO profiles,
+* the account of the `source_profile` for profiles that chain without a `role_arn`.
+
+For profiles where none of the above applies, such as stored long-term credentials or `credential_process`, the account
+ID can be set explicitly with the `aws_account_id` option, which is the same option the AWS CLI uses:
+
+```ini
+[profile jonsmith]
+region=eu-west-1
+aws_account_id=123456789012
+```
+
+Unlike other settings, `aws_account_id` is not inherited from the `[default]` section, since an account ID belongs to
+one specific set of credentials. It applies to the `default` profile itself, to the profile that sets it, and to
+profiles that pull it in explicitly with `include_profile`.
+
+When the account is unknown, `exec` removes any `AWS_ACCOUNT_ID` inherited from the parent shell rather than passing
+it on. Note that AWS SDKs also read `AWS_ACCOUNT_ID` for
+[account-based endpoint routing](https://docs.aws.amazon.com/sdkref/latest/guide/feature-account-endpoints.html), so
+it is only ever set to the account the exposed credentials actually belong to. If your environment cannot reach
+account-specific endpoints (for example a restrictive egress allowlist), set `account_id_endpoint_mode = disabled` in
+your profile or `AWS_ACCOUNT_ID_ENDPOINT_MODE=disabled` in the environment.
+
 ## Environment variables
 
 To configure the default flag values of `aws-vault` and its subcommands:

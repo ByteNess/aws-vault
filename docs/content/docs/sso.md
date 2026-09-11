@@ -29,6 +29,9 @@ sso_account_id=123456789012
 sso_role_name=Administrator
 ```
 
+`exec` and `export` expose `sso_account_id` to the sub-process as the `AWS_ACCOUNT_ID` environment variable, so
+scripts can use the account ID without calling `aws sts get-caller-identity`.
+
 ## Assuming a role with SSO
 
 If your SSO Permission Set allows you to assume another IAM role

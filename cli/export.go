@@ -119,18 +119,23 @@ func ExportCommand(input ExportCommandInput, f *vault.ConfigFile, keyring keyrin
 		return fmt.Errorf("Error getting temporary credentials: %w", err)
 	}
 
+	accountID, err := vault.AccountIDForProfile(config, ckr)
+	if err != nil {
+		return fmt.Errorf("Error determining account ID: %w", err)
+	}
+
 	if input.Format == FormatTypeExportJSON {
-		return printJSON(input, credsProvider)
+		return printJSON(input, credsProvider, accountID)
 	} else if input.Format == FormatTypeExportINI {
-		return printINI(credsProvider, input.ProfileName, config.Region)
+		return printINI(credsProvider, input.ProfileName, config.Region, accountID)
 	} else if input.Format == FormatTypeExportEnv {
-		return printEnv(input, credsProvider, config.Region, "export ")
+		return printEnv(input, credsProvider, config.Region, accountID, "export ")
 	} else {
-		return printEnv(input, credsProvider, config.Region, "")
+		return printEnv(input, credsProvider, config.Region, accountID, "")
 	}
 }
 
-func printJSON(input ExportCommandInput, credsProvider aws.CredentialsProvider) error {
+func printJSON(input ExportCommandInput, credsProvider aws.CredentialsProvider, accountID string) error {
 	// AwsCredentialHelperData is metadata for AWS CLI credential process
 	// See https://docs.aws.amazon.com/cli/latest/topic/config-vars.html#sourcing-credentials-from-external-processes
 	type AwsCredentialHelperData struct {
@@ -139,6 +144,7 @@ func printJSON(input ExportCommandInput, credsProvider aws.CredentialsProvider) 
 		SecretAccessKey string `json:"SecretAccessKey"`
 		SessionToken    string `json:"SessionToken,omitempty"`
 		Expiration      string `json:"Expiration,omitempty"`
+		AccountID       string `json:"AccountId,omitempty"`
 	}
 
 	creds, err := credsProvider.Retrieve(context.TODO())
@@ -151,6 +157,7 @@ func printJSON(input ExportCommandInput, credsProvider aws.CredentialsProvider) 
 		AccessKeyID:     creds.AccessKeyID,
 		SecretAccessKey: creds.SecretAccessKey,
 		SessionToken:    creds.SessionToken,
+		AccountID:       accountID,
 	}
 
 	if creds.CanExpire {
@@ -176,7 +183,7 @@ func mustNewKey(s *ini.Section, name, val string) {
 	}
 }
 
-func printINI(credsProvider aws.CredentialsProvider, profilename, region string) error {
+func printINI(credsProvider aws.CredentialsProvider, profilename, region, accountID string) error {
 	creds, err := credsProvider.Retrieve(context.TODO())
 	if err != nil {
 		return fmt.Errorf("Failed to get credentials for %s: %w", profilename, err)
@@ -195,6 +202,7 @@ func printINI(credsProvider aws.CredentialsProvider, profilename, region string)
 		mustNewKey(s, "aws_credential_expiration", iso8601.Format(creds.Expires))
 	}
 	mustNewKey(s, "region", region)
+	mustNewKey(s, "aws_account_id", accountID)
 
 	_, err = f.WriteTo(os.Stdout)
 	if err != nil {
@@ -204,7 +212,7 @@ func printINI(credsProvider aws.CredentialsProvider, profilename, region string)
 	return nil
 }
 
-func printEnv(input ExportCommandInput, credsProvider aws.CredentialsProvider, region, prefix string) error {
+func printEnv(input ExportCommandInput, credsProvider aws.CredentialsProvider, region, accountID, prefix string) error {
 	creds, err := credsProvider.Retrieve(context.TODO())
 	if err != nil {
 		return fmt.Errorf("Failed to get credentials for %s: %w", input.ProfileName, err)
@@ -222,6 +230,9 @@ func printEnv(input ExportCommandInput, credsProvider aws.CredentialsProvider, r
 	if region != "" {
 		fmt.Printf("%sAWS_REGION=%s\n", prefix, region)
 		fmt.Printf("%sAWS_DEFAULT_REGION=%s\n", prefix, region)
+	}
+	if accountID != "" {
+		fmt.Printf("%sAWS_ACCOUNT_ID=%s\n", prefix, accountID)
 	}
 
 	return nil
