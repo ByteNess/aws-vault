@@ -487,6 +487,10 @@ func (t *TempCredentialsCreator) getSourceCredWithSession(config *ProfileConfig,
 }
 
 func (t *TempCredentialsCreator) GetProviderForProfile(config *ProfileConfig) (aws.CredentialsProvider, error) {
+	if t.SessionKeyring == nil {
+		t.SessionKeyring = t.Keyring.Keyring
+	}
+
 	hasStoredCredentials, err := t.Keyring.Has(config.ProfileName)
 	if err != nil {
 		return nil, err
