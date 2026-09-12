@@ -40,7 +40,7 @@ func ConfigureRotateCommand(app *kingpin.Application, a *AwsVault) {
 		if err != nil {
 			return err
 		}
-		keyring, err := a.Keyring()
+		keyring, sessionKeyring, err := a.Keyrings()
 		if err != nil {
 			return err
 		}
@@ -56,13 +56,13 @@ func ConfigureRotateCommand(app *kingpin.Application, a *AwsVault) {
 			input.ProfileName = ProfileName
 		}
 
-		err = RotateCommand(input, f, keyring)
+		err = RotateCommand(input, f, keyring, sessionKeyring)
 		app.FatalIfError(err, "rotate")
 		return nil
 	})
 }
 
-func RotateCommand(input RotateCommandInput, f *vault.ConfigFile, keyring keyring.Keyring) error {
+func RotateCommand(input RotateCommandInput, f *vault.ConfigFile, keyring, sessionKeyring keyring.Keyring) error {
 	if !profileResolvable(f, keyring, input.ProfileName) {
 		return fmt.Errorf("profile '%s' not found in ~/.aws/config and no stored credentials exist for it", input.ProfileName)
 	}
@@ -101,7 +101,7 @@ func RotateCommand(input RotateCommandInput, f *vault.ConfigFile, keyring keyrin
 		credsProvider = vault.NewMasterCredentialsProvider(ckr, config.ProfileName)
 	} else {
 		// Can't always disable sessions completely, might need to use session for MFA-Protected API Access
-		credsProvider, err = vault.NewTempCredentialsProvider(config, ckr, input.NoSession, true)
+		credsProvider, err = vault.NewTempCredentialsProvider(config, ckr, sessionKeyring, input.NoSession, true)
 		if err != nil {
 			return fmt.Errorf("Error getting temporary credentials: %w", err)
 		}
@@ -136,7 +136,7 @@ func RotateCommand(input RotateCommandInput, f *vault.ConfigFile, keyring keyrin
 	}
 
 	// Delete old sessions
-	sk := &vault.SessionKeyring{Keyring: ckr.Keyring}
+	sk := &vault.SessionKeyring{Keyring: sessionKeyring}
 	profileNames, err := getProfilesInChain(input.ProfileName, configLoader)
 	for _, profileName := range profileNames {
 		if n, _ := sk.RemoveForProfile(profileName); n > 0 {

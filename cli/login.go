@@ -77,7 +77,7 @@ func ConfigureLoginCommand(app *kingpin.Application, a *AwsVault) {
 		input.Config.ChainedGetSessionTokenDuration = input.SessionDuration
 		input.Config.AssumeRoleDuration = input.SessionDuration
 		input.Config.GetFederationTokenDuration = input.SessionDuration
-		keyring, err := a.Keyring()
+		keyring, sessionKeyring, err := a.Keyrings()
 		if err != nil {
 			return err
 		}
@@ -86,13 +86,13 @@ func ConfigureLoginCommand(app *kingpin.Application, a *AwsVault) {
 			return err
 		}
 
-		err = LoginCommand(context.Background(), input, f, keyring)
+		err = LoginCommand(context.Background(), input, f, keyring, sessionKeyring)
 		app.FatalIfError(err, "login")
 		return nil
 	})
 }
 
-func getCredsProvider(input LoginCommandInput, config *vault.ProfileConfig, f *vault.ConfigFile, keyring keyring.Keyring) (credsProvider aws.CredentialsProvider, err error) {
+func getCredsProvider(input LoginCommandInput, config *vault.ProfileConfig, f *vault.ConfigFile, keyring, sessionKeyring keyring.Keyring) (credsProvider aws.CredentialsProvider, err error) {
 	if input.ProfileName == "" {
 		// When no profile is specified, source credentials from the environment
 		configFromEnv, err := awsconfig.NewEnvConfig()
@@ -118,6 +118,7 @@ func getCredsProvider(input LoginCommandInput, config *vault.ProfileConfig, f *v
 			ckr := &vault.CredentialKeyring{Keyring: keyring}
 			t := vault.TempCredentialsCreator{
 				Keyring:                   ckr,
+				SessionKeyring:            sessionKeyring,
 				DisableSessions:           input.NoSession,
 				DisableSessionsForProfile: config.ProfileName,
 			}
@@ -135,6 +136,7 @@ func getCredsProvider(input LoginCommandInput, config *vault.ProfileConfig, f *v
 		ckr := &vault.CredentialKeyring{Keyring: keyring}
 		t := vault.TempCredentialsCreator{
 			Keyring:                   ckr,
+			SessionKeyring:            sessionKeyring,
 			DisableSessions:           input.NoSession,
 			DisableSessionsForProfile: config.ProfileName,
 		}
@@ -149,7 +151,7 @@ func getCredsProvider(input LoginCommandInput, config *vault.ProfileConfig, f *v
 
 // LoginCommand creates a login URL for the AWS Management Console using the method described at
 // https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_providers_enable-console-custom-url.html
-func LoginCommand(ctx context.Context, input LoginCommandInput, f *vault.ConfigFile, keyring keyring.Keyring) error {
+func LoginCommand(ctx context.Context, input LoginCommandInput, f *vault.ConfigFile, keyring, sessionKeyring keyring.Keyring) error {
 	// An empty ProfileName is valid for login: getCredsProvider falls back to
 	// environment credentials or an interactive profile picker. Only guard when
 	// the user explicitly named a profile.
@@ -162,7 +164,7 @@ func LoginCommand(ctx context.Context, input LoginCommandInput, f *vault.ConfigF
 		return fmt.Errorf("Error loading config: %w", err)
 	}
 
-	credsProvider, err := getCredsProvider(input, config, f, keyring)
+	credsProvider, err := getCredsProvider(input, config, f, keyring, sessionKeyring)
 	if err != nil {
 		return err
 	}

@@ -77,7 +77,7 @@ func ConfigureExportCommand(app *kingpin.Application, a *AwsVault) {
 		if err != nil {
 			return err
 		}
-		keyring, err := a.Keyring()
+		keyring, sessionKeyring, err := a.Keyrings()
 		if err != nil {
 			return err
 		}
@@ -93,13 +93,13 @@ func ConfigureExportCommand(app *kingpin.Application, a *AwsVault) {
 			input.ProfileName = ProfileName
 		}
 
-		err = ExportCommand(input, f, keyring)
+		err = ExportCommand(input, f, keyring, sessionKeyring)
 		app.FatalIfError(err, "export")
 		return nil
 	})
 }
 
-func ExportCommand(input ExportCommandInput, f *vault.ConfigFile, keyring keyring.Keyring) error {
+func ExportCommand(input ExportCommandInput, f *vault.ConfigFile, keyring, sessionKeyring keyring.Keyring) error {
 	if os.Getenv("AWS_VAULT") != "" {
 		return fmt.Errorf("in an existing aws-vault subshell; 'exit' from the subshell or unset AWS_VAULT to force")
 	}
@@ -114,7 +114,7 @@ func ExportCommand(input ExportCommandInput, f *vault.ConfigFile, keyring keyrin
 	}
 
 	ckr := &vault.CredentialKeyring{Keyring: keyring}
-	credsProvider, err := vault.NewTempCredentialsProvider(config, ckr, input.NoSession, false)
+	credsProvider, err := vault.NewTempCredentialsProvider(config, ckr, sessionKeyring, input.NoSession, false)
 	if err != nil {
 		return fmt.Errorf("Error getting temporary credentials: %w", err)
 	}
