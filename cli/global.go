@@ -147,6 +147,7 @@ func (a *AwsVault) Keyring() (keyring.Keyring, error) {
 			a.KeyringConfig.AllowedBackends = []keyring.BackendType{keyring.BackendType(a.KeyringBackend)}
 		}
 		var err error
+		log.Println("Opening primary keyring")
 		a.keyringImpl, err = keyring.Open(a.KeyringConfig)
 		if err != nil {
 			return nil, err
@@ -158,6 +159,7 @@ func (a *AwsVault) Keyring() (keyring.Keyring, error) {
 
 func (a *AwsVault) SessionKeyring() (keyring.Keyring, error) {
 	if a.SessionKeyringBackend == "" && !a.sessionKeyringOverrides.configured() {
+		log.Println("Using primary keyring for sessions")
 		return a.Keyring()
 	}
 
@@ -172,6 +174,7 @@ func (a *AwsVault) SessionKeyring() (keyring.Keyring, error) {
 		}
 
 		var err error
+		log.Println("Opening session keyring")
 		a.sessionKeyringImpl, err = keyring.Open(config)
 		if err != nil {
 			return nil, err
