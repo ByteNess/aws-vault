@@ -9,7 +9,7 @@ on the AWS CLI and SDKs; even though it's supported on the AWS Console.
 
 ## Prerequisites
 
- 1. [A Yubikey that supports OATH-TOTP](https://support.yubico.com/support/solutions/articles/15000006419-using-your-yubikey-with-authenticator-codes)
+ 1. [A Yubikey that supports OATH-TOTP](https://support.yubico.com/s/article/Using-your-YubiKey-with-authenticator-codes)
  1. `ykman`, the [YubiKey Manager CLI](https://github.com/Yubico/yubikey-manager) tool.
 
 You can verify these prerequisites by running `ykman info` and checking `OATH` is enabled.
