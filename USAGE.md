@@ -12,6 +12,7 @@ The usage documentation now lives on the **[AWS Vault documentation site](https:
 | [Managing Sessions](https://byteness.github.io/aws-vault/docs/managing-sessions/) | `exec`, `login`, `clear`, session duration, `--server` |
 | [MFA](https://byteness.github.io/aws-vault/docs/mfa/) | Multi-factor authentication |
 | [Single Sign On (SSO)](https://byteness.github.io/aws-vault/docs/sso/) | AWS IAM Identity Center |
+| [Parallel-safe mode](https://byteness.github.io/aws-vault/docs/parallel-safe/) | Cross-process locking for concurrent invocations |
 | [Assuming roles with web identities](https://byteness.github.io/aws-vault/docs/web-identities/) | Web identity federation and OpenID Connect |
 | [Using `credential_process`](https://byteness.github.io/aws-vault/docs/credential-process/) | Sourcing credentials from an external process |
 | [Using a Yubikey](https://byteness.github.io/aws-vault/docs/yubikey/) | OATH-TOTP with `ykman` |
