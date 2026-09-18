@@ -105,6 +105,36 @@ region=us-east-1
 	}
 }
 
+func TestTempCredentialsCreatorDefaultsNilSessionKeyringToPrimary(t *testing.T) {
+	f := newConfigFile(t, []byte("[profile source]\nregion=us-east-1\n"))
+	defer os.Remove(f)
+
+	configFile, err := vault.LoadConfig(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	config, err := (&vault.ConfigLoader{File: configFile, ActiveProfile: "source"}).GetProfileConfig("source")
+	if err != nil {
+		t.Fatal(err)
+	}
+	config.MfaToken = "123456"
+
+	credentials := newSeededKeyring(t, "source")
+	creator := vault.TempCredentialsCreator{Keyring: credentials} // SessionKeyring left nil
+	p, err := creator.GetProviderForProfile(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cached, ok := p.(*vault.CachedSessionProvider)
+	if !ok {
+		t.Fatalf("expected CachedSessionProvider, got %T", p)
+	}
+	if cached.Keyring.Keyring != credentials.Keyring {
+		t.Fatal("nil SessionKeyring did not default to the primary keyring")
+	}
+}
+
 func TestSSOProviderKeepsOIDCTokenInPrimaryKeyring(t *testing.T) {
 	primary := keyring.NewArrayKeyring(nil)
 	sessions := keyring.NewArrayKeyring(nil)
