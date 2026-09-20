@@ -118,6 +118,12 @@ func (p *SSORoleCredentialsProvider) getRoleCredentialsAsStsCredemtials(ctx cont
 	}, nil
 }
 
+// oidcRefreshWindow is how long before expiry a refreshable token is renewed.
+// It matches the AWS CLI's SSOTokenProvider and keeps GetRoleCredentials from
+// being handed a token with seconds left, whose 401 would drop the cached
+// entry (refresh token included) and force a browser login.
+const oidcRefreshWindow = 15 * time.Minute
+
 func (p *SSORoleCredentialsProvider) getOIDCToken(ctx context.Context) (token *ssooidc.CreateTokenOutput, cached bool, err error) {
 	if p.OIDCTokenCache != nil {
 		data, err := p.OIDCTokenCache.Get(p.StartURL)
@@ -125,19 +131,12 @@ func (p *SSORoleCredentialsProvider) getOIDCToken(ctx context.Context) (token *s
 			return nil, false, err
 		}
 		if data != nil {
-			if !data.Expired() {
-				return &data.Token, true, nil
-			}
-			refreshed, err := p.refreshOIDCToken(ctx, data)
-			if err == nil {
-				if err := p.OIDCTokenCache.Set(p.StartURL, refreshed); err != nil {
-					return nil, false, err
-				}
-				return &refreshed.Token, true, nil
-			}
-			log.Printf("Refreshing OIDC token for %s failed, starting a new login: %s", p.StartURL, err)
-			if err := p.OIDCTokenCache.Remove(p.StartURL); err != nil {
+			token, needLogin, err := p.cachedOIDCToken(ctx, data)
+			if err != nil {
 				return nil, false, err
+			}
+			if !needLogin {
+				return token, true, nil
 			}
 		}
 	}
@@ -153,6 +152,73 @@ func (p *SSORoleCredentialsProvider) getOIDCToken(ctx context.Context) (token *s
 		}
 	}
 	return &data.Token, false, nil
+}
+
+// cachedOIDCToken decides what to do with a cached entry: use it, refresh it,
+// or report that a new login is needed. It is safe against several processes
+// sharing one cache: a refresh token is single use, so when a refresh is
+// rejected the cache is re-read before anything is removed, and a transient
+// error keeps the refresh token for the next attempt.
+func (p *SSORoleCredentialsProvider) cachedOIDCToken(ctx context.Context, data *OIDCTokenData) (token *ssooidc.CreateTokenOutput, needLogin bool, err error) {
+	expiresSoon := time.Until(data.Expiration) < oidcRefreshWindow
+	if !data.Expired() && !expiresSoon {
+		return &data.Token, false, nil
+	}
+	if !data.Refreshable() {
+		if !data.Expired() {
+			return &data.Token, false, nil
+		}
+		log.Printf("OIDC token for %s expired and cannot be refreshed, starting a new login", p.StartURL)
+		if err := p.OIDCTokenCache.Remove(p.StartURL); err != nil && err != keyring.ErrKeyNotFound {
+			return nil, false, err
+		}
+		return nil, true, nil
+	}
+
+	refreshed, refreshErr := p.refreshOIDCToken(ctx, data)
+	if refreshErr == nil {
+		if err := p.OIDCTokenCache.Set(p.StartURL, refreshed); err != nil {
+			return nil, false, err
+		}
+		return &refreshed.Token, false, nil
+	}
+	if !data.Expired() {
+		log.Printf("Refreshing OIDC token for %s failed, using the current token (expires in %s): %s", p.StartURL, time.Until(data.Expiration).Round(time.Second), refreshErr)
+		return &data.Token, false, nil
+	}
+
+	// Another process may have refreshed the same entry in the meantime, in
+	// which case our refresh token was already consumed and the cache now holds
+	// a valid token that must not be discarded.
+	current, getErr := p.OIDCTokenCache.Get(p.StartURL)
+	if getErr == nil && current != nil && !current.Expired() {
+		log.Printf("OIDC token for %s was refreshed by another process, using it", p.StartURL)
+		return &current.Token, false, nil
+	}
+	if !isOIDCRejection(refreshErr) {
+		return nil, false, fmt.Errorf("refreshing OIDC token for %s: %w", p.StartURL, refreshErr)
+	}
+	log.Printf("Refreshing OIDC token for %s was rejected, starting a new login: %s", p.StartURL, refreshErr)
+	// Remove only the entry we tried to redeem; anything else was written by
+	// someone else and is theirs to manage.
+	if getErr == nil && current != nil && aws.ToString(current.Token.RefreshToken) == aws.ToString(data.Token.RefreshToken) {
+		if err := p.OIDCTokenCache.Remove(p.StartURL); err != nil && err != keyring.ErrKeyNotFound {
+			return nil, false, err
+		}
+	}
+	return nil, true, nil
+}
+
+// isOIDCRejection reports whether the OIDC service definitively refused the
+// request (a 4xx such as InvalidGrantException or ExpiredTokenException), as
+// opposed to a transport failure or a 5xx that may succeed on retry.
+func isOIDCRejection(err error) bool {
+	var rspError *awshttp.ResponseError
+	if !errors.As(err, &rspError) {
+		return false
+	}
+	code := rspError.HTTPStatusCode()
+	return code >= 400 && code < 500
 }
 
 // refreshOIDCToken exchanges the refresh token of an expired cached token for

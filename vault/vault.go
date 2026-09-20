@@ -213,6 +213,11 @@ func SyncOIDCTokenToStandardCache(config *ProfileConfig, k keyring.Keyring) erro
 		AccessToken  string `json:"accessToken"`
 		ExpiresAt    string `json:"expiresAt"`
 		RefreshToken string `json:"refreshToken,omitempty"`
+		// The client registration lets the AWS CLI and SDKs refresh the token
+		// themselves; without it they treat the file as unrefreshable.
+		ClientID              string `json:"clientId,omitempty"`
+		ClientSecret          string `json:"clientSecret,omitempty"`
+		RegistrationExpiresAt string `json:"registrationExpiresAt,omitempty"`
 	}
 
 	t := cachedToken{
@@ -221,6 +226,13 @@ func SyncOIDCTokenToStandardCache(config *ProfileConfig, k keyring.Keyring) erro
 	}
 	if token.RefreshToken != nil {
 		t.RefreshToken = aws.ToString(token.RefreshToken)
+	}
+	if data.Refreshable() {
+		t.ClientID = data.ClientID
+		t.ClientSecret = data.ClientSecret
+		if !data.ClientSecretExpiresAt.IsZero() {
+			t.RegistrationExpiresAt = data.ClientSecretExpiresAt.UTC().Format(time.RFC3339)
+		}
 	}
 
 	b, err := json.Marshal(t)
