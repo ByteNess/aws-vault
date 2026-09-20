@@ -21,8 +21,8 @@ import (
 )
 
 type OIDCTokenCacher interface {
-	Get(string) (*ssooidc.CreateTokenOutput, error)
-	Set(string, *ssooidc.CreateTokenOutput) error
+	Get(string) (*OIDCTokenData, error)
+	Set(string, *OIDCTokenData) error
 	Remove(string) error
 }
 
@@ -35,6 +35,12 @@ type SSORoleCredentialsProvider struct {
 	AccountID      string
 	RoleName       string
 	UseStdout      bool
+	// RegistrationScopes are the OAuth scopes requested when registering the
+	// OIDC client (sso_registration_scopes). With scopes such as
+	// sso:account:access, IAM Identity Center returns a refresh token alongside
+	// the access token, so an expired token is renewed without a browser until
+	// the Identity Center session itself ends.
+	RegistrationScopes []string
 }
 
 func millisecondsTimeValue(v int64) time.Time {
@@ -114,32 +120,74 @@ func (p *SSORoleCredentialsProvider) getRoleCredentialsAsStsCredemtials(ctx cont
 
 func (p *SSORoleCredentialsProvider) getOIDCToken(ctx context.Context) (token *ssooidc.CreateTokenOutput, cached bool, err error) {
 	if p.OIDCTokenCache != nil {
-		token, err = p.OIDCTokenCache.Get(p.StartURL)
+		data, err := p.OIDCTokenCache.Get(p.StartURL)
 		if err != nil && err != keyring.ErrKeyNotFound {
 			return nil, false, err
 		}
-		if token != nil {
-			return token, true, nil
+		if data != nil {
+			if !data.Expired() {
+				return &data.Token, true, nil
+			}
+			refreshed, err := p.refreshOIDCToken(ctx, data)
+			if err == nil {
+				if err := p.OIDCTokenCache.Set(p.StartURL, refreshed); err != nil {
+					return nil, false, err
+				}
+				return &refreshed.Token, true, nil
+			}
+			log.Printf("Refreshing OIDC token for %s failed, starting a new login: %s", p.StartURL, err)
+			if err := p.OIDCTokenCache.Remove(p.StartURL); err != nil {
+				return nil, false, err
+			}
 		}
 	}
-	token, err = p.newOIDCToken(ctx)
+	data, err := p.newOIDCToken(ctx)
 	if err != nil {
 		return nil, false, err
 	}
 
 	if p.OIDCTokenCache != nil {
-		err = p.OIDCTokenCache.Set(p.StartURL, token)
+		err = p.OIDCTokenCache.Set(p.StartURL, data)
 		if err != nil {
 			return nil, false, err
 		}
 	}
-	return token, false, err
+	return &data.Token, false, nil
 }
 
-func (p *SSORoleCredentialsProvider) newOIDCToken(ctx context.Context) (*ssooidc.CreateTokenOutput, error) {
+// refreshOIDCToken exchanges the refresh token of an expired cached token for
+// a new access token, using the client registration the token was issued to.
+func (p *SSORoleCredentialsProvider) refreshOIDCToken(ctx context.Context, data *OIDCTokenData) (*OIDCTokenData, error) {
+	t, err := p.OIDCClient.CreateToken(ctx, &ssooidc.CreateTokenInput{
+		ClientId:     aws.String(data.ClientID),
+		ClientSecret: aws.String(data.ClientSecret),
+		GrantType:    aws.String("refresh_token"),
+		RefreshToken: data.Token.RefreshToken,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if t.RefreshToken == nil {
+		// Identity Center rotates the refresh token on every use; keep the
+		// previous one if a server ever omits it rather than losing the ability
+		// to refresh.
+		t.RefreshToken = data.Token.RefreshToken
+	}
+	log.Printf("Refreshed OIDC access token for %s (expires in: %ds)", p.StartURL, t.ExpiresIn)
+
+	return &OIDCTokenData{
+		Token:                 *t,
+		ClientID:              data.ClientID,
+		ClientSecret:          data.ClientSecret,
+		ClientSecretExpiresAt: data.ClientSecretExpiresAt,
+	}, nil
+}
+
+func (p *SSORoleCredentialsProvider) newOIDCToken(ctx context.Context) (*OIDCTokenData, error) {
 	clientCreds, err := p.OIDCClient.RegisterClient(ctx, &ssooidc.RegisterClientInput{
 		ClientName: aws.String("aws-vault"),
 		ClientType: aws.String("public"),
+		Scopes:     p.RegistrationScopes,
 	})
 	if err != nil {
 		return nil, err
@@ -197,7 +245,12 @@ func (p *SSORoleCredentialsProvider) newOIDCToken(ctx context.Context) (*ssooidc
 			return nil, err
 		}
 
-		log.Printf("Created new OIDC access token for %s (expires in: %ds)", p.StartURL, t.ExpiresIn)
-		return t, nil
+		log.Printf("Created new OIDC access token for %s (expires in: %ds, refresh token: %t)", p.StartURL, t.ExpiresIn, t.RefreshToken != nil)
+		return &OIDCTokenData{
+			Token:                 *t,
+			ClientID:              aws.ToString(clientCreds.ClientId),
+			ClientSecret:          aws.ToString(clientCreds.ClientSecret),
+			ClientSecretExpiresAt: time.Unix(clientCreds.ClientSecretExpiresAt, 0),
+		}, nil
 	}
 }
