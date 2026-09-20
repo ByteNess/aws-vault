@@ -20,7 +20,7 @@ The configuration options are as follows:
   profile.
 * `sso_registration_scopes` Comma-separated OAuth scopes requested when registering the OIDC client, for example
   `sso:account:access`. With scopes set, IAM Identity Center issues a refresh token alongside the access token and
-  AWS Vault renews the token in the background when it expires instead of opening a browser. You then only sign in
+  AWS Vault renews the token in the background shortly before it expires instead of opening a browser. You then only sign in
   again when the Identity Center session itself ends (the session duration is configured by your administrator).
   Without scopes the token cannot be refreshed and expires after the fixed lifetime Identity Center assigns it,
   typically 8 hours. This matches the AWS CLI option of the same name and is usually set in the `[sso-session]` section.

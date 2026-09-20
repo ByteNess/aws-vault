@@ -21,8 +21,9 @@ type fakeOIDC struct {
 	mu       sync.Mutex
 	requests []map[string]any
 	paths    []string
-	// refreshFails makes the refresh_token grant answer InvalidGrantException.
-	refreshFails bool
+	// refreshStatus, when non-zero, is the HTTP status the refresh_token grant
+	// answers with: 400 (InvalidGrantException) or 503 (InternalServerException).
+	refreshStatus int
 }
 
 func (f *fakeOIDC) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -49,10 +50,17 @@ func (f *fakeOIDC) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "/token":
 		switch body["grantType"] {
 		case "refresh_token":
-			if f.refreshFails {
+			switch f.refreshStatus {
+			case 0:
+			case http.StatusBadRequest:
 				w.Header().Set("X-Amzn-Errortype", "InvalidGrantException")
 				w.WriteHeader(http.StatusBadRequest)
 				f.reply(w, map[string]any{"error": "invalid_grant", "error_description": "refresh token revoked"})
+				return
+			default:
+				w.Header().Set("X-Amzn-Errortype", "InternalServerException")
+				w.WriteHeader(f.refreshStatus)
+				f.reply(w, map[string]any{"error": "server_error"})
 				return
 			}
 			f.reply(w, map[string]any{
@@ -87,12 +95,21 @@ func (f *fakeOIDC) calls(path string) []map[string]any {
 }
 
 // memOIDCCache is an in-memory OIDCTokenCacher that also records removals.
+// staleReads, when set, is returned by the first Get calls before the map is
+// consulted, to simulate a process that read the entry before another process
+// replaced it.
 type memOIDCCache struct {
-	data    map[string]*OIDCTokenData
-	removed int
+	data       map[string]*OIDCTokenData
+	staleReads []*OIDCTokenData
+	removed    int
 }
 
 func (m *memOIDCCache) Get(k string) (*OIDCTokenData, error) {
+	if len(m.staleReads) > 0 {
+		d := m.staleReads[0]
+		m.staleReads = m.staleReads[1:]
+		return d, nil
+	}
 	d, ok := m.data[k]
 	if !ok {
 		return nil, keyring.ErrKeyNotFound
@@ -107,9 +124,10 @@ func newTestSSOProvider(t *testing.T, f *fakeOIDC, cache OIDCTokenCacher) *SSORo
 	srv := httptest.NewServer(f)
 	t.Cleanup(srv.Close)
 	client := ssooidc.New(ssooidc.Options{
-		Region:       "us-east-1",
-		BaseEndpoint: aws.String(srv.URL),
-		HTTPClient:   srv.Client(),
+		Region:           "us-east-1",
+		BaseEndpoint:     aws.String(srv.URL),
+		HTTPClient:       srv.Client(),
+		RetryMaxAttempts: 1,
 	})
 	return &SSORoleCredentialsProvider{
 		OIDCClient:         client,
@@ -214,7 +232,7 @@ func TestGetOIDCTokenRefreshesExpiredTokenWithoutBrowser(t *testing.T) {
 }
 
 func TestGetOIDCTokenFallsBackToLoginWhenRefreshFails(t *testing.T) {
-	f := &fakeOIDC{refreshFails: true}
+	f := &fakeOIDC{refreshStatus: http.StatusBadRequest}
 	cache := &memOIDCCache{data: map[string]*OIDCTokenData{}}
 	p := newTestSSOProvider(t, f, cache)
 	cache.data[p.StartURL] = expiredRefreshableToken()
@@ -249,5 +267,99 @@ func TestParseSSORegistrationScopes(t *testing.T) {
 		if strings.Join(got, "|") != strings.Join(want, "|") {
 			t.Errorf("ParseSSORegistrationScopes(%q) = %v, want %v", in, got, want)
 		}
+	}
+}
+
+func TestGetOIDCTokenRefreshesShortlyBeforeExpiry(t *testing.T) {
+	f := &fakeOIDC{}
+	cache := &memOIDCCache{data: map[string]*OIDCTokenData{}}
+	p := newTestSSOProvider(t, f, cache)
+	soon := expiredRefreshableToken()
+	soon.Expiration = time.Now().Add(oidcRefreshWindow / 2)
+	cache.data[p.StartURL] = soon
+
+	token, cached, err := p.getOIDCToken(context.Background())
+	if err != nil {
+		t.Fatalf("getOIDCToken: %v", err)
+	}
+	if !cached || aws.ToString(token.AccessToken) != "access-2" {
+		t.Errorf("token = %q cached=%t, want the refreshed access-2 from cache", aws.ToString(token.AccessToken), cached)
+	}
+	if n := len(f.calls("/device_authorization")); n != 0 {
+		t.Errorf("device authorization started %d time(s), want 0", n)
+	}
+}
+
+func TestGetOIDCTokenKeepsValidTokenWhenEarlyRefreshFails(t *testing.T) {
+	f := &fakeOIDC{refreshStatus: http.StatusBadRequest}
+	cache := &memOIDCCache{data: map[string]*OIDCTokenData{}}
+	p := newTestSSOProvider(t, f, cache)
+	soon := expiredRefreshableToken()
+	soon.Expiration = time.Now().Add(oidcRefreshWindow / 2)
+	cache.data[p.StartURL] = soon
+
+	token, _, err := p.getOIDCToken(context.Background())
+	if err != nil {
+		t.Fatalf("getOIDCToken: %v", err)
+	}
+	if aws.ToString(token.AccessToken) != "access-old" {
+		t.Errorf("AccessToken = %q, want the still-valid access-old", aws.ToString(token.AccessToken))
+	}
+	if cache.removed != 0 || cache.data[p.StartURL] != soon {
+		t.Error("a still-valid entry must not be removed or replaced when its early refresh fails")
+	}
+	if n := len(f.calls("/device_authorization")); n != 0 {
+		t.Errorf("device authorization started %d time(s), want 0", n)
+	}
+}
+
+// Two processes read the same expired entry. The other one refreshes first, so
+// the refresh token this process holds is already consumed and the refresh is
+// rejected. It must pick up the entry the other process wrote instead of
+// deleting it and opening a browser.
+func TestGetOIDCTokenUsesTokenRefreshedByAnotherProcess(t *testing.T) {
+	f := &fakeOIDC{refreshStatus: http.StatusBadRequest}
+	cache := &memOIDCCache{data: map[string]*OIDCTokenData{}}
+	p := newTestSSOProvider(t, f, cache)
+
+	stale := expiredRefreshableToken()
+	fresh := expiredRefreshableToken()
+	fresh.Token.AccessToken = aws.String("access-2")
+	fresh.Token.RefreshToken = aws.String("refresh-2")
+	fresh.Expiration = time.Now().Add(time.Hour)
+	cache.staleReads = []*OIDCTokenData{stale}
+	cache.data[p.StartURL] = fresh
+
+	token, cached, err := p.getOIDCToken(context.Background())
+	if err != nil {
+		t.Fatalf("getOIDCToken: %v", err)
+	}
+	if !cached || aws.ToString(token.AccessToken) != "access-2" {
+		t.Errorf("token = %q cached=%t, want access-2 written by the other process", aws.ToString(token.AccessToken), cached)
+	}
+	if cache.removed != 0 || cache.data[p.StartURL] != fresh {
+		t.Error("the other process's fresh entry must not be removed")
+	}
+	if n := len(f.calls("/device_authorization")); n != 0 {
+		t.Errorf("device authorization started %d time(s), want 0", n)
+	}
+}
+
+func TestGetOIDCTokenKeepsRefreshTokenOnTransientError(t *testing.T) {
+	f := &fakeOIDC{refreshStatus: http.StatusServiceUnavailable}
+	cache := &memOIDCCache{data: map[string]*OIDCTokenData{}}
+	p := newTestSSOProvider(t, f, cache)
+	entry := expiredRefreshableToken()
+	cache.data[p.StartURL] = entry
+
+	_, _, err := p.getOIDCToken(context.Background())
+	if err == nil {
+		t.Fatal("expected an error when the refresh fails with a 5xx")
+	}
+	if cache.removed != 0 || cache.data[p.StartURL] != entry {
+		t.Error("a transient failure must keep the refresh token for the next attempt")
+	}
+	if n := len(f.calls("/device_authorization")); n != 0 {
+		t.Errorf("device authorization started %d time(s); a transient error must not open a browser", n)
 	}
 }
