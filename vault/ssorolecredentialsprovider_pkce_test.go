@@ -22,9 +22,9 @@ import (
 
 const fakeStartURL = "https://d-1234567890.awsapps.com/start"
 
-// fakeOIDC is a minimal IAM Identity Center OIDC service that enforces the
+// fakePKCEOIDC is a minimal IAM Identity Center OIDC service that enforces the
 // PKCE authorization code flow.
-type fakeOIDC struct {
+type fakePKCEOIDC struct {
 	t    *testing.T
 	deny bool // redirect back with access_denied instead of a code
 
@@ -34,20 +34,20 @@ type fakeOIDC struct {
 	codeUsed    bool
 }
 
-func (f *fakeOIDC) fail(w http.ResponseWriter, format string, args ...any) {
+func (f *fakePKCEOIDC) fail(w http.ResponseWriter, format string, args ...any) {
 	f.t.Errorf(format, args...)
 	w.Header().Set("X-Amzn-ErrorType", "InvalidRequestException")
 	w.WriteHeader(http.StatusBadRequest)
 	_, _ = io.WriteString(w, `{"error":"invalid_request"}`)
 }
 
-func (f *fakeOIDC) reply(w http.ResponseWriter, v map[string]any) {
+func (f *fakePKCEOIDC) reply(w http.ResponseWriter, v map[string]any) {
 	if err := json.NewEncoder(w).Encode(v); err != nil {
 		f.t.Errorf("encoding reply: %v", err)
 	}
 }
 
-func (f *fakeOIDC) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (f *fakePKCEOIDC) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -134,7 +134,7 @@ func (f *fakeOIDC) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // runPKCE runs the PKCE flow against f, with a "browser" that follows the
 // redirect to the callback server and returns the page it shows.
-func runPKCE(t *testing.T, f *fakeOIDC) (*ssooidc.CreateTokenOutput, string, error) {
+func runPKCE(t *testing.T, f *fakePKCEOIDC) (*OIDCTokenData, string, error) {
 	t.Helper()
 	srv := httptest.NewServer(f)
 	t.Cleanup(srv.Close)
@@ -182,12 +182,12 @@ func runPKCE(t *testing.T, f *fakeOIDC) (*ssooidc.CreateTokenOutput, string, err
 }
 
 func TestNewOIDCTokenPKCE_EndToEnd(t *testing.T) {
-	tok, shown, err := runPKCE(t, &fakeOIDC{t: t})
+	tok, shown, err := runPKCE(t, &fakePKCEOIDC{t: t})
 	if err != nil {
 		t.Fatalf("newOIDCTokenPKCE: %v", err)
 	}
-	if aws.ToString(tok.AccessToken) != "access-token" {
-		t.Errorf("access token = %q, want access-token", aws.ToString(tok.AccessToken))
+	if aws.ToString(tok.Token.AccessToken) != "access-token" {
+		t.Errorf("access token = %q, want access-token", aws.ToString(tok.Token.AccessToken))
 	}
 	if !strings.Contains(shown, "Request approved") {
 		t.Errorf("browser showed %q, want the success page", shown)
@@ -195,7 +195,7 @@ func TestNewOIDCTokenPKCE_EndToEnd(t *testing.T) {
 }
 
 func TestNewOIDCTokenPKCE_UserDenies(t *testing.T) {
-	_, shown, err := runPKCE(t, &fakeOIDC{t: t, deny: true})
+	_, shown, err := runPKCE(t, &fakePKCEOIDC{t: t, deny: true})
 	if err == nil || !strings.Contains(err.Error(), "access_denied") {
 		t.Fatalf("err = %v, want the access_denied authorization error", err)
 	}
@@ -209,7 +209,7 @@ func TestNewOIDCTokenPKCE_UserDenies(t *testing.T) {
 }
 
 func TestNewOIDCTokenPKCE_Timeout(t *testing.T) {
-	srv := httptest.NewServer(&fakeOIDC{t: t})
+	srv := httptest.NewServer(&fakePKCEOIDC{t: t})
 	t.Cleanup(srv.Close)
 
 	origOpen, origTimeout := openBrowser, pkceSignInTimeout
