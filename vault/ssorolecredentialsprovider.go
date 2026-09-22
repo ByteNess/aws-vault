@@ -209,16 +209,29 @@ func (p *SSORoleCredentialsProvider) cachedOIDCToken(ctx context.Context, data *
 	return nil, true, nil
 }
 
-// isOIDCRejection reports whether the OIDC service definitively refused the
-// request (a 4xx such as InvalidGrantException or ExpiredTokenException), as
-// opposed to a transport failure or a 5xx that may succeed on retry.
+// isOIDCRejection reports whether the OIDC service refused the grant itself,
+// so that retrying with the same refresh token can never succeed and a new
+// login is the only way forward.
+//
+// Only the grant errors count. Everything else is transient and keeps the
+// refresh token for the next attempt: transport failures, 5xx, and throttling
+// in particular. Throttling is not distinguishable by status code alone
+// (SlowDownException is a 400 and API-level throttling a 429), and it is most
+// likely exactly when several credential_process callers refresh at once,
+// which is the burst this change exists to keep out of the browser.
 func isOIDCRejection(err error) bool {
-	var rspError *awshttp.ResponseError
-	if !errors.As(err, &rspError) {
-		return false
-	}
-	code := rspError.HTTPStatusCode()
-	return code >= 400 && code < 500
+	var (
+		invalidGrant       *ssooidctypes.InvalidGrantException
+		expiredToken       *ssooidctypes.ExpiredTokenException
+		invalidClient      *ssooidctypes.InvalidClientException
+		unauthorizedClient *ssooidctypes.UnauthorizedClientException
+		accessDenied       *ssooidctypes.AccessDeniedException
+	)
+	return errors.As(err, &invalidGrant) ||
+		errors.As(err, &expiredToken) ||
+		errors.As(err, &invalidClient) ||
+		errors.As(err, &unauthorizedClient) ||
+		errors.As(err, &accessDenied)
 }
 
 // refreshOIDCToken exchanges the refresh token of an expired cached token for

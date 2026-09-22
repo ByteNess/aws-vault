@@ -22,8 +22,11 @@ type fakeOIDC struct {
 	requests []map[string]any
 	paths    []string
 	// refreshStatus, when non-zero, is the HTTP status the refresh_token grant
-	// answers with: 400 (InvalidGrantException) or 503 (InternalServerException).
-	refreshStatus int
+	// answers with, and refreshErrorType the accompanying error type. The type
+	// defaults to InvalidGrantException for a 400 and InternalServerException
+	// otherwise.
+	refreshStatus    int
+	refreshErrorType string
 }
 
 func (f *fakeOIDC) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -50,17 +53,8 @@ func (f *fakeOIDC) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "/token":
 		switch body["grantType"] {
 		case "refresh_token":
-			switch f.refreshStatus {
-			case 0:
-			case http.StatusBadRequest:
-				w.Header().Set("X-Amzn-Errortype", "InvalidGrantException")
-				w.WriteHeader(http.StatusBadRequest)
-				f.reply(w, map[string]any{"error": "invalid_grant", "error_description": "refresh token revoked"})
-				return
-			default:
-				w.Header().Set("X-Amzn-Errortype", "InternalServerException")
-				w.WriteHeader(f.refreshStatus)
-				f.reply(w, map[string]any{"error": "server_error"})
+			if f.refreshStatus != 0 {
+				f.replyRefreshError(w)
 				return
 			}
 			f.reply(w, map[string]any{
@@ -74,6 +68,23 @@ func (f *fakeOIDC) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.NotFound(w, r)
 	}
+}
+
+// replyRefreshError answers the refresh_token grant with the configured
+// failure, the way the OIDC service reports it: an error type header plus an
+// OAuth error body.
+func (f *fakeOIDC) replyRefreshError(w http.ResponseWriter) {
+	errorType := f.refreshErrorType
+	if errorType == "" {
+		if f.refreshStatus == http.StatusBadRequest {
+			errorType = "InvalidGrantException"
+		} else {
+			errorType = "InternalServerException"
+		}
+	}
+	w.Header().Set("X-Amzn-Errortype", errorType)
+	w.WriteHeader(f.refreshStatus)
+	f.reply(w, map[string]any{"error": errorType})
 }
 
 func (f *fakeOIDC) reply(w http.ResponseWriter, v any) {
@@ -361,5 +372,39 @@ func TestGetOIDCTokenKeepsRefreshTokenOnTransientError(t *testing.T) {
 	}
 	if n := len(f.calls("/device_authorization")); n != 0 {
 		t.Errorf("device authorization started %d time(s); a transient error must not open a browser", n)
+	}
+}
+
+// Throttling must not be read as a refusal of the grant: SlowDownException is
+// a 400 and API-level throttling a 429, and both are what a burst of parallel
+// credential_process callers gets. Treating either as a rejection would drop
+// the refresh token and open the browser tab this change exists to avoid.
+func TestGetOIDCTokenKeepsRefreshTokenWhenThrottled(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		status    int
+		errorType string
+	}{
+		{"slow down", http.StatusBadRequest, "SlowDownException"},
+		{"too many requests", http.StatusTooManyRequests, "ThrottlingException"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := &fakeOIDC{refreshStatus: tc.status, refreshErrorType: tc.errorType}
+			cache := &memOIDCCache{data: map[string]*OIDCTokenData{}}
+			p := newTestSSOProvider(t, f, cache)
+			entry := expiredRefreshableToken()
+			cache.data[p.StartURL] = entry
+
+			_, _, err := p.getOIDCToken(context.Background())
+			if err == nil {
+				t.Fatalf("expected an error when the refresh is throttled with %s", tc.errorType)
+			}
+			if cache.removed != 0 || cache.data[p.StartURL] != entry {
+				t.Error("throttling must keep the refresh token for the next attempt")
+			}
+			if n := len(f.calls("/device_authorization")); n != 0 {
+				t.Errorf("device authorization started %d time(s); throttling must not open a browser", n)
+			}
+		})
 	}
 }
