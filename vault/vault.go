@@ -7,7 +7,9 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
+	"unicode"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/aws/arn"
@@ -152,6 +154,8 @@ func NewSSORoleCredentialsProvider(k keyring.Keyring, config *ProfileConfig, use
 		AccountID:  config.SSOAccountID,
 		RoleName:   config.SSORoleName,
 		UseStdout:  config.SSOUseStdout,
+
+		RegistrationScopes: ParseSSORegistrationScopes(config.SSORegistrationScopes),
 	}
 
 	if useSessionCache {
@@ -169,6 +173,12 @@ func NewSSORoleCredentialsProvider(k keyring.Keyring, config *ProfileConfig, use
 	}
 
 	return ssoRoleCredentialsProvider, nil
+}
+
+// ParseSSORegistrationScopes splits the sso_registration_scopes config value,
+// which the AWS CLI accepts as a comma-separated list, into individual scopes.
+func ParseSSORegistrationScopes(s string) []string {
+	return strings.FieldsFunc(s, func(r rune) bool { return r == ',' || unicode.IsSpace(r) })
 }
 
 // ssoTokenCacheKey returns the key used to compute the standard SSO cache file path.
@@ -189,19 +199,25 @@ func SyncOIDCTokenToStandardCache(config *ProfileConfig, k keyring.Keyring) erro
 		return err
 	}
 
-	token, err := (OIDCTokenKeyring{Keyring: k}).Get(config.SSOStartURL)
+	data, err := (OIDCTokenKeyring{Keyring: k}).Get(config.SSOStartURL)
 	if err != nil {
 		return fmt.Errorf("OIDC token not found in keyring for %s: %w", config.SSOStartURL, err)
 	}
-
-	// ExpiresIn is recalculated by OIDCTokenKeyring.Get() to reflect the
-	// remaining seconds until expiry, so time.Now().Add() is correct here.
-	expiration := time.Now().Add(time.Duration(token.ExpiresIn) * time.Second)
+	if data.Expired() {
+		return fmt.Errorf("OIDC token in keyring for %s has expired", config.SSOStartURL)
+	}
+	token := data.Token
+	expiration := data.Expiration
 
 	type cachedToken struct {
 		AccessToken  string `json:"accessToken"`
 		ExpiresAt    string `json:"expiresAt"`
 		RefreshToken string `json:"refreshToken,omitempty"`
+		// The client registration lets the AWS CLI and SDKs refresh the token
+		// themselves; without it they treat the file as unrefreshable.
+		ClientID              string `json:"clientId,omitempty"`
+		ClientSecret          string `json:"clientSecret,omitempty"`
+		RegistrationExpiresAt string `json:"registrationExpiresAt,omitempty"`
 	}
 
 	t := cachedToken{
@@ -210,6 +226,13 @@ func SyncOIDCTokenToStandardCache(config *ProfileConfig, k keyring.Keyring) erro
 	}
 	if token.RefreshToken != nil {
 		t.RefreshToken = aws.ToString(token.RefreshToken)
+	}
+	if data.Refreshable() {
+		t.ClientID = data.ClientID
+		t.ClientSecret = data.ClientSecret
+		if !data.ClientSecretExpiresAt.IsZero() {
+			t.RegistrationExpiresAt = data.ClientSecretExpiresAt.UTC().Format(time.RFC3339)
+		}
 	}
 
 	b, err := json.Marshal(t)
