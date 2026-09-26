@@ -22,45 +22,40 @@ func ConfigureClearCommand(app *kingpin.Application, a *AwsVault) {
 		StringVar(&input.ProfileName)
 
 	cmd.Action(func(c *kingpin.ParseContext) (err error) {
-		keyring, err := a.Keyring()
+		keyring, sessionKeyring, err := a.Keyrings()
 		if err != nil {
 			return err
+		}
+		if !a.hasSeparateSessionKeyring() {
+			sessionKeyring = nil
 		}
 		awsConfigFile, err := a.AwsConfigFile()
 		if err != nil {
 			return err
 		}
 
-		err = ClearCommand(input, awsConfigFile, keyring)
+		err = ClearCommand(input, awsConfigFile, keyring, sessionKeyring)
 		app.FatalIfError(err, "clear")
 		return nil
 	})
 }
 
-func ClearCommand(input ClearCommandInput, awsConfigFile *vault.ConfigFile, keyring keyring.Keyring) error {
-	sessions := &vault.SessionKeyring{Keyring: keyring}
+// ClearCommand removes cached sessions and OIDC tokens. A nil sessionKeyring
+// means sessions share the primary keyring.
+func ClearCommand(input ClearCommandInput, awsConfigFile *vault.ConfigFile, keyring, sessionKeyring keyring.Keyring) error {
+	numSessionsRemoved, err := clearSessions(input, keyring)
+	if err != nil {
+		return err
+	}
+
 	oidcTokens := &vault.OIDCTokenKeyring{Keyring: keyring}
-	var oldSessionsRemoved, numSessionsRemoved, numTokensRemoved int
-	var err error
+	var numTokensRemoved int
 	if input.ProfileName == "" {
-		oldSessionsRemoved, err = sessions.RemoveOldSessions()
-		if err != nil {
-			return err
-		}
-		numSessionsRemoved, err = sessions.RemoveAll()
-		if err != nil {
-			return err
-		}
 		numTokensRemoved, err = oidcTokens.RemoveAll()
 		if err != nil {
 			return err
 		}
 	} else {
-		numSessionsRemoved, err = sessions.RemoveForProfile(input.ProfileName)
-		if err != nil {
-			return err
-		}
-
 		if profileSection, ok := awsConfigFile.ProfileSection(input.ProfileName); ok {
 			startURL := awsConfigFile.ResolvedSSOStartURL(profileSection)
 			if startURL != "" {
@@ -74,7 +69,30 @@ func ClearCommand(input ClearCommandInput, awsConfigFile *vault.ConfigFile, keyr
 			}
 		}
 	}
-	fmt.Printf("Cleared %d sessions.\n", oldSessionsRemoved+numSessionsRemoved+numTokensRemoved)
+
+	if sessionKeyring != nil {
+		n, err := clearSessions(input, sessionKeyring)
+		if err != nil {
+			return err
+		}
+		numSessionsRemoved += n
+	}
+
+	fmt.Printf("Cleared %d sessions.\n", numSessionsRemoved+numTokensRemoved)
 
 	return nil
+}
+
+func clearSessions(input ClearCommandInput, keyring keyring.Keyring) (int, error) {
+	sessions := &vault.SessionKeyring{Keyring: keyring}
+	if input.ProfileName != "" {
+		return sessions.RemoveForProfile(input.ProfileName)
+	}
+
+	oldSessionsRemoved, err := sessions.RemoveOldSessions()
+	if err != nil {
+		return 0, err
+	}
+	numSessionsRemoved, err := sessions.RemoveAll()
+	return oldSessionsRemoved + numSessionsRemoved, err
 }
