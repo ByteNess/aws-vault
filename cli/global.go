@@ -157,8 +157,12 @@ func (a *AwsVault) Keyring() (keyring.Keyring, error) {
 	return a.keyringImpl, nil
 }
 
+func (a *AwsVault) hasSeparateSessionKeyring() bool {
+	return a.SessionKeyringBackend != "" || a.sessionKeyringOverrides.configured()
+}
+
 func (a *AwsVault) SessionKeyring() (keyring.Keyring, error) {
-	if a.SessionKeyringBackend == "" && !a.sessionKeyringOverrides.configured() {
+	if !a.hasSeparateSessionKeyring() {
 		log.Println("Using primary keyring for sessions")
 		return a.Keyring()
 	}
