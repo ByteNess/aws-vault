@@ -146,7 +146,13 @@ func NewSSORoleCredentialsProvider(k keyring.Keyring, config *ProfileConfig, use
 	cfg := NewAwsConfig(config.SSORegion, config.STSRegionalEndpoints, config.EndpointURL)
 
 	ssoRoleCredentialsProvider := &SSORoleCredentialsProvider{
-		OIDCClient:    ssooidc.NewFromConfig(cfg),
+		OIDCClient: ssooidc.NewFromConfig(cfg, func(o *ssooidc.Options) {
+			// API calls already use EndpointURL via the resolver; this makes the
+			// hand-built PKCE authorize URL use it too
+			if config.EndpointURL != "" {
+				o.BaseEndpoint = aws.String(config.EndpointURL)
+			}
+		}),
 		StartURL:      config.SSOStartURL,
 		SSOClient:     sso.NewFromConfig(cfg),
 		AccountID:     config.SSOAccountID,

@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
 )
 
 // newTestCallbackServer binds a callback server without serving it, so
@@ -231,5 +233,18 @@ func TestDeviceCodeReason(t *testing.T) {
 				t.Errorf("want device code when %s is set", v)
 			}
 		})
+	}
+}
+
+func TestNewSSORoleCredentialsProvider_EndpointURL(t *testing.T) {
+	for _, endpoint := range []string{"", "https://oidc.example.internal"} {
+		cp, err := NewSSORoleCredentialsProvider(nil, &ProfileConfig{SSORegion: "eu-west-1", EndpointURL: endpoint}, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := aws.ToString(cp.(*SSORoleCredentialsProvider).OIDCClient.Options().BaseEndpoint)
+		if got != endpoint {
+			t.Errorf("EndpointURL %q: OIDC BaseEndpoint = %q, want %q", endpoint, got, endpoint)
+		}
 	}
 }
