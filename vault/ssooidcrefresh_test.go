@@ -375,6 +375,44 @@ func TestGetOIDCTokenKeepsRefreshTokenOnTransientError(t *testing.T) {
 	}
 }
 
+// Every error the OIDC service models that cannot succeed on retry must lead
+// to a new login rather than to a caller stuck on the same failure: the grant
+// and client errors, and the request errors an administrator's configuration
+// can cause, such as a scope that is no longer allowed.
+func TestGetOIDCTokenFallsBackToLoginOnPermanentRefreshError(t *testing.T) {
+	for _, errorType := range []string{
+		"AccessDeniedException",
+		"ExpiredTokenException",
+		"InvalidClientException",
+		"InvalidGrantException",
+		"InvalidRequestException",
+		"InvalidScopeException",
+		"UnauthorizedClientException",
+		"UnsupportedGrantTypeException",
+	} {
+		t.Run(errorType, func(t *testing.T) {
+			f := &fakeOIDC{refreshStatus: http.StatusBadRequest, refreshErrorType: errorType}
+			cache := &memOIDCCache{data: map[string]*OIDCTokenData{}}
+			p := newTestSSOProvider(t, f, cache)
+			cache.data[p.StartURL] = expiredRefreshableToken()
+
+			token, cached, err := p.getOIDCToken(context.Background())
+			if err != nil {
+				t.Fatalf("getOIDCToken: %v", err)
+			}
+			if cached || aws.ToString(token.AccessToken) != "access-1" {
+				t.Errorf("token = %q cached=%t, want access-1 from a new device flow", aws.ToString(token.AccessToken), cached)
+			}
+			if cache.removed != 1 {
+				t.Errorf("stale token removed %d time(s), want 1", cache.removed)
+			}
+			if n := len(f.calls("/device_authorization")); n != 1 {
+				t.Errorf("device authorization started %d time(s), want 1", n)
+			}
+		})
+	}
+}
+
 // Throttling must not be read as a refusal of the grant: SlowDownException is
 // a 400 and API-level throttling a 429, and both are what a burst of parallel
 // credential_process callers gets. Treating either as a rejection would drop

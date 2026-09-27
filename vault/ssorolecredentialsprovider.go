@@ -229,29 +229,38 @@ func (p *SSORoleCredentialsProvider) cachedOIDCToken(ctx context.Context, data *
 	return nil, true, nil
 }
 
-// isOIDCRejection reports whether the OIDC service refused the grant itself,
-// so that retrying with the same refresh token can never succeed and a new
-// login is the only way forward.
+// isOIDCRejection reports whether the OIDC service refused the refresh in a
+// way that retrying cannot fix, so a new login is the only way forward. It
+// covers the grant and client errors (a revoked or already redeemed refresh
+// token, an ended session, an expired registration) as well as the request
+// errors that would be answered the same way every time, such as scopes an
+// administrator no longer allows.
 //
-// Only the grant errors count. Everything else is transient and keeps the
-// refresh token for the next attempt: transport failures, 5xx, and throttling
-// in particular. Throttling is not distinguishable by status code alone
-// (SlowDownException is a 400 and API-level throttling a 429), and it is most
-// likely exactly when several credential_process callers refresh at once,
-// which is the burst this change exists to keep out of the browser.
+// Everything else is transient and keeps the refresh token for the next
+// attempt: transport failures, 5xx, and throttling in particular. Throttling
+// is not distinguishable by status code alone (SlowDownException is a 400 and
+// API-level throttling a 429), and it is most likely exactly when several
+// credential_process callers refresh at once, which is the burst this change
+// exists to keep out of the browser.
 func isOIDCRejection(err error) bool {
 	var (
-		invalidGrant       *ssooidctypes.InvalidGrantException
-		expiredToken       *ssooidctypes.ExpiredTokenException
-		invalidClient      *ssooidctypes.InvalidClientException
-		unauthorizedClient *ssooidctypes.UnauthorizedClientException
-		accessDenied       *ssooidctypes.AccessDeniedException
+		accessDenied         *ssooidctypes.AccessDeniedException
+		expiredToken         *ssooidctypes.ExpiredTokenException
+		invalidClient        *ssooidctypes.InvalidClientException
+		invalidGrant         *ssooidctypes.InvalidGrantException
+		invalidRequest       *ssooidctypes.InvalidRequestException
+		invalidScope         *ssooidctypes.InvalidScopeException
+		unauthorizedClient   *ssooidctypes.UnauthorizedClientException
+		unsupportedGrantType *ssooidctypes.UnsupportedGrantTypeException
 	)
-	return errors.As(err, &invalidGrant) ||
+	return errors.As(err, &accessDenied) ||
 		errors.As(err, &expiredToken) ||
 		errors.As(err, &invalidClient) ||
+		errors.As(err, &invalidGrant) ||
+		errors.As(err, &invalidRequest) ||
+		errors.As(err, &invalidScope) ||
 		errors.As(err, &unauthorizedClient) ||
-		errors.As(err, &accessDenied)
+		errors.As(err, &unsupportedGrantType)
 }
 
 // refreshOIDCToken exchanges the refresh token of an expired cached token for
