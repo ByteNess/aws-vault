@@ -178,7 +178,7 @@ func TestNewOIDCTokenPKCE_EndToEnd(t *testing.T) {
 	if aws.ToString(tok.AccessToken) != "access-token" {
 		t.Errorf("access token = %q, want access-token", aws.ToString(tok.AccessToken))
 	}
-	if !strings.Contains(shown, "Authorization code received") {
+	if !strings.Contains(shown, "Request approved") {
 		t.Errorf("browser showed %q, want the success page", shown)
 	}
 }
@@ -192,7 +192,7 @@ func TestNewOIDCTokenPKCE_UserDenies(t *testing.T) {
 	if errors.As(err, &ae) {
 		t.Errorf("err = %v, want it to come from the callback rather than the token call", err)
 	}
-	if !strings.Contains(shown, "Authorization failed") {
+	if !strings.Contains(shown, "Sign-in failed") || !strings.Contains(shown, "access_denied") {
 		t.Errorf("browser showed %q, want the failure page", shown)
 	}
 }

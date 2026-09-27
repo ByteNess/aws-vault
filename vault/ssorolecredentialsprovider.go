@@ -8,7 +8,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"html"
+	"html/template"
 	"log"
 	"net"
 	"net/http"
@@ -406,13 +406,20 @@ func (s *oauthCallbackServer) handleCallback(w http.ResponseWriter, r *http.Requ
 	// an OAuth2 error instead of a code, e.g. the user denied access
 	if errCode := r.URL.Query().Get("error"); errCode != "" {
 		errDesc := r.URL.Query().Get("error_description")
-		writeCallbackPage(w, "Authorization failed, you can close this tab now.")
+		writeCallbackPage(w, callbackView{
+			Title:   "Sign-in failed",
+			Message: fmt.Sprintf("The request was not approved (%s). See your terminal for details.", errCode),
+		})
 		s.report(oauthCallbackResult{err: fmt.Errorf("authorization error: %s: %s", errCode, errDesc)})
 		return
 	}
 
 	code := r.URL.Query().Get("code")
-	writeCallbackPage(w, "Authorization code received, you can close this tab now.")
+	writeCallbackPage(w, callbackView{
+		OK:      true,
+		Title:   "Request approved",
+		Message: "You have approved the request for access. aws-vault will finish signing in.",
+	})
 	s.report(oauthCallbackResult{code: code})
 }
 
@@ -428,18 +435,52 @@ func (s *oauthCallbackServer) report(r oauthCallbackResult) {
 // The script drops the authorization code from the address bar, then tries to
 // close the tab. Browsers only allow that if script opened the tab or the page
 // is its only history entry, which the SSO sign-in pages usually rule out.
-const callbackPage = `<!doctype html>
-<html><head><meta charset="utf-8"><title>aws-vault</title></head>
-<body><p>%s</p><script>history.replaceState(null, "", location.pathname); window.close()</script></body></html>
-`
+var callbackPage = template.Must(template.New("callback").Parse(`<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>aws-vault</title>
+<style>
+:root { color-scheme: light dark; --fg: #16191f; --bg: #fff;
+  --ok: #1a7f37; --ok-bg: #effbf1; --err: #cf222e; --err-bg: #fff1f0; }
+@media (prefers-color-scheme: dark) { :root { --fg: #e6e9ee; --bg: #16191f;
+  --ok: #3fb950; --ok-bg: #12261a; --err: #f85149; --err-bg: #2d1416; } }
+body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: var(--bg);
+  color: var(--fg); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { width: min(400px, calc(100vw - 32px)); }
+.card { display: flex; gap: 10px; padding: 14px 16px; border: 2px solid var(--c); border-radius: 12px;
+  background: var(--c-bg); }
+.ok { --c: var(--ok); --c-bg: var(--ok-bg); }
+.err { --c: var(--err); --c-bg: var(--err-bg); }
+svg { flex: none; width: 20px; height: 20px; margin-top: 1px; color: var(--c); }
+h1 { margin: 0; font-size: 15px; }
+p { margin: 0; }
+.hint { margin-top: 20px; }
+</style></head>
+<body><main>
+<div class="card {{if .OK}}ok{{else}}err{{end}}">
+<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="8.5"/>{{if .OK}}<path d="m6 10.3 2.7 2.7L14.2 7.3"/>{{else}}<path d="m7.2 7.2 5.6 5.6m0-5.6-5.6 5.6"/>{{end}}</svg>
+<div><h1>{{.Title}}</h1><p>{{.Message}}</p></div>
+</div>
+<p class="hint">You can close this window.</p>
+</main>
+<script>history.replaceState(null, "", location.pathname); window.close()</script>
+</body></html>
+`))
 
-func writeCallbackPage(w http.ResponseWriter, msg string) {
+type callbackView struct {
+	OK             bool
+	Title, Message string
+}
+
+func writeCallbackPage(w http.ResponseWriter, v callbackView) {
 	h := w.Header()
 	h.Set("Content-Type", "text/html; charset=utf-8")
 	h.Set("Cache-Control", "no-store")
 	// the callback URL carries the authorization code
 	h.Set("Referrer-Policy", "no-referrer")
-	fmt.Fprintf(w, callbackPage, html.EscapeString(msg))
+	if err := callbackPage.Execute(w, v); err != nil {
+		log.Printf("Failed to write the OAuth callback page: %s", err)
+	}
 }
 
 // redirectURI returns the URL for the OAuth callback endpoint with the server's port included in the address.

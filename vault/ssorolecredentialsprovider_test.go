@@ -65,7 +65,7 @@ func TestHandleCallback_Success(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
-	if !strings.Contains(rec.Body.String(), "Authorization code received") {
+	if !strings.Contains(rec.Body.String(), "Request approved") {
 		t.Errorf("body = %q, want success message", rec.Body.String())
 	}
 
@@ -194,7 +194,7 @@ func TestCallbackPageDeliveredBeforeShutdown(t *testing.T) {
 		}
 		body, err := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
-		if err != nil || !strings.Contains(string(body), "Authorization failed") {
+		if err != nil || !strings.Contains(string(body), "Sign-in failed") {
 			t.Fatalf("run %d: body = %q, err = %v", i, body, err)
 		}
 		<-closed
@@ -271,5 +271,17 @@ func TestHandleCallback_RepeatedCallbackDoesNotBlock(t *testing.T) {
 	}
 	if r := recvResult(t, s); r.code != "abc123" {
 		t.Errorf("code = %q, want the first callback's", r.code)
+	}
+}
+
+func TestHandleCallback_ErrorIsEscaped(t *testing.T) {
+	s := newTestCallbackServer(t)
+
+	rec := httptest.NewRecorder()
+	s.handleCallback(rec, httptest.NewRequest(http.MethodGet, "/oauth/callback?state="+s.state+"&error=%3Cb%3Ex%3C%2Fb%3E", nil))
+	recvResult(t, s)
+
+	if body := rec.Body.String(); strings.Contains(body, "<b>x</b>") || !strings.Contains(body, "&lt;b&gt;x&lt;/b&gt;") {
+		t.Errorf("body = %q, want the error code HTML-escaped", body)
 	}
 }
