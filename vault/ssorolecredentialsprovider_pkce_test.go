@@ -196,3 +196,22 @@ func TestNewOIDCTokenPKCE_UserDenies(t *testing.T) {
 		t.Errorf("browser showed %q, want the failure page", shown)
 	}
 }
+
+func TestNewOIDCTokenPKCE_Timeout(t *testing.T) {
+	srv := httptest.NewServer(&fakeOIDC{t: t})
+	t.Cleanup(srv.Close)
+
+	origOpen, origTimeout := openBrowser, pkceSignInTimeout
+	t.Cleanup(func() { openBrowser, pkceSignInTimeout = origOpen, origTimeout })
+	openBrowser = func(string) error { return nil } // the user never signs in
+	pkceSignInTimeout = 50 * time.Millisecond
+
+	p := &SSORoleCredentialsProvider{
+		OIDCClient: ssooidc.New(ssooidc.Options{Region: "eu-west-1", BaseEndpoint: aws.String(srv.URL)}),
+		StartURL:   fakeStartURL,
+	}
+	_, err := p.newOIDCTokenPKCE(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "did not complete") {
+		t.Fatalf("err = %v, want the sign-in timeout", err)
+	}
+}

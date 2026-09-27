@@ -233,6 +233,9 @@ func (p *SSORoleCredentialsProvider) newOIDCTokenDeviceCode(ctx context.Context)
 	}
 }
 
+// pkceSignInTimeout bounds the wait for the browser, as in the AWS CLI.
+var pkceSignInTimeout = 10 * time.Minute
+
 // newOIDCTokenPKCE generates a new OIDC token using the authorization code flow
 // with PKCE (https://datatracker.ietf.org/doc/html/rfc7636).
 func (p *SSORoleCredentialsProvider) newOIDCTokenPKCE(ctx context.Context) (*ssooidc.CreateTokenOutput, error) {
@@ -310,6 +313,8 @@ func (p *SSORoleCredentialsProvider) newOIDCTokenPKCE(ctx context.Context) (*sso
 	case r = <-cbServer.resultChan:
 	case <-ctx.Done():
 		return nil, fmt.Errorf("aborted waiting for OAuth callback: %w", ctx.Err())
+	case <-time.After(pkceSignInTimeout):
+		return nil, fmt.Errorf("SSO sign-in did not complete in the browser within %s", pkceSignInTimeout)
 	}
 
 	if r.err != nil {
