@@ -1,6 +1,7 @@
 package vault
 
 import (
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -10,10 +11,9 @@ import (
 	"time"
 )
 
-// newTestCallbackServer builds an oauthCallbackServer with a known state and a
-// buffered result channel, without starting the underlying HTTP listener. The
-// listener is only needed for redirectURI(); tests that don't call it may leave
-// it nil.
+// newTestCallbackServer builds an oauthCallbackServer with its listener bound
+// but not serving, so handlers can be called directly; the listener is closed
+// when the test ends.
 func newTestCallbackServer(t *testing.T) *oauthCallbackServer {
 	t.Helper()
 	s, err := newOauthCallbackServer()
@@ -148,5 +148,92 @@ func assertNoResult(t *testing.T, s *oauthCallbackServer) {
 	case r := <-s.resultChan:
 		t.Fatalf("unexpected result sent on resultChan: %+v", r)
 	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+func TestHandleCallback_PageHeaders(t *testing.T) {
+	s := newTestCallbackServer(t)
+
+	rec := httptest.NewRecorder()
+	s.handleCallback(rec, httptest.NewRequest(http.MethodGet, "/oauth/callback?state="+s.state+"&code=abc123", nil))
+	recvResult(t, s)
+
+	for k, want := range map[string]string{
+		"Content-Type":    "text/html; charset=utf-8",
+		"Cache-Control":   "no-store",
+		"Referrer-Policy": "no-referrer",
+	} {
+		if got := rec.Header().Get(k); got != want {
+			t.Errorf("%s = %q, want %q", k, got, want)
+		}
+	}
+	if !strings.Contains(rec.Body.String(), "window.close()") {
+		t.Errorf("body = %q, want a best-effort window.close()", rec.Body.String())
+	}
+}
+
+// The PKCE flow closes the server as soon as it receives a result, so the page
+// must already be on the wire by then or the browser gets a dropped connection.
+func TestCallbackPageDeliveredBeforeShutdown(t *testing.T) {
+	for i := 0; i < 200; i++ {
+		s, err := newOauthCallbackServer()
+		if err != nil {
+			t.Fatal(err)
+		}
+		go func() { _ = s.Serve() }()
+		closed := make(chan struct{})
+		go func() {
+			<-s.resultChan
+			_ = s.h.Close()
+			close(closed)
+		}()
+
+		resp, err := http.Get(s.redirectURI() + "?state=" + s.state + "&error=access_denied")
+		if err != nil {
+			t.Fatalf("run %d: %v", i, err)
+		}
+		body, err := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if err != nil || !strings.Contains(string(body), "Authorization failed") {
+			t.Fatalf("run %d: body = %q, err = %v", i, body, err)
+		}
+		<-closed
+	}
+}
+
+func TestDeviceCodeReason(t *testing.T) {
+	sshVars := []string{"SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"}
+	clearSSH := func(t *testing.T) {
+		for _, v := range sshVars {
+			t.Setenv(v, "")
+		}
+	}
+
+	t.Run("pkce by default", func(t *testing.T) {
+		clearSSH(t)
+		if got := (&SSORoleCredentialsProvider{}).deviceCodeReason(); got != "" {
+			t.Errorf("deviceCodeReason() = %q, want PKCE", got)
+		}
+	})
+	t.Run("device code requested", func(t *testing.T) {
+		clearSSH(t)
+		if got := (&SSORoleCredentialsProvider{UseDeviceCode: true}).deviceCodeReason(); got == "" {
+			t.Error("want device code when requested")
+		}
+	})
+	t.Run("stdout", func(t *testing.T) {
+		clearSSH(t)
+		if got := (&SSORoleCredentialsProvider{UseStdout: true}).deviceCodeReason(); got == "" {
+			t.Error("want device code with --stdout")
+		}
+	})
+	for _, v := range sshVars {
+		t.Run("ssh via "+v, func(t *testing.T) {
+			clearSSH(t)
+			t.Setenv(v, "set")
+			if got := (&SSORoleCredentialsProvider{}).deviceCodeReason(); got == "" {
+				t.Errorf("want device code when %s is set", v)
+			}
+		})
 	}
 }

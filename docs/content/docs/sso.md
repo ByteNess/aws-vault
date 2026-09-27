@@ -32,6 +32,27 @@ sso_role_name=Administrator
 `exec` and `export` expose `sso_account_id` to the sub-process as the `AWS_ACCOUNT_ID` environment variable, so
 scripts can use the account ID without calling `aws sts get-caller-identity`.
 
+## Signing in
+
+By default aws-vault signs in with the OAuth2 authorization code flow with
+[PKCE](https://datatracker.ietf.org/doc/html/rfc7636), like `aws sso login` in v2 of the AWS CLI. aws-vault starts a
+short-lived callback server on `127.0.0.1` and opens the IAM Identity Center sign-in page in your default browser. Once
+you allow access, the browser is sent back to that local server and aws-vault exchanges the authorization code for a
+token, so there is no code to compare between the terminal and the browser. The code is only ever sent to your own
+machine, and it is useless without the PKCE secret that never leaves aws-vault.
+
+aws-vault uses the device code flow instead, which shows a URL and code to confirm in any browser, when:
+
+* `--device-code` is passed, or `AWS_VAULT_DEVICE_CODE` is set
+* `--stdout` is passed, or `AWS_VAULT_STDOUT` is set, since the URL may then be opened on another machine
+* it runs in an SSH session (`SSH_CONNECTION`, `SSH_CLIENT` or `SSH_TTY` is set)
+
+The browser can only reach the callback server when it runs on the same machine, which is why these cases use the
+device code flow. `--device-code` is available on `exec`, `export` and `login`.
+
+Browsers only let a page close its own tab in limited cases, so the tab usually stays open after signing in, showing
+that you can close it.
+
 ## Assuming a role with SSO
 
 If your SSO Permission Set allows you to assume another IAM role
