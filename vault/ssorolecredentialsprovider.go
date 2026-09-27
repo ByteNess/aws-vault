@@ -154,8 +154,7 @@ func (p *SSORoleCredentialsProvider) getOIDCToken(ctx context.Context) (token *s
 }
 
 // deviceCodeReason returns why to use the device code flow instead of PKCE, or
-// "". PKCE redirects to this machine's 127.0.0.1, which a browser on another
-// machine cannot reach.
+// "". PKCE needs the browser on this machine to reach the 127.0.0.1 callback.
 func (p *SSORoleCredentialsProvider) deviceCodeReason() string {
 	switch {
 	case p.UseDeviceCode:
@@ -323,10 +322,8 @@ func (p *SSORoleCredentialsProvider) newOIDCTokenPKCE(ctx context.Context) (*sso
 	return tok, nil
 }
 
-// authorizeURL returns the OIDC /authorize endpoint. It isn't a modeled API
-// operation, so it's derived from the client's resolved endpoint, as in the AWS
-// CLI; that gives the right domain for every partition and honours a custom
-// endpoint.
+// authorizeURL derives the /authorize endpoint, which isn't a modeled operation,
+// from the client's resolved endpoint, as the AWS CLI does, so every partition works.
 func (p *SSORoleCredentialsProvider) authorizeURL(ctx context.Context) (*url.URL, error) {
 	o := p.OIDCClient.Options()
 	e, err := o.EndpointResolverV2.ResolveEndpoint(ctx, ssooidc.EndpointParameters{
@@ -346,7 +343,7 @@ func (p *SSORoleCredentialsProvider) authorizeURL(ctx context.Context) (*url.URL
 // openBrowser is a variable so tests can replace it.
 var openBrowser = open.Run
 
-// openOrPrintURL opens the URL in the default browser, or only prints it to stderr if UseStdout is set.
+// openOrPrintURL opens url in the default browser, or only prints it if UseStdout is set.
 func (p *SSORoleCredentialsProvider) openOrPrintURL(url string) {
 	if p.UseStdout {
 		fmt.Fprintf(os.Stderr, "Open the SSO authorization page in a browser (use Ctrl-C to abort)\n%s\n", url)
@@ -387,7 +384,6 @@ func newOauthCallbackServer() (*oauthCallbackServer, error) {
 	return oauth, nil
 }
 
-// handleCallback handles the OAuth2 callback request and sends the authorization code to the server channel.
 func (s *oauthCallbackServer) handleCallback(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
@@ -497,7 +493,6 @@ func writeCallbackPage(w http.ResponseWriter, v callbackView) {
 	}
 }
 
-// redirectURI returns the URL for the OAuth callback endpoint with the server's port included in the address.
 func (s *oauthCallbackServer) redirectURI() string {
 	// the host must match the registered redirect URI
 	u := url.URL{
@@ -518,8 +513,7 @@ type oauthCallbackServer struct {
 	h  *http.Server
 
 	// secret used to prevent CSRF attacks
-	state string
-	// channel to send authorization code after successful callback
+	state      string
 	resultChan chan oauthCallbackResult
 }
 
@@ -527,8 +521,7 @@ func (s *oauthCallbackServer) Serve() error {
 	return s.h.Serve(s.ln)
 }
 
-// shutdown waits for in-flight callbacks to finish, so a page being written as
-// the flow gets its result is sent in full rather than cut off.
+// shutdown lets an in-flight callback finish sending its page before closing.
 func (s *oauthCallbackServer) shutdown() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
