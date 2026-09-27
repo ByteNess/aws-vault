@@ -165,7 +165,7 @@ func TestHandleCallback_PageHeaders(t *testing.T) {
 			t.Errorf("%s = %q, want %q", k, got, want)
 		}
 	}
-	for _, js := range []string{`history.replaceState(null, "", location.pathname)`, "window.close()"} {
+	for _, js := range []string{`history.replaceState(null, "", location.pathname)`, "window.close()", `<link rel="icon" href="data:image/svg+xml,`} {
 		if !strings.Contains(rec.Body.String(), js) {
 			t.Errorf("body = %q, want %s", rec.Body.String(), js)
 		}
