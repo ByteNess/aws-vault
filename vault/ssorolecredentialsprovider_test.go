@@ -1,6 +1,7 @@
 package vault
 
 import (
+	"context"
 	"io"
 	"net"
 	"net/http"
@@ -300,5 +301,29 @@ func TestHandleCallback_MissingCode(t *testing.T) {
 	}
 	if r := recvResult(t, s); r.err == nil || r.code != "" {
 		t.Errorf("result = %+v, want an error and no code", r)
+	}
+}
+
+func TestAuthorizeURL(t *testing.T) {
+	for _, c := range []struct {
+		region, endpoint, want string
+	}{
+		{"eu-west-1", "", "https://oidc.eu-west-1.amazonaws.com/authorize"},
+		{"cn-north-1", "", "https://oidc.cn-north-1.amazonaws.com.cn/authorize"},
+		{"us-iso-east-1", "", "https://oidc.us-iso-east-1.c2s.ic.gov/authorize"},
+		{"eu-west-1", "https://proxy.example.com/oidc", "https://proxy.example.com/oidc/authorize"},
+		{"eu-west-1", "oidc.example.com", ""}, // not an absolute URL
+	} {
+		cp, err := NewSSORoleCredentialsProvider(nil, &ProfileConfig{SSORegion: c.region, EndpointURL: c.endpoint}, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		u, err := cp.(*SSORoleCredentialsProvider).authorizeURL(context.Background())
+		switch {
+		case c.want == "" && err == nil:
+			t.Errorf("%s %q: got %s, want an error", c.region, c.endpoint, u)
+		case c.want != "" && (err != nil || u.String() != c.want):
+			t.Errorf("%s %q: got %v, %v; want %s", c.region, c.endpoint, u, err, c.want)
+		}
 	}
 }

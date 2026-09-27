@@ -285,24 +285,10 @@ func (p *SSORoleCredentialsProvider) newOIDCTokenPKCE(ctx context.Context) (*sso
 		"code_challenge":        {codeChallenge},
 		"scopes":                {"sso:account:access"},
 	}
-	// /authorize is not a modeled API operation, so build its URL by hand.
-	// BaseEndpoint is a full URL, not a host.
-	authorizeURL := &url.URL{
-		Scheme: "https",
-		Host:   fmt.Sprintf("oidc.%s.amazonaws.com", p.OIDCClient.Options().Region),
+	authorizeURL, err := p.authorizeURL(ctx)
+	if err != nil {
+		return nil, err
 	}
-	if base := aws.ToString(p.OIDCClient.Options().BaseEndpoint); base != "" {
-		u, err := url.Parse(base)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse OIDC base endpoint %q: %w", base, err)
-		}
-		if u.Scheme == "" || u.Host == "" {
-			return nil, fmt.Errorf("OIDC base endpoint %q is not an absolute URL", base)
-		}
-		authorizeURL = u
-	}
-	// JoinPath keeps any path prefix of the base endpoint
-	authorizeURL = authorizeURL.JoinPath("authorize")
 	authorizeURL.RawQuery = args.Encode()
 	log.Printf("Authorize URL: %s", authorizeURL.String())
 
@@ -335,6 +321,26 @@ func (p *SSORoleCredentialsProvider) newOIDCTokenPKCE(ctx context.Context) (*sso
 
 	log.Printf("Created new OIDC access token for %s (expires in: %ds)", p.StartURL, tok.ExpiresIn)
 	return tok, nil
+}
+
+// authorizeURL returns the OIDC /authorize endpoint. It isn't a modeled API
+// operation, so it's derived from the client's resolved endpoint, as in the AWS
+// CLI; that gives the right domain for every partition and honours a custom
+// endpoint.
+func (p *SSORoleCredentialsProvider) authorizeURL(ctx context.Context) (*url.URL, error) {
+	o := p.OIDCClient.Options()
+	e, err := o.EndpointResolverV2.ResolveEndpoint(ctx, ssooidc.EndpointParameters{
+		Region:   aws.String(o.Region),
+		Endpoint: o.BaseEndpoint,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve the OIDC endpoint: %w", err)
+	}
+	if e.URI.Scheme == "" || e.URI.Host == "" {
+		return nil, fmt.Errorf("OIDC endpoint %q is not an absolute URL", e.URI.String())
+	}
+	// JoinPath keeps any path prefix of a custom endpoint
+	return e.URI.JoinPath("authorize"), nil
 }
 
 // openBrowser is a variable so tests can replace it.
