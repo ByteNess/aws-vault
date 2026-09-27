@@ -37,6 +37,9 @@ type SSORoleCredentialsProvider struct {
 	UseStdout      bool
 }
 
+// pollSleep is a variable so tests can replace it.
+var pollSleep = time.Sleep
+
 func millisecondsTimeValue(v int64) time.Time {
 	return time.Unix(0, v*int64(time.Millisecond))
 }
@@ -184,17 +187,15 @@ func (p *SSORoleCredentialsProvider) newOIDCToken(ctx context.Context) (*ssooidc
 		})
 		if err != nil {
 			var sde *ssooidctypes.SlowDownException
-			if errors.As(err, &sde) {
-				retryInterval += slowDownDelay
-			}
-
 			var ape *ssooidctypes.AuthorizationPendingException
-			if errors.As(err, &ape) {
-				time.Sleep(retryInterval)
-				continue
+			switch {
+			case errors.As(err, &sde):
+				retryInterval += slowDownDelay
+			case !errors.As(err, &ape):
+				return nil, err
 			}
-
-			return nil, err
+			pollSleep(retryInterval)
+			continue
 		}
 
 		log.Printf("Created new OIDC access token for %s (expires in: %ds)", p.StartURL, t.ExpiresIn)
