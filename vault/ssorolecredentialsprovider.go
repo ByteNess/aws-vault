@@ -320,9 +320,6 @@ func (p *SSORoleCredentialsProvider) newOIDCTokenPKCE(ctx context.Context) (*sso
 	if r.err != nil {
 		return nil, r.err
 	}
-	if r.code == "" {
-		return nil, errors.New("no authorization code received")
-	}
 
 	tok, err := p.OIDCClient.CreateToken(ctx, &ssooidc.CreateTokenInput{
 		ClientId:     clientCreds.ClientId,
@@ -415,6 +412,14 @@ func (s *oauthCallbackServer) handleCallback(w http.ResponseWriter, r *http.Requ
 	}
 
 	code := r.URL.Query().Get("code")
+	if code == "" {
+		writeCallbackPage(w, callbackView{
+			Title:   "Sign-in failed",
+			Message: "No authorization code was received. See your terminal for details.",
+		})
+		s.report(oauthCallbackResult{err: errors.New("no authorization code received")})
+		return
+	}
 	writeCallbackPage(w, callbackView{
 		OK:      true,
 		Title:   "Request approved",

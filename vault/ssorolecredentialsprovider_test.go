@@ -288,3 +288,17 @@ func TestHandleCallback_ErrorIsEscaped(t *testing.T) {
 		t.Errorf("body = %q, want the error code HTML-escaped", body)
 	}
 }
+
+func TestHandleCallback_MissingCode(t *testing.T) {
+	s := newTestCallbackServer(t)
+
+	rec := httptest.NewRecorder()
+	s.handleCallback(rec, httptest.NewRequest(http.MethodGet, "/oauth/callback?state="+s.state, nil))
+
+	if !strings.Contains(rec.Body.String(), "Sign-in failed") {
+		t.Errorf("body = %q, want the failure page", rec.Body.String())
+	}
+	if r := recvResult(t, s); r.err == nil || r.code != "" {
+		t.Errorf("result = %+v, want an error and no code", r)
+	}
+}
