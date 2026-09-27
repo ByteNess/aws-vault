@@ -342,7 +342,7 @@ func (p *SSORoleCredentialsProvider) newOIDCTokenPKCE(ctx context.Context) (*sso
 // openBrowser is a variable so tests can replace it.
 var openBrowser = open.Run
 
-// openOrPrintURL opens the URL in the default browser or prints it to stdout if UseStdout is set.
+// openOrPrintURL opens the URL in the default browser, or only prints it to stderr if UseStdout is set.
 func (p *SSORoleCredentialsProvider) openOrPrintURL(url string) {
 	if p.UseStdout {
 		fmt.Fprintf(os.Stderr, "Open the SSO authorization page in a browser (use Ctrl-C to abort)\n%s\n", url)
@@ -406,13 +406,22 @@ func (s *oauthCallbackServer) handleCallback(w http.ResponseWriter, r *http.Requ
 	if errCode := r.URL.Query().Get("error"); errCode != "" {
 		errDesc := r.URL.Query().Get("error_description")
 		writeCallbackPage(w, "Authorization failed, you can close this tab now.")
-		s.resultChan <- oauthCallbackResult{err: fmt.Errorf("authorization error: %s: %s", errCode, errDesc)}
+		s.report(oauthCallbackResult{err: fmt.Errorf("authorization error: %s: %s", errCode, errDesc)})
 		return
 	}
 
 	code := r.URL.Query().Get("code")
 	writeCallbackPage(w, "Authorization code received, you can close this tab now.")
-	s.resultChan <- oauthCallbackResult{code: code}
+	s.report(oauthCallbackResult{code: code})
+}
+
+// report sends the first result only, so a repeated callback (e.g. a reload)
+// can't block its handler once the flow stops reading.
+func (s *oauthCallbackServer) report(r oauthCallbackResult) {
+	select {
+	case s.resultChan <- r:
+	default:
+	}
 }
 
 // Browsers only let a page close its tab if script opened the tab or the page
