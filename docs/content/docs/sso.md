@@ -38,9 +38,9 @@ By default aws-vault signs in with the OAuth2 authorization code flow with
 [PKCE](https://datatracker.ietf.org/doc/html/rfc7636), like `aws sso login` in v2 of the AWS CLI. aws-vault starts a
 short-lived callback server on `127.0.0.1` and opens the IAM Identity Center sign-in page in your default browser. Once
 you allow access, the browser is sent back to that local server and aws-vault exchanges the authorization code for a
-token, so there is no code to compare between the terminal and the browser. The code is only ever sent to your own
-machine, and it is useless without the PKCE secret that never leaves aws-vault. If sign-in isn't completed within
-10 minutes, aws-vault stops waiting and exits with an error.
+token, so there is no code to compare between the terminal and the browser. The browser only ever delivers the code to
+your own machine, and the code is useless without the PKCE secret, which never passes through the browser: aws-vault
+sends it only to AWS. If sign-in isn't completed within 10 minutes, aws-vault stops waiting and exits with an error.
 
 aws-vault uses the device code flow instead, which shows a URL and code to confirm in any browser, when:
 
