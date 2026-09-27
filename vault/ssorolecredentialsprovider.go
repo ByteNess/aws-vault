@@ -438,7 +438,7 @@ func (s *oauthCallbackServer) report(r oauthCallbackResult) {
 var callbackPage = template.Must(template.New("callback").Parse(`<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>aws-vault</title>
+<title>aws-vault | {{.Title}}</title>
 {{if .OK}}<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><circle cx='8' cy='8' r='8' fill='%231a7f37'/><path d='m4.6 8.2 2.3 2.3 4.5-4.6' fill='none' stroke='white' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/></svg>">
 {{- else}}<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><circle cx='8' cy='8' r='8' fill='%23cf222e'/><path d='m5.4 5.4 5.2 5.2m0-5.2-5.2 5.2' fill='none' stroke='white' stroke-width='1.8' stroke-linecap='round'/></svg>">
 {{- end}}

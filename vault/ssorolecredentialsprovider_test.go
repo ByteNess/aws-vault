@@ -165,7 +165,7 @@ func TestHandleCallback_PageHeaders(t *testing.T) {
 			t.Errorf("%s = %q, want %q", k, got, want)
 		}
 	}
-	for _, js := range []string{`history.replaceState(null, "", location.pathname)`, "window.close()", `<link rel="icon" href="data:image/svg+xml,`} {
+	for _, js := range []string{`history.replaceState(null, "", location.pathname)`, "window.close()", `<link rel="icon" href="data:image/svg+xml,`, "<title>aws-vault | Request approved</title>"} {
 		if !strings.Contains(rec.Body.String(), js) {
 			t.Errorf("body = %q, want %s", rec.Body.String(), js)
 		}
@@ -281,6 +281,9 @@ func TestHandleCallback_ErrorIsEscaped(t *testing.T) {
 	s.handleCallback(rec, httptest.NewRequest(http.MethodGet, "/oauth/callback?state="+s.state+"&error=%3Cb%3Ex%3C%2Fb%3E", nil))
 	recvResult(t, s)
 
+	if body := rec.Body.String(); !strings.Contains(body, "<title>aws-vault | Sign-in failed</title>") {
+		t.Errorf("body = %q, want the failure title", body)
+	}
 	if body := rec.Body.String(); strings.Contains(body, "<b>x</b>") || !strings.Contains(body, "&lt;b&gt;x&lt;/b&gt;") {
 		t.Errorf("body = %q, want the error code HTML-escaped", body)
 	}
