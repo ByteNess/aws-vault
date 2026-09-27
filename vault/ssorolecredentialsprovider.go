@@ -264,11 +264,7 @@ func (p *SSORoleCredentialsProvider) newOIDCTokenPKCE(ctx context.Context) (*sso
 		return nil, fmt.Errorf("failed to create oauthCallbackServer: %w", err)
 	}
 	log.Printf("oauthCallbackServer callback endpoint: %s", cbServer.redirectURI())
-	defer func() {
-		if err := cbServer.h.Close(); err != nil {
-			log.Printf("Failed to close oauthCallbackServer: %s", err)
-		}
-	}()
+	defer cbServer.shutdown()
 	go func() {
 		if err := cbServer.Serve(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Printf("Failed to run oauthCallbackServer: %s", err)
@@ -432,8 +428,6 @@ const callbackPage = `<!doctype html>
 <body><p>%s</p><script>history.replaceState(null, "", location.pathname); window.close()</script></body></html>
 `
 
-// writeCallbackPage flushes because the caller signals the result next, and the
-// receiver may then close the connection before the reply is sent.
 func writeCallbackPage(w http.ResponseWriter, msg string) {
 	h := w.Header()
 	h.Set("Content-Type", "text/html; charset=utf-8")
@@ -441,9 +435,6 @@ func writeCallbackPage(w http.ResponseWriter, msg string) {
 	// the callback URL carries the authorization code
 	h.Set("Referrer-Policy", "no-referrer")
 	fmt.Fprintf(w, callbackPage, html.EscapeString(msg))
-	if f, ok := w.(http.Flusher); ok {
-		f.Flush()
-	}
 }
 
 // redirectURI returns the URL for the OAuth callback endpoint with the server's port included in the address.
@@ -474,4 +465,15 @@ type oauthCallbackServer struct {
 
 func (s *oauthCallbackServer) Serve() error {
 	return s.h.Serve(s.ln)
+}
+
+// shutdown waits for in-flight callbacks to finish, so a page being written as
+// the flow gets its result is sent in full rather than cut off.
+func (s *oauthCallbackServer) shutdown() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := s.h.Shutdown(ctx); err != nil {
+		log.Printf("Failed to shut down oauthCallbackServer: %s", err)
+		_ = s.h.Close()
+	}
 }

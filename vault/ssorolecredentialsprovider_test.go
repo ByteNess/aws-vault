@@ -184,7 +184,7 @@ func TestCallbackPageDeliveredBeforeShutdown(t *testing.T) {
 		closed := make(chan struct{})
 		go func() {
 			<-s.resultChan
-			_ = s.h.Close()
+			s.shutdown()
 			close(closed)
 		}()
 
