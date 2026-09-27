@@ -424,12 +424,12 @@ func (s *oauthCallbackServer) report(r oauthCallbackResult) {
 	}
 }
 
-// Browsers only let a page close its tab if script opened the tab or the page
-// is its only history entry, which the SSO sign-in pages usually rule out, so
-// closing is best effort.
+// The script drops the authorization code from the address bar, then tries to
+// close the tab. Browsers only allow that if script opened the tab or the page
+// is its only history entry, which the SSO sign-in pages usually rule out.
 const callbackPage = `<!doctype html>
 <html><head><meta charset="utf-8"><title>aws-vault</title></head>
-<body><p>%s</p><script>window.close()</script></body></html>
+<body><p>%s</p><script>history.replaceState(null, "", location.pathname); window.close()</script></body></html>
 `
 
 // writeCallbackPage flushes because the caller signals the result next, and the

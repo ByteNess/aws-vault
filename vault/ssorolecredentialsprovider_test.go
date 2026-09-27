@@ -165,8 +165,10 @@ func TestHandleCallback_PageHeaders(t *testing.T) {
 			t.Errorf("%s = %q, want %q", k, got, want)
 		}
 	}
-	if !strings.Contains(rec.Body.String(), "window.close()") {
-		t.Errorf("body = %q, want a best-effort window.close()", rec.Body.String())
+	for _, js := range []string{`history.replaceState(null, "", location.pathname)`, "window.close()"} {
+		if !strings.Contains(rec.Body.String(), js) {
+			t.Errorf("body = %q, want %s", rec.Body.String(), js)
+		}
 	}
 }
 
