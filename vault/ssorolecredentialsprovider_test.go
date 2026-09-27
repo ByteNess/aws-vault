@@ -248,3 +248,26 @@ func TestNewSSORoleCredentialsProvider_EndpointURL(t *testing.T) {
 		}
 	}
 }
+
+func TestHandleCallback_RepeatedCallbackDoesNotBlock(t *testing.T) {
+	s := newTestCallbackServer(t)
+	req := func() *http.Request {
+		return httptest.NewRequest(http.MethodGet, "/oauth/callback?state="+s.state+"&code=abc123", nil)
+	}
+
+	done := make(chan struct{})
+	go func() {
+		for i := 0; i < 3; i++ {
+			s.handleCallback(httptest.NewRecorder(), req())
+		}
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("handler blocked on a repeated callback")
+	}
+	if r := recvResult(t, s); r.code != "abc123" {
+		t.Errorf("code = %q, want the first callback's", r.code)
+	}
+}
