@@ -8,7 +8,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"io"
+	"html"
 	"log"
 	"net"
 	"net/http"
@@ -131,9 +131,10 @@ func (p *SSORoleCredentialsProvider) getOIDCToken(ctx context.Context) (token *s
 		}
 	}
 
-	// use the device code flow only if we have been requested to, otherwise
-	// default to the PKCE authorization code flow.
-	if p.UseDeviceCode {
+	// default to the PKCE authorization code flow, unless the device code flow
+	// was requested or the browser is unlikely to run on this machine.
+	if reason := p.deviceCodeReason(); reason != "" {
+		log.Printf("Using the OIDC device code flow: %s", reason)
 		token, err = p.newOIDCTokenDeviceCode(ctx)
 	} else {
 		token, err = p.newOIDCTokenPKCE(ctx)
@@ -149,6 +150,33 @@ func (p *SSORoleCredentialsProvider) getOIDCToken(ctx context.Context) (token *s
 		}
 	}
 	return token, false, err
+}
+
+// deviceCodeReason returns why the device code flow should be used instead of
+// PKCE, or "" to use PKCE. The PKCE redirect targets a callback server on this
+// machine's 127.0.0.1, which a browser elsewhere (the user copying a --stdout
+// URL, or a remote SSH session) cannot reach, so the flow could never finish.
+func (p *SSORoleCredentialsProvider) deviceCodeReason() string {
+	switch {
+	case p.UseDeviceCode:
+		return "requested with --device-code"
+	case p.UseStdout:
+		return "--stdout is set, so the browser may not run on this machine"
+	case inSSHSession():
+		return "running in an SSH session"
+	}
+	return ""
+}
+
+// inSSHSession reports whether the process runs inside an SSH session, using
+// the variables sshd sets for the session.
+func inSSHSession() bool {
+	for _, v := range []string{"SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"} {
+		if os.Getenv(v) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func (p *SSORoleCredentialsProvider) newOIDCTokenDeviceCode(ctx context.Context) (*ssooidc.CreateTokenOutput, error) {
@@ -215,8 +243,7 @@ func (p *SSORoleCredentialsProvider) newOIDCTokenPKCE(ctx context.Context) (*sso
 
 	// generate a random 32 byte code verifier; base64 encode it
 	codeVerifierBytes := make([]byte, 32)
-	n, err := crand.Read(codeVerifierBytes)
-	if err != nil || n != 32 {
+	if _, err := crand.Read(codeVerifierBytes); err != nil {
 		return nil, fmt.Errorf("failed to generate PKCE verifier: %w", err)
 	}
 	codeVerifier := base64.RawURLEncoding.EncodeToString(codeVerifierBytes)
@@ -327,6 +354,9 @@ func (p *SSORoleCredentialsProvider) newOIDCTokenPKCE(ctx context.Context) (*sso
 	return tok, nil
 }
 
+// openBrowser opens a URL in the default browser; tests replace it.
+var openBrowser = open.Run
+
 // openOrPrintURL opens the URL in the default browser or prints it to stdout if UseStdout is set.
 func (p *SSORoleCredentialsProvider) openOrPrintURL(url string) {
 	if p.UseStdout {
@@ -334,7 +364,7 @@ func (p *SSORoleCredentialsProvider) openOrPrintURL(url string) {
 	} else {
 		fmt.Fprintf(os.Stderr, "Opening the SSO authorization page in your default browser (use Ctrl-C to abort)\n%s\n", url)
 		log.Println("Opening SSO authorization page in browser")
-		if err := open.Run(url); err != nil {
+		if err := openBrowser(url); err != nil {
 			log.Printf("Failed to open browser: %s", err)
 		}
 	}
@@ -399,16 +429,38 @@ func (s *oauthCallbackServer) handleCallback(w http.ResponseWriter, r *http.Requ
 	// a code (e.g. the user denied the request); surface it as a terminal error.
 	if errCode := r.URL.Query().Get("error"); errCode != "" {
 		errDesc := r.URL.Query().Get("error_description")
-		io.WriteString(w, "Authorization failed, you can close this tab now.")
+		writeCallbackPage(w, "Authorization failed, you can close this tab now.")
 		s.resultChan <- oauthCallbackResult{err: fmt.Errorf("authorization error: %s: %s", errCode, errDesc)}
 		return
 	}
 
-	// respond with a success message before signalling completion, so the
-	// response is fully written before the main goroutine tears the server down
 	code := r.URL.Query().Get("code")
-	io.WriteString(w, "Authorization code received, you can close this tab now.")
+	writeCallbackPage(w, "Authorization code received, you can close this tab now.")
 	s.resultChan <- oauthCallbackResult{code: code}
+}
+
+// callbackPage is served on the OAuth callback. Browsers only honour
+// window.close() for tabs opened by script or whose history holds a single
+// entry, and the SSO sign-in pages usually leave more than one, so closing is
+// best effort and the message covers the other cases.
+const callbackPage = `<!doctype html>
+<html><head><meta charset="utf-8"><title>aws-vault</title></head>
+<body><p>%s</p><script>window.close()</script></body></html>
+`
+
+// writeCallbackPage writes the callback page and flushes it before the caller
+// signals the result: the receiver may close the server, and with it this
+// connection, straight away, which would otherwise drop the reply.
+func writeCallbackPage(w http.ResponseWriter, msg string) {
+	h := w.Header()
+	h.Set("Content-Type", "text/html; charset=utf-8")
+	h.Set("Cache-Control", "no-store")
+	// the callback URL carries the authorization code
+	h.Set("Referrer-Policy", "no-referrer")
+	fmt.Fprintf(w, callbackPage, html.EscapeString(msg))
+	if f, ok := w.(http.Flusher); ok {
+		f.Flush()
+	}
 }
 
 // redirectURI returns the URL for the OAuth callback endpoint with the server's port included in the address.
