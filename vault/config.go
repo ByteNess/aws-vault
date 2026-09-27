@@ -692,7 +692,7 @@ type ProfileConfig struct {
 	// SSOUseStdout specifies that the system browser should not be automatically opened
 	SSOUseStdout bool
 
-	// SSOUseDeviceCode specifies that the "device code" flow should be used instead of the default PKCE "authorization code" flow.
+	// SSOUseDeviceCode specifies that the device code flow is used instead of PKCE
 	SSOUseDeviceCode bool
 
 	// SessionTags specifies assumed role Session Tags

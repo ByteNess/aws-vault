@@ -134,8 +134,6 @@ func (p *SSORoleCredentialsProvider) getOIDCToken(ctx context.Context) (token *s
 		}
 	}
 
-	// default to the PKCE authorization code flow, unless the device code flow
-	// was requested or the browser is unlikely to run on this machine.
 	if reason := p.deviceCodeReason(); reason != "" {
 		log.Printf("Using the OIDC device code flow: %s", reason)
 		token, err = p.newOIDCTokenDeviceCode(ctx)
@@ -155,10 +153,9 @@ func (p *SSORoleCredentialsProvider) getOIDCToken(ctx context.Context) (token *s
 	return token, false, err
 }
 
-// deviceCodeReason returns why the device code flow should be used instead of
-// PKCE, or "" to use PKCE. The PKCE redirect targets a callback server on this
-// machine's 127.0.0.1, which a browser elsewhere (the user copying a --stdout
-// URL, or a remote SSH session) cannot reach, so the flow could never finish.
+// deviceCodeReason returns why to use the device code flow instead of PKCE, or
+// "". PKCE redirects to this machine's 127.0.0.1, which a browser on another
+// machine cannot reach.
 func (p *SSORoleCredentialsProvider) deviceCodeReason() string {
 	switch {
 	case p.UseDeviceCode:
@@ -171,8 +168,6 @@ func (p *SSORoleCredentialsProvider) deviceCodeReason() string {
 	return ""
 }
 
-// inSSHSession reports whether the process runs inside an SSH session, using
-// the variables sshd sets for the session.
 func inSSHSession() bool {
 	for _, v := range []string{"SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"} {
 		if os.Getenv(v) != "" {
@@ -238,18 +233,15 @@ func (p *SSORoleCredentialsProvider) newOIDCTokenDeviceCode(ctx context.Context)
 	}
 }
 
-// newOIDCTokenPKCE generates a new OIDC token using the "Authorization Code Grant" flow with PKCE.
+// newOIDCTokenPKCE generates a new OIDC token using the authorization code flow
+// with PKCE (https://datatracker.ietf.org/doc/html/rfc7636).
 func (p *SSORoleCredentialsProvider) newOIDCTokenPKCE(ctx context.Context) (*ssooidc.CreateTokenOutput, error) {
-	// ref: https://datatracker.ietf.org/doc/html/rfc7636
-
-	// generate a random 32 byte code verifier; base64 encode it
 	codeVerifierBytes := make([]byte, 32)
 	if _, err := crand.Read(codeVerifierBytes); err != nil {
 		return nil, fmt.Errorf("failed to generate PKCE verifier: %w", err)
 	}
 	codeVerifier := base64.RawURLEncoding.EncodeToString(codeVerifierBytes)
 
-	// generate the code challenge: base64(sha256(codeVerifier))
 	codeChallengeBytes := sha256.Sum256([]byte(codeVerifier))
 	codeChallenge := base64.RawURLEncoding.EncodeToString(codeChallengeBytes[:])
 	log.Printf("Generated PKCE code_challenge: %q", codeChallenge)
@@ -267,13 +259,11 @@ func (p *SSORoleCredentialsProvider) newOIDCTokenPKCE(ctx context.Context) (*sso
 	}
 	log.Printf("Created new OIDC client (expires at: %s)", time.Unix(clientCreds.ClientSecretExpiresAt, 0))
 
-	// start the callback server
 	cbServer, err := newOauthCallbackServer()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create oauthCallbackServer: %w", err)
 	}
 	log.Printf("oauthCallbackServer callback endpoint: %s", cbServer.redirectURI())
-	// ensure the callback server is torn down on any exit path
 	defer func() {
 		if err := cbServer.h.Close(); err != nil {
 			log.Printf("Failed to close oauthCallbackServer: %s", err)
@@ -284,11 +274,9 @@ func (p *SSORoleCredentialsProvider) newOIDCTokenPKCE(ctx context.Context) (*sso
 			log.Printf("Failed to run oauthCallbackServer: %s", err)
 		}
 	}()
-	// redirectURI is used in both the authorize URL and the later CreateToken call;
-	// bind it once so both sides agree on the same value.
+	// the authorize URL and CreateToken must use the same redirect URI
 	redirectURI := cbServer.redirectURI()
 
-	// construct the authorize URL with the client and PKCE parameters
 	args := url.Values{
 		"client_id":             {aws.ToString(clientCreds.ClientId)},
 		"response_type":         {"code"},
@@ -298,10 +286,8 @@ func (p *SSORoleCredentialsProvider) newOIDCTokenPKCE(ctx context.Context) (*sso
 		"code_challenge":        {codeChallenge},
 		"scopes":                {"sso:account:access"},
 	}
-	// /authorize is not part of the modeled API, so the URL is built by hand.
-	// Prefer the client's configured base endpoint, which is a full URL and so
-	// must be parsed rather than used as a bare host, and fall back to the
-	// regional OIDC host.
+	// /authorize is not a modeled API operation, so build its URL by hand.
+	// BaseEndpoint is a full URL, not a host.
 	authorizeURL := &url.URL{
 		Scheme: "https",
 		Host:   fmt.Sprintf("oidc.%s.amazonaws.com", p.OIDCClient.Options().Region),
@@ -316,14 +302,13 @@ func (p *SSORoleCredentialsProvider) newOIDCTokenPKCE(ctx context.Context) (*sso
 		}
 		authorizeURL = u
 	}
-	// JoinPath so a base endpoint carrying a path prefix is preserved
+	// JoinPath keeps any path prefix of the base endpoint
 	authorizeURL = authorizeURL.JoinPath("authorize")
 	authorizeURL.RawQuery = args.Encode()
 	log.Printf("Authorize URL: %s", authorizeURL.String())
 
 	p.openOrPrintURL(authorizeURL.String())
 
-	// await the authorization code, or context cancellation
 	var r oauthCallbackResult
 	select {
 	case r = <-cbServer.resultChan:
@@ -338,7 +323,6 @@ func (p *SSORoleCredentialsProvider) newOIDCTokenPKCE(ctx context.Context) (*sso
 		return nil, errors.New("no authorization code received")
 	}
 
-	// create the OIDC token using the authorization code received from the callback server
 	tok, err := p.OIDCClient.CreateToken(ctx, &ssooidc.CreateTokenInput{
 		ClientId:     clientCreds.ClientId,
 		ClientSecret: clientCreds.ClientSecret,
@@ -355,7 +339,7 @@ func (p *SSORoleCredentialsProvider) newOIDCTokenPKCE(ctx context.Context) (*sso
 	return tok, nil
 }
 
-// openBrowser opens a URL in the default browser; tests replace it.
+// openBrowser is a variable so tests can replace it.
 var openBrowser = open.Run
 
 // openOrPrintURL opens the URL in the default browser or prints it to stdout if UseStdout is set.
@@ -371,23 +355,18 @@ func (p *SSORoleCredentialsProvider) openOrPrintURL(url string) {
 	}
 }
 
-// newOauthCallbackServer creates a HTTP server listening on a random localhost
-// port to serve the OAuth2 callback. It serves a single oauth callback endpoint
-// and sends the authorization code received via a channel.
+// newOauthCallbackServer binds a random loopback port for the OAuth2 callback,
+// which reports the authorization code on resultChan.
 func newOauthCallbackServer() (*oauthCallbackServer, error) {
-	// select a random port for the callback server, bound to loopback only so
-	// the ephemeral server is never exposed on non-loopback interfaces.
+	// loopback only: the callback carries the authorization code
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create listener: %w", err)
 	}
 	log.Printf("oauthCallbackListener listening on %s", ln.Addr().String())
 
-	// create a 32 byte state for CSRF protection
 	state := make([]byte, 32)
 	if _, err := crand.Read(state); err != nil {
-		// the listener is already bound at this point, so close it rather than
-		// leaking the socket on the error path
 		_ = ln.Close()
 		return nil, fmt.Errorf("failed to generate state: %w", err)
 	}
@@ -406,7 +385,6 @@ func newOauthCallbackServer() (*oauthCallbackServer, error) {
 
 // handleCallback handles the OAuth2 callback request and sends the authorization code to the server channel.
 func (s *oauthCallbackServer) handleCallback(w http.ResponseWriter, r *http.Request) {
-	// only respond to GET requests on the callback
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 		return
@@ -416,18 +394,15 @@ func (s *oauthCallbackServer) handleCallback(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// constant time string comparison of want vs got state. A mismatched or
-	// missing state (e.g. a stray port probe) is not treated as terminal: we
-	// reject the request but keep listening for a valid callback, mirroring the
-	// AWS CLI. The main goroutine stays blocked on resultChan/ctx.Done().
+	// a wrong or missing state (e.g. a port probe) is rejected without ending
+	// the flow, as in the AWS CLI
 	state := r.URL.Query().Get("state")
 	if subtle.ConstantTimeCompare([]byte(state), []byte(s.state)) != 1 {
 		http.Error(w, "Invalid state", http.StatusBadRequest)
 		return
 	}
 
-	// the authorize endpoint may redirect back with an OAuth2 error instead of
-	// a code (e.g. the user denied the request); surface it as a terminal error.
+	// an OAuth2 error instead of a code, e.g. the user denied access
 	if errCode := r.URL.Query().Get("error"); errCode != "" {
 		errDesc := r.URL.Query().Get("error_description")
 		writeCallbackPage(w, "Authorization failed, you can close this tab now.")
@@ -440,18 +415,16 @@ func (s *oauthCallbackServer) handleCallback(w http.ResponseWriter, r *http.Requ
 	s.resultChan <- oauthCallbackResult{code: code}
 }
 
-// callbackPage is served on the OAuth callback. Browsers only honour
-// window.close() for tabs opened by script or whose history holds a single
-// entry, and the SSO sign-in pages usually leave more than one, so closing is
-// best effort and the message covers the other cases.
+// Browsers only let a page close its tab if script opened the tab or the page
+// is its only history entry, which the SSO sign-in pages usually rule out, so
+// closing is best effort.
 const callbackPage = `<!doctype html>
 <html><head><meta charset="utf-8"><title>aws-vault</title></head>
 <body><p>%s</p><script>window.close()</script></body></html>
 `
 
-// writeCallbackPage writes the callback page and flushes it before the caller
-// signals the result: the receiver may close the server, and with it this
-// connection, straight away, which would otherwise drop the reply.
+// writeCallbackPage flushes because the caller signals the result next, and the
+// receiver may then close the connection before the reply is sent.
 func writeCallbackPage(w http.ResponseWriter, msg string) {
 	h := w.Header()
 	h.Set("Content-Type", "text/html; charset=utf-8")
@@ -466,7 +439,7 @@ func writeCallbackPage(w http.ResponseWriter, msg string) {
 
 // redirectURI returns the URL for the OAuth callback endpoint with the server's port included in the address.
 func (s *oauthCallbackServer) redirectURI() string {
-	// AWS requires that the callback be a 127.0.0.1 v4 address
+	// the host must match the registered redirect URI
 	u := url.URL{
 		Scheme: "http",
 		Host:   fmt.Sprintf("127.0.0.1:%d", s.ln.Addr().(*net.TCPAddr).Port),

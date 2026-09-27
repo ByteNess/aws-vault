@@ -11,9 +11,8 @@ import (
 	"time"
 )
 
-// newTestCallbackServer builds an oauthCallbackServer with its listener bound
-// but not serving, so handlers can be called directly; the listener is closed
-// when the test ends.
+// newTestCallbackServer binds a callback server without serving it, so
+// handlers can be called directly.
 func newTestCallbackServer(t *testing.T) *oauthCallbackServer {
 	t.Helper()
 	s, err := newOauthCallbackServer()
@@ -87,8 +86,7 @@ func TestHandleCallback_StateMismatchDoesNotAbort(t *testing.T) {
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", rec.Code)
 	}
-	// Nothing must be sent on resultChan: the flow keeps waiting for a valid
-	// callback rather than aborting on a stray/probe request.
+	// the flow must keep waiting for a valid callback
 	assertNoResult(t, s)
 }
 
@@ -114,7 +112,6 @@ func TestHandleCallback_OAuthError(t *testing.T) {
 func TestHandleCallback_MethodAndPath(t *testing.T) {
 	s := newTestCallbackServer(t)
 
-	// wrong method
 	rec := httptest.NewRecorder()
 	s.handleCallback(rec, httptest.NewRequest(http.MethodPost, "/oauth/callback?state="+s.state, nil))
 	if rec.Code != http.StatusMethodNotAllowed {
@@ -122,7 +119,6 @@ func TestHandleCallback_MethodAndPath(t *testing.T) {
 	}
 	assertNoResult(t, s)
 
-	// wrong path
 	rec = httptest.NewRecorder()
 	s.handleCallback(rec, httptest.NewRequest(http.MethodGet, "/nope", nil))
 	if rec.Code != http.StatusNotFound {
@@ -172,8 +168,8 @@ func TestHandleCallback_PageHeaders(t *testing.T) {
 	}
 }
 
-// The PKCE flow closes the server as soon as it receives a result, so the page
-// must already be on the wire by then or the browser gets a dropped connection.
+// The PKCE flow closes the server as soon as it gets a result, so the page must
+// already be on the wire by then.
 func TestCallbackPageDeliveredBeforeShutdown(t *testing.T) {
 	for i := 0; i < 200; i++ {
 		s, err := newOauthCallbackServer()
