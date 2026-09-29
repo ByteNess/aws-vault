@@ -22,7 +22,7 @@ import (
 	"github.com/skratchdot/open-golang/open"
 )
 
-type LoginCommandInput struct {
+type loginCommandInput struct {
 	ProfileName     string
 	UseStdout       bool
 	UseDeviceCode   bool
@@ -34,7 +34,7 @@ type LoginCommandInput struct {
 }
 
 func ConfigureLoginCommand(app *kingpin.Application, a *AwsVault) {
-	input := LoginCommandInput{}
+	input := loginCommandInput{}
 
 	cmd := app.Command("login", "Generate a login link for the AWS Console.")
 
@@ -93,13 +93,13 @@ func ConfigureLoginCommand(app *kingpin.Application, a *AwsVault) {
 			return err
 		}
 
-		err = LoginCommand(context.Background(), input, f, keyring)
+		err = loginCommand(context.Background(), input, f, keyring)
 		app.FatalIfError(err, "login")
 		return nil
 	})
 }
 
-func getCredsProvider(input LoginCommandInput, config *vault.ProfileConfig, f *vault.ConfigFile, keyring keyring.Keyring) (credsProvider aws.CredentialsProvider, err error) {
+func getCredsProvider(input loginCommandInput, config *vault.ProfileConfig, f *vault.ConfigFile, keyring keyring.Keyring) (credsProvider aws.CredentialsProvider, err error) {
 	if input.ProfileName == "" {
 		// When no profile is specified, source credentials from the environment
 		configFromEnv, err := awsconfig.NewEnvConfig()
@@ -154,9 +154,9 @@ func getCredsProvider(input LoginCommandInput, config *vault.ProfileConfig, f *v
 	return credsProvider, err
 }
 
-// LoginCommand creates a login URL for the AWS Management Console using the method described at
+// loginCommand creates a login URL for the AWS Management Console using the method described at
 // https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_providers_enable-console-custom-url.html
-func LoginCommand(ctx context.Context, input LoginCommandInput, f *vault.ConfigFile, keyring keyring.Keyring) error {
+func loginCommand(ctx context.Context, input loginCommandInput, f *vault.ConfigFile, keyring keyring.Keyring) error {
 	// An empty ProfileName is valid for login: getCredsProvider falls back to
 	// environment credentials or an interactive profile picker. Only guard when
 	// the user explicitly named a profile.

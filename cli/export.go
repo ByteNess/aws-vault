@@ -16,7 +16,7 @@ import (
 	ini "gopkg.in/ini.v1"
 )
 
-type ExportCommandInput struct {
+type exportCommandInput struct {
 	ProfileName     string
 	Format          string
 	Config          vault.ProfileConfig
@@ -27,14 +27,14 @@ type ExportCommandInput struct {
 }
 
 var (
-	FormatTypeEnv        = "env"
+	formatTypeEnv        = "env"
 	FormatTypeExportEnv  = "export-env"
 	FormatTypeExportJSON = "json"
 	FormatTypeExportINI  = "ini"
 )
 
 func ConfigureExportCommand(app *kingpin.Application, a *AwsVault) {
-	input := ExportCommandInput{}
+	input := exportCommandInput{}
 
 	cmd := app.Command("export", "Export AWS credentials.")
 
@@ -54,9 +54,9 @@ func ConfigureExportCommand(app *kingpin.Application, a *AwsVault) {
 		Short('t').
 		StringVar(&input.Config.MfaToken)
 
-	cmd.Flag("format", fmt.Sprintf("Format to output credentials. Valid formats: %s, %s, %s, %s", FormatTypeEnv, FormatTypeExportEnv, FormatTypeExportJSON, FormatTypeExportINI)).
-		Default(FormatTypeEnv).
-		EnumVar(&input.Format, FormatTypeEnv, FormatTypeExportEnv, FormatTypeExportJSON, FormatTypeExportINI)
+	cmd.Flag("format", fmt.Sprintf("Format to output credentials. Valid formats: %s, %s, %s, %s", formatTypeEnv, FormatTypeExportEnv, FormatTypeExportJSON, FormatTypeExportINI)).
+		Default(formatTypeEnv).
+		EnumVar(&input.Format, formatTypeEnv, FormatTypeExportEnv, FormatTypeExportJSON, FormatTypeExportINI)
 
 	cmd.Flag("stdout", "Print the SSO link to the terminal without automatically opening the browser").
 		OverrideDefaultFromEnvar("AWS_VAULT_STDOUT").
@@ -99,13 +99,13 @@ func ConfigureExportCommand(app *kingpin.Application, a *AwsVault) {
 			input.ProfileName = ProfileName
 		}
 
-		err = ExportCommand(input, f, keyring)
+		err = exportCommand(input, f, keyring)
 		app.FatalIfError(err, "export")
 		return nil
 	})
 }
 
-func ExportCommand(input ExportCommandInput, f *vault.ConfigFile, keyring keyring.Keyring) error {
+func exportCommand(input exportCommandInput, f *vault.ConfigFile, keyring keyring.Keyring) error {
 	if os.Getenv("AWS_VAULT") != "" {
 		return fmt.Errorf("in an existing aws-vault subshell; 'exit' from the subshell or unset AWS_VAULT to force")
 	}
@@ -141,7 +141,7 @@ func ExportCommand(input ExportCommandInput, f *vault.ConfigFile, keyring keyrin
 	}
 }
 
-func printJSON(input ExportCommandInput, credsProvider aws.CredentialsProvider, accountID string) error {
+func printJSON(input exportCommandInput, credsProvider aws.CredentialsProvider, accountID string) error {
 	// AwsCredentialHelperData is metadata for AWS CLI credential process
 	// See https://docs.aws.amazon.com/cli/latest/topic/config-vars.html#sourcing-credentials-from-external-processes
 	type AwsCredentialHelperData struct {
@@ -218,7 +218,7 @@ func printINI(credsProvider aws.CredentialsProvider, profilename, region, accoun
 	return nil
 }
 
-func printEnv(input ExportCommandInput, credsProvider aws.CredentialsProvider, region, accountID, prefix string) error {
+func printEnv(input exportCommandInput, credsProvider aws.CredentialsProvider, region, accountID, prefix string) error {
 	creds, err := credsProvider.Retrieve(context.TODO())
 	if err != nil {
 		return fmt.Errorf("Failed to get credentials for %s: %w", input.ProfileName, err)

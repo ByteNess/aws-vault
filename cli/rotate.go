@@ -13,14 +13,14 @@ import (
 	"github.com/byteness/keyring"
 )
 
-type RotateCommandInput struct {
+type rotateCommandInput struct {
 	NoSession   bool
 	ProfileName string
 	Config      vault.ProfileConfig
 }
 
 func ConfigureRotateCommand(app *kingpin.Application, a *AwsVault) {
-	input := RotateCommandInput{}
+	input := rotateCommandInput{}
 
 	cmd := app.Command("rotate", "Rotate credentials.")
 
@@ -56,13 +56,13 @@ func ConfigureRotateCommand(app *kingpin.Application, a *AwsVault) {
 			input.ProfileName = ProfileName
 		}
 
-		err = RotateCommand(input, f, keyring)
+		err = rotateCommand(input, f, keyring)
 		app.FatalIfError(err, "rotate")
 		return nil
 	})
 }
 
-func RotateCommand(input RotateCommandInput, f *vault.ConfigFile, keyring keyring.Keyring) error {
+func rotateCommand(input rotateCommandInput, f *vault.ConfigFile, keyring keyring.Keyring) error {
 	if !profileResolvable(f, keyring, input.ProfileName) {
 		return fmt.Errorf("profile '%s' not found in ~/.aws/config and no stored credentials exist for it", input.ProfileName)
 	}

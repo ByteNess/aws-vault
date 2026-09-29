@@ -8,12 +8,12 @@ import (
 	"github.com/byteness/keyring"
 )
 
-type ClearCommandInput struct {
+type clearCommandInput struct {
 	ProfileName string
 }
 
 func ConfigureClearCommand(app *kingpin.Application, a *AwsVault) {
-	input := ClearCommandInput{}
+	input := clearCommandInput{}
 
 	cmd := app.Command("clear", "Clear temporary credentials from the secure keystore.")
 
@@ -31,13 +31,13 @@ func ConfigureClearCommand(app *kingpin.Application, a *AwsVault) {
 			return err
 		}
 
-		err = ClearCommand(input, awsConfigFile, keyring)
+		err = clearCommand(input, awsConfigFile, keyring)
 		app.FatalIfError(err, "clear")
 		return nil
 	})
 }
 
-func ClearCommand(input ClearCommandInput, awsConfigFile *vault.ConfigFile, keyring keyring.Keyring) error {
+func clearCommand(input clearCommandInput, awsConfigFile *vault.ConfigFile, keyring keyring.Keyring) error {
 	sessions := &vault.SessionKeyring{Keyring: keyring}
 	oidcTokens := &vault.OIDCTokenKeyring{Keyring: keyring}
 	var oldSessionsRemoved, numSessionsRemoved, numTokensRemoved int

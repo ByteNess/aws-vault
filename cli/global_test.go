@@ -82,15 +82,15 @@ func TestProfileResolvable(t *testing.T) {
 // TestExecCommandRejectsMissingProfile is the regression test for issue #377:
 // exec must error on a non-existent profile rather than silently inheriting
 // [default]. The guard fires before any config load or execve, so calling
-// ExecCommand directly is safe on every platform.
+// execCommand directly is safe on every platform.
 func TestExecCommandRejectsMissingProfile(t *testing.T) {
 	t.Setenv("AWS_VAULT", "") // ensure we are not treated as an existing subshell
 	configFile := writeTempConfig(t, issue377Config)
 	kr := keyring.NewArrayKeyring([]keyring.Item{})
 
-	_, err := ExecCommand(ExecCommandInput{ProfileName: "invalid-profile", NoSession: true}, configFile, kr)
+	_, err := execCommand(execCommandInput{ProfileName: "invalid-profile", NoSession: true}, configFile, kr)
 	if err == nil {
-		t.Fatal("ExecCommand accepted a non-existent profile; expected an error (issue #377)")
+		t.Fatal("execCommand accepted a non-existent profile; expected an error (issue #377)")
 	}
 	if !strings.Contains(err.Error(), "invalid-profile") || !strings.Contains(err.Error(), "not found") {
 		t.Fatalf("unexpected error message: %v", err)
@@ -98,15 +98,15 @@ func TestExecCommandRejectsMissingProfile(t *testing.T) {
 }
 
 // TestExportCommandRejectsMissingProfile covers the same guard on export, which
-// also closes the `exec --json` path (it delegates to ExportCommand).
+// also closes the `exec --json` path (it delegates to exportCommand).
 func TestExportCommandRejectsMissingProfile(t *testing.T) {
 	t.Setenv("AWS_VAULT", "")
 	configFile := writeTempConfig(t, issue377Config)
 	kr := keyring.NewArrayKeyring([]keyring.Item{})
 
-	err := ExportCommand(ExportCommandInput{ProfileName: "invalid-profile", Format: FormatTypeEnv, NoSession: true}, configFile, kr)
+	err := exportCommand(exportCommandInput{ProfileName: "invalid-profile", Format: formatTypeEnv, NoSession: true}, configFile, kr)
 	if err == nil {
-		t.Fatal("ExportCommand accepted a non-existent profile; expected an error (issue #377)")
+		t.Fatal("exportCommand accepted a non-existent profile; expected an error (issue #377)")
 	}
 	if !strings.Contains(err.Error(), "invalid-profile") || !strings.Contains(err.Error(), "not found") {
 		t.Fatalf("unexpected error message: %v", err)
@@ -119,9 +119,9 @@ func TestRotateCommandRejectsMissingProfile(t *testing.T) {
 	configFile := writeTempConfig(t, issue377Config)
 	kr := keyring.NewArrayKeyring([]keyring.Item{})
 
-	err := RotateCommand(RotateCommandInput{ProfileName: "invalid-profile", NoSession: true}, configFile, kr)
+	err := rotateCommand(rotateCommandInput{ProfileName: "invalid-profile", NoSession: true}, configFile, kr)
 	if err == nil {
-		t.Fatal("RotateCommand accepted a non-existent profile; expected an error (issue #377)")
+		t.Fatal("rotateCommand accepted a non-existent profile; expected an error (issue #377)")
 	}
 	if !strings.Contains(err.Error(), "invalid-profile") || !strings.Contains(err.Error(), "not found") {
 		t.Fatalf("unexpected error message: %v", err)

@@ -7,7 +7,7 @@ import (
 	"github.com/alecthomas/kingpin/v2"
 )
 
-func ExampleAddCommand() {
+func Example_addCommand() {
 	f, err := os.CreateTemp("", "aws-config")
 	if err != nil {
 		log.Fatal(err)

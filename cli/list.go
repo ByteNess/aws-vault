@@ -14,14 +14,14 @@ import (
 	"github.com/byteness/keyring"
 )
 
-type ListCommandInput struct {
+type listCommandInput struct {
 	OnlyProfiles    bool
 	OnlySessions    bool
 	OnlyCredentials bool
 }
 
 func ConfigureListCommand(app *kingpin.Application, a *AwsVault) {
-	input := ListCommandInput{}
+	input := listCommandInput{}
 
 	cmd := app.Command("list", "List profiles, along with their credentials and sessions.")
 	cmd.Alias("ls")
@@ -44,7 +44,7 @@ func ConfigureListCommand(app *kingpin.Application, a *AwsVault) {
 		if err != nil {
 			return err
 		}
-		err = ListCommand(input, awsConfigFile, keyring, os.Stdout)
+		err = listCommand(input, awsConfigFile, keyring, os.Stdout)
 		app.FatalIfError(err, "list")
 		return nil
 	})
@@ -94,7 +94,7 @@ func oidcLabel(sessionName, startURL string) string {
 	return fmt.Sprintf("oidc:%s", id)
 }
 
-func ListCommand(input ListCommandInput, awsConfigFile *vault.ConfigFile, keyring keyring.Keyring, out io.Writer) (err error) {
+func listCommand(input listCommandInput, awsConfigFile *vault.ConfigFile, keyring keyring.Keyring, out io.Writer) (err error) {
 	credentialKeyring := &vault.CredentialKeyring{Keyring: keyring}
 	oidcTokenKeyring := &vault.OIDCTokenKeyring{Keyring: credentialKeyring.Keyring}
 	sessionKeyring := &vault.SessionKeyring{Keyring: credentialKeyring.Keyring}
