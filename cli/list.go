@@ -163,21 +163,27 @@ func listCommand(input listCommandInput, awsConfigFile *vault.ConfigFile, keyrin
 
 	if input.OnlyCredentials {
 		for _, c := range credentialsNames {
-			fmt.Fprintln(out, c)
+			if _, err := fmt.Fprintln(out, c); err != nil {
+				return err
+			}
 		}
 		return nil
 	}
 
 	if input.OnlyProfiles {
 		for _, ps := range profileSections {
-			fmt.Fprintln(out, ps.Name)
+			if _, err := fmt.Fprintln(out, ps.Name); err != nil {
+				return err
+			}
 		}
 		return nil
 	}
 
 	if input.OnlySessions {
 		for _, l := range allSessionLabels {
-			fmt.Fprintln(out, l)
+			if _, err := fmt.Fprintln(out, l); err != nil {
+				return err
+			}
 		}
 		return nil
 	}
@@ -185,19 +191,21 @@ func listCommand(input listCommandInput, awsConfigFile *vault.ConfigFile, keyrin
 	displayedSessionLabels := []string{}
 
 	w := tabwriter.NewWriter(out, 25, 4, 2, ' ', 0)
+	// the table is buffered, so write errors are reported by w.Flush below
+	row := func(format string, a ...any) { _, _ = fmt.Fprintf(w, format, a...) }
 
-	fmt.Fprintln(w, "Profile\tCredentials\tSessions\t")
-	fmt.Fprintln(w, "=======\t===========\t========\t")
+	row("Profile\tCredentials\tSessions\t\n")
+	row("=======\t===========\t========\t\n")
 
 	// list out known profiles first
 	for _, profileSection := range profileSections {
 		profileName := profileSection.Name
-		fmt.Fprintf(w, "%s\t", profileName)
+		row("%s\t", profileName)
 
 		if credentialsSet[profileName] {
-			fmt.Fprintf(w, "%s\t", profileName)
+			row("%s\t", profileName)
 		} else {
-			fmt.Fprintf(w, "-\t")
+			row("-\t")
 		}
 
 		var sessionLabels []string
@@ -217,9 +225,9 @@ func listCommand(input listCommandInput, awsConfigFile *vault.ConfigFile, keyrin
 		}
 
 		if len(sessionLabels) > 0 {
-			fmt.Fprintf(w, "%s\t\n", strings.Join(sessionLabels, ", "))
+			row("%s\t\n", strings.Join(sessionLabels, ", "))
 		} else {
-			fmt.Fprintf(w, "-\t\n")
+			row("-\t\n")
 		}
 
 		displayedSessionLabels = append(displayedSessionLabels, sessionLabels...)
@@ -228,14 +236,14 @@ func listCommand(input listCommandInput, awsConfigFile *vault.ConfigFile, keyrin
 	// show credentials that don't have profiles
 	for _, credentialName := range credentialsNames {
 		if !profileNamesSet[credentialName] {
-			fmt.Fprintf(w, "-\t%s\t-\t\n", credentialName)
+			row("-\t%s\t-\t\n", credentialName)
 		}
 	}
 
 	// show sessions that don't have profiles
 	sessionsWithoutProfiles := stringslice(allSessionLabels).remove(displayedSessionLabels)
 	for _, s := range sessionsWithoutProfiles {
-		fmt.Fprintf(w, "-\t-\t%s\t\n", s)
+		row("-\t-\t%s\t\n", s)
 	}
 
 	return w.Flush()
