@@ -45,11 +45,13 @@ func StartProxy() error {
 	return http.Serve(l, handler)
 }
 
+// IsProxyRunning reports whether something is listening on the EC2 metadata endpoint.
 func IsProxyRunning() bool {
 	_, err := net.DialTimeout("tcp", ec2MetadataEndpointAddr, time.Millisecond*10)
 	return err == nil
 }
 
+// Shutdown removes the EC2 metadata endpoint's network alias and exits the process.
 func Shutdown() {
 	_, err := removeEc2EndpointNetworkAlias()
 	if err != nil {

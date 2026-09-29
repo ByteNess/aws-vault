@@ -6,6 +6,7 @@ import (
 	"strings"
 )
 
+// OSAScriptMfaPrompt prompts for an MFA code in a macOS dialog.
 func OSAScriptMfaPrompt(mfaSerial string) (string, error) {
 	cmd := exec.Command("osascript", "-e", fmt.Sprintf(`
 		display dialog %q default answer "" buttons {"OK", "Cancel"} default button 1

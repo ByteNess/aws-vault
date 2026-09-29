@@ -27,6 +27,7 @@ import (
 	"github.com/skratchdot/open-golang/open"
 )
 
+// OIDCTokenCacher caches OIDC access tokens by SSO start URL.
 type OIDCTokenCacher interface {
 	Get(string) (*ssooidc.CreateTokenOutput, error)
 	Set(string, *ssooidc.CreateTokenOutput) error
@@ -104,6 +105,7 @@ func (p *SSORoleCredentialsProvider) getRoleCredentials(ctx context.Context) (*s
 	return resp.RoleCredentials, nil
 }
 
+// RetrieveStsCredentials returns the SSO role credentials in STS form.
 func (p *SSORoleCredentialsProvider) RetrieveStsCredentials(ctx context.Context) (*ststypes.Credentials, error) {
 	return p.getRoleCredentialsAsStsCredemtials(ctx)
 }

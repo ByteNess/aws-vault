@@ -10,7 +10,7 @@ import (
 	"github.com/byteness/keyring"
 )
 
-func ExampleListCommand() {
+func Example_listCommand() {
 	app := kingpin.New("aws-vault", "")
 	awsVault := ConfigureGlobals(app)
 	awsVault.keyringImpl = keyring.NewArrayKeyring([]keyring.Item{
@@ -52,7 +52,7 @@ func TestListCommandCredentialShown(t *testing.T) {
 		{Key: "sso-profile", Data: []byte(`{"AccessKeyID":"ABC","SecretAccessKey":"XYZ"}`)},
 	})
 
-	output := captureListOutput(t, ListCommandInput{}, configFile, kr)
+	output := captureListOutput(t, listCommandInput{}, configFile, kr)
 
 	// sso-profile has a stored credential; its Credentials column must show the profile name.
 	found := false
@@ -82,7 +82,7 @@ func TestListCommandCredentialShown(t *testing.T) {
 //
 // This test exercises the OIDCTokenKeyring abstraction layer: Has() must
 // delegate to Keys() so both methods operate on stripped startURLs. The
-// ListCommand display logic is covered by TestListCommandOutputModernOIDC.
+// listCommand display logic is covered by TestListCommandOutputModernOIDC.
 func TestListCommandOIDCTokenShown(t *testing.T) {
 	const startURL = "https://example.awsapps.com/start"
 
@@ -112,7 +112,7 @@ func TestListCommandOIDCTokenShown(t *testing.T) {
 		t.Error("OIDCTokenKeyring.Has() returned false; prefix comparison is broken again")
 	}
 
-	// Verify Keys() returns stripped URLs — ListCommand builds oidcTokenLabels
+	// Verify Keys() returns stripped URLs — listCommand builds oidcTokenLabels
 	// from Keys(), so a broken Keys() would silently hide all OIDC tokens.
 	tokenSet := make(map[string]bool, len(keys))
 	for _, k := range keys {
@@ -213,12 +213,12 @@ sso_role_name = ReadOnly
 region = us-east-1
 `)
 
-// captureListOutput calls ListCommand into a bytes.Buffer and returns the output.
-func captureListOutput(t *testing.T, input ListCommandInput, configFile *vault.ConfigFile, kr keyring.Keyring) string {
+// captureListOutput calls listCommand into a bytes.Buffer and returns the output.
+func captureListOutput(t *testing.T, input listCommandInput, configFile *vault.ConfigFile, kr keyring.Keyring) string {
 	t.Helper()
 	var buf bytes.Buffer
-	if err := ListCommand(input, configFile, kr, &buf); err != nil {
-		t.Fatalf("ListCommand error: %v", err)
+	if err := listCommand(input, configFile, kr, &buf); err != nil {
+		t.Fatalf("listCommand error: %v", err)
 	}
 	return buf.String()
 }
@@ -233,7 +233,7 @@ func TestListCommandOutputLegacyOIDC(t *testing.T) {
 		{Key: "oidc:" + startURL, Data: []byte(`{}`)},
 	})
 
-	output := captureListOutput(t, ListCommandInput{}, configFile, kr)
+	output := captureListOutput(t, listCommandInput{}, configFile, kr)
 
 	// Legacy config has no sso-session name, so the label uses the hostname:
 	// "oidc:example.awsapps.com".
@@ -261,7 +261,7 @@ func TestListCommandOutputLegacyOIDC(t *testing.T) {
 
 // TestListCommandOutputModernOIDC verifies that profiles using a modern
 // [sso-session] block correctly show the OIDC token in their Sessions column.
-// ListCommand resolves the sso_start_url from the referenced [sso-session]
+// listCommand resolves the sso_start_url from the referenced [sso-session]
 // section when the profile's own SSOStartURL field is empty.
 func TestListCommandOutputModernOIDC(t *testing.T) {
 	const startURL = "https://example.awsapps.com/start"
@@ -270,7 +270,7 @@ func TestListCommandOutputModernOIDC(t *testing.T) {
 		{Key: "oidc:" + startURL, Data: []byte(`{}`)},
 	})
 
-	output := captureListOutput(t, ListCommandInput{}, configFile, kr)
+	output := captureListOutput(t, listCommandInput{}, configFile, kr)
 
 	// Modern config references [sso-session my-sso], so the label uses the session
 	// name: "oidc:my-sso".
@@ -310,7 +310,7 @@ func TestListCommandOnlySessionsIncludesOIDC(t *testing.T) {
 		{Key: "oidc:" + startURL, Data: []byte(`{}`)},
 	})
 
-	output := captureListOutput(t, ListCommandInput{OnlySessions: true}, configFile, kr)
+	output := captureListOutput(t, listCommandInput{OnlySessions: true}, configFile, kr)
 
 	// The OIDC label (oidc:my-sso) must appear in the --sessions output.
 	found := false
@@ -325,7 +325,7 @@ func TestListCommandOnlySessionsIncludesOIDC(t *testing.T) {
 }
 
 // TestListCommandBothSetPrefersSSOSession verifies that when a profile sets
-// both an inline sso_start_url and an sso_session, ListCommand resolves the
+// both an inline sso_start_url and an sso_session, listCommand resolves the
 // start URL the same way ConfigLoader does: the [sso-session] url wins. The
 // token is stored under the session url, so inline-first precedence would
 // fail to display it.
@@ -336,7 +336,7 @@ func TestListCommandBothSetPrefersSSOSession(t *testing.T) {
 		{Key: "oidc:" + sessionURL, Data: []byte(`{}`)},
 	})
 
-	output := captureListOutput(t, ListCommandInput{}, configFile, kr)
+	output := captureListOutput(t, listCommandInput{}, configFile, kr)
 
 	// sso-session takes precedence, so the label uses the session name.
 	const label = "oidc:my-sso"

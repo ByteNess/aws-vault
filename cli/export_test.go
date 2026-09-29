@@ -9,7 +9,7 @@ import (
 	"github.com/byteness/keyring"
 )
 
-func ExampleExportCommand() {
+func Example_exportCommand() {
 	f, err := os.CreateTemp("", "aws-config")
 	if err != nil {
 		log.Fatal(err)
@@ -36,7 +36,7 @@ func ExampleExportCommand() {
 	// aws_secret_access_key=XYZ
 }
 
-func ExampleExportCommand_accountID() {
+func Example_exportCommandAccountID() {
 	f, err := os.CreateTemp("", "aws-config")
 	if err != nil {
 		log.Fatal(err)

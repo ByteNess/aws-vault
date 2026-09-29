@@ -12,14 +12,15 @@ import (
 	"github.com/byteness/keyring"
 )
 
-type AddCommandInput struct {
+type addCommandInput struct {
 	ProfileName string
 	FromEnv     bool
 	AddConfig   bool
 }
 
+// ConfigureAddCommand registers the add command.
 func ConfigureAddCommand(app *kingpin.Application, a *AwsVault) {
-	input := AddCommandInput{}
+	input := addCommandInput{}
 
 	cmd := app.Command("add", "Add credentials to the secure keystore.")
 
@@ -43,13 +44,13 @@ func ConfigureAddCommand(app *kingpin.Application, a *AwsVault) {
 		if err != nil {
 			return err
 		}
-		err = AddCommand(input, keyring, awsConfigFile)
+		err = addCommand(input, keyring, awsConfigFile)
 		app.FatalIfError(err, "add")
 		return nil
 	})
 }
 
-func AddCommand(input AddCommandInput, keyring keyring.Keyring, awsConfigFile *vault.ConfigFile) error {
+func addCommand(input addCommandInput, keyring keyring.Keyring, awsConfigFile *vault.ConfigFile) error {
 	var accessKeyID, secretKey, mfaSerial string
 
 	p, _ := awsConfigFile.ProfileSection(input.ProfileName)

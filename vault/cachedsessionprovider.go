@@ -9,6 +9,8 @@ import (
 	ststypes "github.com/aws/aws-sdk-go-v2/service/sts/types"
 )
 
+// StsSessionProvider is a credentials provider whose credentials can also be returned
+// in STS form, which is what the session cache stores.
 type StsSessionProvider interface {
 	aws.CredentialsProvider
 	RetrieveStsCredentials(ctx context.Context) (*ststypes.Credentials, error)
@@ -23,6 +25,8 @@ type CachedSessionProvider struct {
 	ExpiryWindow    time.Duration
 }
 
+// RetrieveStsCredentials returns the cached session, or gets and caches a new one if
+// there is none or it expires within ExpiryWindow.
 func (p *CachedSessionProvider) RetrieveStsCredentials(ctx context.Context) (*ststypes.Credentials, error) {
 	creds, err := p.Keyring.Get(p.SessionKey)
 

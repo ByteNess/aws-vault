@@ -7,6 +7,7 @@ import (
 	"github.com/mattn/go-tty"
 )
 
+// TerminalPrompt shows message on the terminal and returns the line the user types.
 func TerminalPrompt(message string) (string, error) {
 	tty, err := tty.Open()
 	if err != nil {
@@ -24,6 +25,7 @@ func TerminalPrompt(message string) (string, error) {
 	return strings.TrimSpace(text), nil
 }
 
+// TerminalSecretPrompt is like TerminalPrompt, but doesn't echo what the user types.
 func TerminalSecretPrompt(message string) (string, error) {
 	tty, err := tty.Open()
 	if err != nil {
@@ -41,6 +43,7 @@ func TerminalSecretPrompt(message string) (string, error) {
 	return strings.TrimSpace(text), nil
 }
 
+// TerminalMfaPrompt prompts for an MFA code on the terminal.
 func TerminalMfaPrompt(mfaSerial string) (string, error) {
 	return TerminalPrompt(mfaPromptMessage(mfaSerial))
 }

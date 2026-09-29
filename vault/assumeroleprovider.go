@@ -49,6 +49,7 @@ func (p *AssumeRoleProvider) roleSessionName() string {
 	return p.RoleSessionName
 }
 
+// RetrieveStsCredentials assumes the role and returns its STS credentials.
 func (p *AssumeRoleProvider) RetrieveStsCredentials(ctx context.Context) (*ststypes.Credentials, error) {
 	var err error
 

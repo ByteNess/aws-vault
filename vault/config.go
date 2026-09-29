@@ -163,6 +163,7 @@ type SSOSessionSection struct {
 	SSORegistrationScopes string `ini:"sso_registration_scopes,omitempty"`
 }
 
+// IsEmpty reports whether the section has no settings besides its name.
 func (s ProfileSection) IsEmpty() bool {
 	s.Name = ""
 	return s == ProfileSection{}
@@ -288,6 +289,7 @@ func (c *ConfigFile) SSOSessionSection(name string) (SSOSessionSection, bool) {
 	return ssoSession, true
 }
 
+// Save writes the config back to its file.
 func (c *ConfigFile) Save() error {
 	return c.iniFile.SaveTo(c.Path)
 }
@@ -330,6 +332,7 @@ type ConfigLoader struct {
 	visitedProfiles []string
 }
 
+// NewConfigLoader returns a loader for profiles in file, starting from baseConfig.
 func NewConfigLoader(baseConfig ProfileConfig, file *ConfigFile, activeProfile string) *ConfigLoader {
 	return &ConfigLoader{
 		BaseConfig:    baseConfig,
@@ -731,38 +734,47 @@ func (c *ProfileConfig) SetTransitiveSessionTags(s string) {
 	}
 }
 
+// IsChained reports whether the profile is used as the source of another profile.
 func (c *ProfileConfig) IsChained() bool {
 	return c.ChainedFromProfile != nil
 }
 
+// HasSourceProfile reports whether the profile gets its credentials from a source profile.
 func (c *ProfileConfig) HasSourceProfile() bool {
 	return c.SourceProfile != nil
 }
 
+// HasMfaSerial reports whether the profile requires MFA.
 func (c *ProfileConfig) HasMfaSerial() bool {
 	return c.MfaSerial != ""
 }
 
+// HasRole reports whether the profile assumes a role.
 func (c *ProfileConfig) HasRole() bool {
 	return c.RoleARN != ""
 }
 
+// HasSSOSession reports whether the profile references an sso-session section.
 func (c *ProfileConfig) HasSSOSession() bool {
 	return c.SSOSession != ""
 }
 
+// HasSSOStartURL reports whether the profile signs in with SSO.
 func (c *ProfileConfig) HasSSOStartURL() bool {
 	return c.SSOStartURL != ""
 }
 
+// HasWebIdentity reports whether the profile assumes a role with a web identity token.
 func (c *ProfileConfig) HasWebIdentity() bool {
 	return c.WebIdentityTokenFile != "" || c.WebIdentityTokenProcess != ""
 }
 
+// HasCredentialProcess reports whether the profile gets credentials from a credential_process command.
 func (c *ProfileConfig) HasCredentialProcess() bool {
 	return c.CredentialProcess != ""
 }
 
+// GetSessionTokenDuration returns the session duration, which differs for chained profiles.
 func (c *ProfileConfig) GetSessionTokenDuration() time.Duration {
 	if c.IsChained() {
 		return c.ChainedGetSessionTokenDuration

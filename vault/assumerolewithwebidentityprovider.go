@@ -48,6 +48,7 @@ func (p *AssumeRoleWithWebIdentityProvider) roleSessionName() string {
 	return p.RoleSessionName
 }
 
+// RetrieveStsCredentials assumes the role with the web identity token and returns its STS credentials.
 func (p *AssumeRoleWithWebIdentityProvider) RetrieveStsCredentials(ctx context.Context) (*ststypes.Credentials, error) {
 	var err error
 

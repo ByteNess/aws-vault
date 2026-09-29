@@ -22,7 +22,7 @@ import (
 	"github.com/byteness/keyring"
 )
 
-type ExecCommandInput struct {
+type execCommandInput struct {
 	ProfileName      string
 	Command          string
 	Args             []string
@@ -39,7 +39,7 @@ type ExecCommandInput struct {
 	UseProfileEnv    bool
 }
 
-func (input ExecCommandInput) validate() error {
+func (input execCommandInput) validate() error {
 	if input.StartEc2Server && input.StartEcsServer {
 		return fmt.Errorf("Can't use --ec2-server with --ecs-server")
 	}
@@ -65,12 +65,13 @@ func (input ExecCommandInput) validate() error {
 	return nil
 }
 
-func hasBackgroundServer(input ExecCommandInput) bool {
+func hasBackgroundServer(input execCommandInput) bool {
 	return input.StartEcsServer || input.StartEc2Server
 }
 
+// ConfigureExecCommand registers the exec command.
 func ConfigureExecCommand(app *kingpin.Application, a *AwsVault) {
-	input := ExecCommandInput{}
+	input := execCommandInput{}
 
 	cmd := app.Command("exec", "Execute a command with AWS credentials.")
 
@@ -163,7 +164,7 @@ func ConfigureExecCommand(app *kingpin.Application, a *AwsVault) {
 
 		exitcode := 0
 		if input.JSONDeprecated {
-			exportCommandInput := ExportCommandInput{
+			exportInput := exportCommandInput{
 				ProfileName:     input.ProfileName,
 				Format:          "json",
 				Config:          input.Config,
@@ -171,9 +172,9 @@ func ConfigureExecCommand(app *kingpin.Application, a *AwsVault) {
 				NoSession:       input.NoSession,
 			}
 
-			err = ExportCommand(exportCommandInput, f, keyring)
+			err = exportCommand(exportInput, f, keyring)
 		} else {
-			exitcode, err = ExecCommand(input, f, keyring)
+			exitcode, err = execCommand(input, f, keyring)
 		}
 
 		app.FatalIfError(err, "exec")
@@ -185,7 +186,7 @@ func ConfigureExecCommand(app *kingpin.Application, a *AwsVault) {
 	})
 }
 
-func ExecCommand(input ExecCommandInput, f *vault.ConfigFile, keyring keyring.Keyring) (exitcode int, err error) {
+func execCommand(input execCommandInput, f *vault.ConfigFile, keyring keyring.Keyring) (exitcode int, err error) {
 	if os.Getenv("AWS_VAULT") != "" {
 		return 0, fmt.Errorf("running in an existing aws-vault subshell; 'exit' from the subshell or unset AWS_VAULT to force")
 	}

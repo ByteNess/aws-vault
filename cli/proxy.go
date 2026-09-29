@@ -9,6 +9,7 @@ import (
 	"github.com/byteness/aws-vault/v7/server"
 )
 
+// ConfigureProxyCommand registers the hidden proxy command, which starts or stops the local EC2 metadata proxy.
 func ConfigureProxyCommand(app *kingpin.Application) {
 	stop := false
 

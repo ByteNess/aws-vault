@@ -26,6 +26,7 @@ func init() {
 	}
 }
 
+// NewAwsConfig returns an AWS config for region, with STS endpoint resolution applied.
 func NewAwsConfig(region, stsRegionalEndpoints, endpointURL string) aws.Config {
 	return aws.Config{
 		Region:                      region,
@@ -33,6 +34,7 @@ func NewAwsConfig(region, stsRegionalEndpoints, endpointURL string) aws.Config {
 	}
 }
 
+// NewAwsConfigWithCredsProvider is like NewAwsConfig, using credsProvider for credentials.
 func NewAwsConfigWithCredsProvider(credsProvider aws.CredentialsProvider, region, stsRegionalEndpoints, endpointURL string) aws.Config {
 	return aws.Config{
 		Region:                      region,
@@ -41,6 +43,7 @@ func NewAwsConfigWithCredsProvider(credsProvider aws.CredentialsProvider, region
 	}
 }
 
+// FormatKeyForDisplay masks all but the last four characters of an access key ID.
 func FormatKeyForDisplay(k string) string {
 	return fmt.Sprintf("****************%s", k[len(k)-4:])
 }
@@ -55,6 +58,7 @@ func NewMasterCredentialsProvider(k *CredentialKeyring, credentialsName string) 
 	return &KeyringProvider{k, credentialsName}
 }
 
+// NewSessionTokenProvider returns a provider of STS GetSessionToken sessions, cached in k if useSessionCache is set.
 func NewSessionTokenProvider(credsProvider aws.CredentialsProvider, k keyring.Keyring, config *ProfileConfig, useSessionCache bool) (aws.CredentialsProvider, error) {
 	cfg := NewAwsConfigWithCredsProvider(credsProvider, config.Region, config.STSRegionalEndpoints, config.EndpointURL)
 
@@ -318,6 +322,7 @@ func NewCredentialProcessProvider(k keyring.Keyring, config *ProfileConfig, useS
 	return credentialProcessProvider, nil
 }
 
+// NewFederationTokenProvider returns a provider of STS GetFederationToken credentials.
 func NewFederationTokenProvider(ctx context.Context, credsProvider aws.CredentialsProvider, config *ProfileConfig) (*FederationTokenProvider, error) {
 	cfg := NewAwsConfigWithCredsProvider(credsProvider, config.Region, config.STSRegionalEndpoints, config.EndpointURL)
 
@@ -334,6 +339,8 @@ func NewFederationTokenProvider(ctx context.Context, credsProvider aws.Credentia
 	}, nil
 }
 
+// FindMasterCredentialsNameFor returns the name of the stored long-term credentials for profileName,
+// following its source profiles.
 func FindMasterCredentialsNameFor(profileName string, keyring *CredentialKeyring, config *ProfileConfig) (string, error) {
 	hasMasterCreds, err := keyring.Has(profileName)
 	if err != nil {
@@ -351,6 +358,7 @@ func FindMasterCredentialsNameFor(profileName string, keyring *CredentialKeyring
 	return FindMasterCredentialsNameFor(config.SourceProfileName, keyring, config)
 }
 
+// TempCredentialsCreator creates providers of temporary credentials for profiles.
 type TempCredentialsCreator struct {
 	Keyring *CredentialKeyring
 	// DisableSessions will disable the use of GetSessionToken
@@ -489,6 +497,7 @@ func (t *TempCredentialsCreator) getSourceCredWithSession(config *ProfileConfig,
 	return NewAssumeRoleProvider(sourcecredsProvider, t.Keyring.Keyring, config, !t.DisableCache)
 }
 
+// GetProviderForProfile returns a credentials provider for config, based on how the profile gets its credentials.
 func (t *TempCredentialsCreator) GetProviderForProfile(config *ProfileConfig) (aws.CredentialsProvider, error) {
 	hasStoredCredentials, err := t.Keyring.Has(config.ProfileName)
 	if err != nil {

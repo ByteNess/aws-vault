@@ -57,6 +57,7 @@ func generateRandomString() string {
 	return base64.RawURLEncoding.EncodeToString(b)
 }
 
+// EcsServer serves credentials on localhost in the format of the ECS container credentials endpoint.
 type EcsServer struct {
 	listener          net.Listener
 	authToken         string
@@ -66,6 +67,9 @@ type EcsServer struct {
 	config            *vault.ProfileConfig
 }
 
+// NewEcsServer listens on 127.0.0.1:port and returns a server for baseCredsProvider's credentials. An
+// empty authToken gets a random one. Unless lazyLoadBaseCreds is set, the credentials are fetched
+// straight away, so errors show up at startup.
 func NewEcsServer(ctx context.Context, baseCredsProvider aws.CredentialsProvider, config *vault.ProfileConfig, authToken string, port int, lazyLoadBaseCreds bool) (*EcsServer, error) {
 	listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
 	if err != nil {
@@ -98,17 +102,22 @@ func NewEcsServer(ctx context.Context, baseCredsProvider aws.CredentialsProvider
 	return e, nil
 }
 
+// BaseURL returns the URL the server listens on.
 func (e *EcsServer) BaseURL() string {
 	return fmt.Sprintf("http://%s", e.listener.Addr().String())
 }
+
+// AuthToken returns the token clients must send in the Authorization header.
 func (e *EcsServer) AuthToken() string {
 	return e.authToken
 }
 
+// Serve serves requests until the server is shut down.
 func (e *EcsServer) Serve() error {
 	return e.server.Serve(e.listener)
 }
 
+// DefaultRoute responds with the base profile's credentials.
 func (e *EcsServer) DefaultRoute(w http.ResponseWriter, r *http.Request) {
 	creds, err := e.baseCredsProvider.Retrieve(r.Context())
 	if err != nil {
@@ -137,6 +146,7 @@ func (e *EcsServer) getRoleProvider(roleArn string) aws.CredentialsProvider {
 	return roleProviderCache
 }
 
+// AssumeRoleArnRoute responds with credentials for the role ARN in the request path.
 func (e *EcsServer) AssumeRoleArnRoute(w http.ResponseWriter, r *http.Request) {
 	roleArn := strings.TrimPrefix(r.URL.Path, "/role-arn/")
 	roleProvider := e.getRoleProvider(roleArn)

@@ -10,14 +10,15 @@ import (
 	"github.com/byteness/keyring"
 )
 
-type RemoveCommandInput struct {
+type removeCommandInput struct {
 	ProfileName  string
 	SessionsOnly bool
 	Force        bool
 }
 
+// ConfigureRemoveCommand registers the remove command.
 func ConfigureRemoveCommand(app *kingpin.Application, a *AwsVault) {
-	input := RemoveCommandInput{}
+	input := removeCommandInput{}
 
 	cmd := app.Command("remove", "Remove credentials from the secure keystore.")
 	cmd.Alias("rm")
@@ -41,13 +42,13 @@ func ConfigureRemoveCommand(app *kingpin.Application, a *AwsVault) {
 		if err != nil {
 			return err
 		}
-		err = RemoveCommand(input, keyring)
+		err = removeCommand(input, keyring)
 		app.FatalIfError(err, "remove")
 		return nil
 	})
 }
 
-func RemoveCommand(input RemoveCommandInput, keyring keyring.Keyring) error {
+func removeCommand(input removeCommandInput, keyring keyring.Keyring) error {
 	ckr := &vault.CredentialKeyring{Keyring: keyring}
 
 	// Legacy --sessions-only option for backwards compatibility, use aws-vault clear instead
