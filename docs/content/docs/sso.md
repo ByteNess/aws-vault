@@ -34,15 +34,15 @@ scripts can use the account ID without calling `aws sts get-caller-identity`.
 
 ## Signing in
 
-By default aws-vault signs in with the OAuth2 authorization code flow with
-[PKCE](https://datatracker.ietf.org/doc/html/rfc7636), like `aws sso login` in v2 of the AWS CLI. aws-vault starts a
+By default `aws-vault` signs in with the OAuth2 authorization code flow with
+[PKCE](https://datatracker.ietf.org/doc/html/rfc7636), like `aws sso login` in v2 of the AWS CLI. `aws-vault` starts a
 short-lived callback server on `127.0.0.1` and opens the IAM Identity Center sign-in page in your default browser. Once
-you allow access, the browser is sent back to that local server and aws-vault exchanges the authorization code for a
+you allow access, the browser is sent back to that local server and `aws-vault` exchanges the authorization code for a
 token, so there is no code to compare between the terminal and the browser. The browser only ever delivers the code to
-your own machine, and the code is useless without the PKCE secret, which never passes through the browser: aws-vault
-sends it only to AWS. If sign-in isn't completed within 10 minutes, aws-vault stops waiting and exits with an error.
+your own machine, and the code is useless without the PKCE secret, which never passes through the browser: `aws-vault`
+sends it only to AWS. If sign-in isn't completed within 10 minutes, `aws-vault` stops waiting and exits with an error.
 
-aws-vault uses the device code flow instead, which shows a URL and code to confirm in any browser, when:
+`aws-vault` uses the device code flow instead, which shows a URL and code to confirm in any browser, when:
 
 * `--device-code` is passed, or `AWS_VAULT_DEVICE_CODE` is set
 * `--stdout` is passed, or `AWS_VAULT_STDOUT` is set, since the URL may then be opened on another machine
