@@ -61,6 +61,9 @@ jobs:
       - name: Lint
         run: make vet
       - name: golangci-lint
+        # on a branch's first push there's no earlier commit to diff against, so the
+        # action lints everything; pull requests lint only their changes
+        if: github.event_name == 'pull_request'
         uses: golangci/golangci-lint-action@v9
         with:
           version: v2.14
