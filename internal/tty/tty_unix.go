@@ -19,5 +19,5 @@ func Open() (in, out *os.File, cleanup func()) {
 	if err != nil {
 		return nil, nil, func() {}
 	}
-	return f, f, func() { f.Close() }
+	return f, f, func() { _ = f.Close() }
 }

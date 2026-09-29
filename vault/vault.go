@@ -275,19 +275,19 @@ func writeFileAtomic(filename string, data []byte, perm os.FileMode) (err error)
 	// CreateTemp defaults to 0600 on Unix, but be explicit — umask and
 	// platform behavior vary, and this file holds a bearer token.
 	if err = f.Chmod(perm); err != nil {
-		f.Close()
+		_ = f.Close()
 		return fmt.Errorf("chmod temp file: %w", err)
 	}
 
 	if _, err = f.Write(data); err != nil {
-		f.Close()
+		_ = f.Close()
 		return fmt.Errorf("write temp file: %w", err)
 	}
 
 	// fsync before rename so the contents are durable on disk before any
 	// reader can observe the new inode at the target path.
 	if err = f.Sync(); err != nil {
-		f.Close()
+		_ = f.Close()
 		return fmt.Errorf("sync temp file: %w", err)
 	}
 
