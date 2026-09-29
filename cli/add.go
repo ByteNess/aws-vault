@@ -35,7 +35,7 @@ func ConfigureAddCommand(app *kingpin.Application, a *AwsVault) {
 		Default("true").
 		BoolVar(&input.AddConfig)
 
-	cmd.Action(func(c *kingpin.ParseContext) error {
+	cmd.Action(func(_ *kingpin.ParseContext) error {
 		keyring, err := a.Keyring()
 		if err != nil {
 			return err

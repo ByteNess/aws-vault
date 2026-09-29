@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 
@@ -72,19 +73,15 @@ output=json
 
 func newConfigFile(t *testing.T, b []byte) string {
 	t.Helper()
-	f, err := os.CreateTemp("", "aws-config")
-	if err != nil {
+	f := filepath.Join(t.TempDir(), "aws-config")
+	if err := os.WriteFile(f, b, 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(f.Name(), b, 0600); err != nil {
-		t.Fatal(err)
-	}
-	return f.Name()
+	return f
 }
 
 func TestProfileNameCaseSensitivity(t *testing.T) {
 	f := newConfigFile(t, exampleConfig)
-	defer os.Remove(f)
 
 	cfg, err := vault.LoadConfig(f)
 	if err != nil {
@@ -104,7 +101,6 @@ func TestProfileNameCaseSensitivity(t *testing.T) {
 
 func TestConfigParsingProfiles(t *testing.T) {
 	f := newConfigFile(t, exampleConfig)
-	defer os.Remove(f)
 
 	cfg, err := vault.LoadConfig(f)
 	if err != nil {
@@ -137,7 +133,6 @@ func TestConfigParsingProfiles(t *testing.T) {
 
 func TestConfigParsingDefault(t *testing.T) {
 	f := newConfigFile(t, exampleConfig)
-	defer os.Remove(f)
 
 	cfg, err := vault.LoadConfig(f)
 	if err != nil {
@@ -161,7 +156,6 @@ func TestConfigParsingDefault(t *testing.T) {
 
 func TestProfilesFromConfig(t *testing.T) {
 	f := newConfigFile(t, exampleConfig)
-	defer os.Remove(f)
 
 	cfg, err := vault.LoadConfig(f)
 	if err != nil {
@@ -187,7 +181,6 @@ func TestProfilesFromConfig(t *testing.T) {
 
 func TestAddProfileToExistingConfig(t *testing.T) {
 	f := newConfigFile(t, exampleConfig)
-	defer os.Remove(f)
 
 	cfg, err := vault.LoadConfig(f)
 	if err != nil {
@@ -224,7 +217,6 @@ func TestAddProfileToExistingConfig(t *testing.T) {
 
 func TestAddProfileToExistingNestedConfig(t *testing.T) {
 	f := newConfigFile(t, nestedConfig)
-	defer os.Remove(f)
 
 	cfg, err := vault.LoadConfig(f)
 	if err != nil {
@@ -253,7 +245,6 @@ func TestAddProfileToExistingNestedConfig(t *testing.T) {
 
 func TestIncludeProfile(t *testing.T) {
 	f := newConfigFile(t, exampleConfig)
-	defer os.Remove(f)
 
 	configFile, err := vault.LoadConfig(f)
 	if err != nil {
@@ -273,7 +264,6 @@ func TestIncludeProfile(t *testing.T) {
 
 func TestIncludeSsoSession(t *testing.T) {
 	f := newConfigFile(t, exampleConfig)
-	defer os.Remove(f)
 
 	configFile, err := vault.LoadConfig(f)
 	if err != nil {
@@ -310,7 +300,6 @@ func TestProfileIsEmpty(t *testing.T) {
 
 func TestIniWithHeaderSavesWithHeader(t *testing.T) {
 	f := newConfigFile(t, defaultsOnlyConfigWithHeader)
-	defer os.Remove(f)
 
 	cfg, err := vault.LoadConfig(f)
 	if err != nil {
@@ -337,7 +326,6 @@ region=us-east-1
 [default]
 region=us-west-2
 `))
-	defer os.Remove(f)
 
 	cfg, err := vault.LoadConfig(f)
 	if err != nil {
@@ -358,7 +346,6 @@ func TestLoadedProfileDoesntReferToItself(t *testing.T) {
 [profile foo]
 source_profile=foo
 `))
-	defer os.Remove(f)
 
 	configFile, err := vault.LoadConfig(f)
 	if err != nil {
@@ -395,7 +382,6 @@ func TestSourceProfileCanReferToParent(t *testing.T) {
 include_profile=root
 source_profile=root
 `))
-	defer os.Remove(f)
 
 	configFile, err := vault.LoadConfig(f)
 	if err != nil {
@@ -489,14 +475,13 @@ func TestSetTransitiveSessionTags(t *testing.T) {
 }
 
 func TestSessionTaggingFromIni(t *testing.T) {
-	os.Unsetenv("AWS_SESSION_TAGS")
-	os.Unsetenv("AWS_TRANSITIVE_TAGS")
+	t.Setenv("AWS_SESSION_TAGS", "")
+	t.Setenv("AWS_TRANSITIVE_TAGS", "")
 	f := newConfigFile(t, []byte(`
 [profile tagged]
 session_tags = tag1 = value1 , tag2=value2 ,tag3=value3
 transitive_session_tags = tagOne ,tagTwo,tagThree
 `))
-	defer os.Remove(f)
 
 	configFile, err := vault.LoadConfig(f)
 	if err != nil {
@@ -523,17 +508,14 @@ transitive_session_tags = tagOne ,tagTwo,tagThree
 }
 
 func TestSessionTaggingFromEnvironment(t *testing.T) {
-	os.Setenv("AWS_SESSION_TAGS", " tagA = val1 , tagB=val2 ,tagC=val3")
-	os.Setenv("AWS_TRANSITIVE_TAGS", " tagD ,tagE")
-	defer os.Unsetenv("AWS_SESSION_TAGS")
-	defer os.Unsetenv("AWS_TRANSITIVE_TAGS")
+	t.Setenv("AWS_SESSION_TAGS", " tagA = val1 , tagB=val2 ,tagC=val3")
+	t.Setenv("AWS_TRANSITIVE_TAGS", " tagD ,tagE")
 
 	f := newConfigFile(t, []byte(`
 [profile tagged]
 session_tags = tag1 = value1 , tag2=value2 ,tag3=value3
 transitive_session_tags = tagOne ,tagTwo,tagThree
 `))
-	defer os.Remove(f)
 
 	configFile, err := vault.LoadConfig(f)
 	if err != nil {
@@ -560,10 +542,8 @@ transitive_session_tags = tagOne ,tagTwo,tagThree
 }
 
 func TestSessionTaggingFromEnvironmentChainedRoles(t *testing.T) {
-	os.Setenv("AWS_SESSION_TAGS", "tagI=valI")
-	os.Setenv("AWS_TRANSITIVE_TAGS", " tagII")
-	defer os.Unsetenv("AWS_SESSION_TAGS")
-	defer os.Unsetenv("AWS_TRANSITIVE_TAGS")
+	t.Setenv("AWS_SESSION_TAGS", "tagI=valI")
+	t.Setenv("AWS_TRANSITIVE_TAGS", " tagII")
 
 	f := newConfigFile(t, []byte(`
 [profile base]
@@ -578,7 +558,6 @@ session_tags=tagA=valueA
 transitive_session_tags=tagB
 source_profile = interim
 `))
-	defer os.Remove(f)
 
 	configFile, err := vault.LoadConfig(f)
 	if err != nil {
@@ -676,7 +655,6 @@ sso_account_id = 333344445555
 [profile none]
 region = us-east-1
 `))
-	defer os.Remove(f)
 
 	configFile, err := vault.LoadConfig(f)
 	if err != nil {

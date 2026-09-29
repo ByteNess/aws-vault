@@ -1,7 +1,8 @@
+// aws-vault securely stores AWS credentials and provides temporary ones to
+// commands and applications.
 package main
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/alecthomas/kingpin/v2"
@@ -21,7 +22,7 @@ var (
 
 func main() {
 	app := kingpin.New("aws-vault", "A vault for securely storing and accessing AWS credentials in development environments.")
-	versionInfo := fmt.Sprintf("%s", Version)
+	versionInfo := Version
 	//versionInfo := fmt.Sprintf("%s\ngo: %s", Version, runtime.Version())
 	app.Version(versionInfo)
 	app.VersionFlag.Short('v')

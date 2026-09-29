@@ -49,7 +49,6 @@ func TestUsageWebIdentityExample(t *testing.T) {
 role_arn = arn:aws:iam::33333333333:role/role2
 web_identity_token_process = oidccli raw
 `))
-	defer os.Remove(f)
 	configFile, err := vault.LoadConfig(f)
 	if err != nil {
 		t.Fatal(err)
@@ -85,7 +84,6 @@ include_profile=my-shared-base-profile
 region=eu-west-1
 role_arn=arn:aws:iam::12345678901:role/allow-view-only-access-from-other-accounts
 `))
-	defer os.Remove(f)
 	configFile, err := vault.LoadConfig(f)
 	if err != nil {
 		t.Fatal(err)
@@ -133,7 +131,6 @@ sso_start_url=https://xxxx.awsapps.com/start
 sso_region=ap-northeast-2
 sso_registration_scopes=sso:account:access
 `))
-	defer os.Remove(f)
 	configFile, err := vault.LoadConfig(f)
 	if err != nil {
 		t.Fatal(err)
@@ -166,7 +163,6 @@ func TestDirectRoleLoginDoesNotUseGetSessionToken(t *testing.T) {
 role_arn=arn:aws:iam::111111111111:role/target
 mfa_serial=arn:aws:iam::111111111111:mfa/user
 `))
-	defer os.Remove(f)
 
 	configFile, err := vault.LoadConfig(f)
 	if err != nil {
@@ -210,7 +206,6 @@ source_profile=source
 role_arn=arn:aws:iam::222222222222:role/target
 mfa_serial=arn:aws:iam::111111111111:mfa/user
 `))
-	defer os.Remove(f)
 
 	configFile, err := vault.LoadConfig(f)
 	if err != nil {
@@ -241,7 +236,7 @@ mfa_serial=arn:aws:iam::111111111111:mfa/user
 	if idxSession == -1 || idxSourceAssume == -1 || idxTargetAssume == -1 {
 		t.Fatalf("expected source GetSessionToken then source/target AssumeRole, logs:\n%s", logs)
 	}
-	if !(idxSession < idxSourceAssume && idxSourceAssume < idxTargetAssume) {
+	if idxSession >= idxSourceAssume || idxSourceAssume >= idxTargetAssume {
 		t.Fatalf("unexpected flow order, logs:\n%s", logs)
 	}
 }
@@ -256,7 +251,6 @@ mfa_serial=arn:aws:iam::111111111111:mfa/user
 [profile target]
 source_profile=source
 `))
-	defer os.Remove(f)
 
 	configFile, err := vault.LoadConfig(f)
 	if err != nil {
@@ -311,7 +305,6 @@ role_session_name=user
 source_profile=admin
 duration_seconds=7200
 `))
-	defer os.Remove(f)
 
 	configFile, err := vault.LoadConfig(f)
 	if err != nil {
@@ -365,7 +358,6 @@ source_profile=source
 role_arn=arn:aws:iam::222222222222:role/target
 mfa_serial=arn:aws:iam::111111111111:mfa/user
 `))
-	defer os.Remove(f)
 
 	base := vault.ProfileConfig{
 		AssumeRoleDuration:             12 * time.Hour,
@@ -430,7 +422,6 @@ region=us-east-1
 mfa_serial=arn:aws:iam::111111111111:mfa/user
 role_arn=arn:aws:iam::111111111111:role/target
 `))
-	defer os.Remove(f)
 
 	base := vault.ProfileConfig{
 		AssumeRoleDuration:             12 * time.Hour,
@@ -492,7 +483,6 @@ region=us-east-1
 mfa_serial=arn:aws:iam::111111111111:mfa/user
 role_arn=arn:aws:iam::111111111111:role/target
 `))
-	defer os.Remove(f)
 
 	base := vault.ProfileConfig{
 		AssumeRoleDuration:             12 * time.Hour,
@@ -551,7 +541,6 @@ region=us-east-1
 mfa_serial=arn:aws:iam::111111111111:mfa/user
 role_arn=arn:aws:iam::111111111111:role/target
 `))
-	defer os.Remove(f)
 
 	configFile, err := vault.LoadConfig(f)
 	if err != nil {
@@ -609,7 +598,6 @@ mfa_serial=arn:aws:iam::111111111111:mfa/user
 role_arn=arn:aws:iam::333333333333:role/target
 role_session_name=user
 `))
-	defer os.Remove(f)
 
 	base := vault.ProfileConfig{
 		AssumeRoleDuration:             12 * time.Hour,
@@ -703,7 +691,6 @@ include_profile=default
 [profile unknown]
 region=eu-west-1
 `))
-	defer os.Remove(f)
 
 	configFile, err := vault.LoadConfig(f)
 	if err != nil {

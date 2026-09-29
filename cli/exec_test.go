@@ -68,7 +68,7 @@ func TestExecCommand(t *testing.T) {
 			helperArgs := []string{"-test.run=^TestExecCommandHelper$", "--", tc.cmd.exe}
 			helperArgs = append(helperArgs, tc.cmd.args...)
 
-			cmd := osexec.Command(os.Args[0], helperArgs...)
+			cmd := osexec.CommandContext(t.Context(), os.Args[0], helperArgs...)
 			cmd.Env = execTestEnv(configPath)
 
 			var stdout bytes.Buffer
@@ -149,8 +149,7 @@ func TestExecCommandHelper(t *testing.T) {
 
 	ConfigureExecCommand(app, awsVault)
 
-	parseArgs := []string{"--debug", "exec", "--no-session", "llamas", "--", helperCommand}
-	parseArgs = append(parseArgs, helperArgs...)
+	parseArgs := append([]string{"--debug", "exec", "--no-session", "llamas", "--", helperCommand}, helperArgs...)
 
 	kingpin.MustParse(app.Parse(parseArgs))
 

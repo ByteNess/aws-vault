@@ -316,8 +316,9 @@ func (c *ConfigFile) Add(profile ProfileSection) error {
 
 // ProfileNames returns a slice of profile names from the AWS config
 func (c *ConfigFile) ProfileNames() []string {
-	profileNames := []string{}
-	for _, profile := range c.ProfileSections() {
+	sections := c.ProfileSections()
+	profileNames := make([]string, 0, len(sections))
+	for _, profile := range sections {
 		profileNames = append(profileNames, profile.Name)
 	}
 	return profileNames

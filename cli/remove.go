@@ -37,7 +37,7 @@ func ConfigureRemoveCommand(app *kingpin.Application, a *AwsVault) {
 		Short('f').
 		BoolVar(&input.Force)
 
-	cmd.Action(func(c *kingpin.ParseContext) error {
+	cmd.Action(func(_ *kingpin.ParseContext) error {
 		keyring, err := a.Keyring()
 		if err != nil {
 			return err

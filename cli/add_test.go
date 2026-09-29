@@ -8,32 +8,23 @@ import (
 )
 
 func Example_addCommand() {
-	f, err := os.CreateTemp("", "aws-config")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer os.Remove(f.Name())
-	f.Close()
+	configFile, removeConfig := exampleConfigFile("")
+	defer removeConfig()
 
 	fileDir, err := os.MkdirTemp("", "aws-vault-file-backend")
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer os.RemoveAll(fileDir)
+	defer func() { _ = os.RemoveAll(fileDir) }()
 
-	os.Setenv("AWS_CONFIG_FILE", f.Name())
-	os.Setenv("AWS_ACCESS_KEY_ID", "llamas")
-	os.Setenv("AWS_SECRET_ACCESS_KEY", "rock")
-	os.Setenv("AWS_VAULT_BACKEND", "file")
-	os.Setenv("AWS_VAULT_FILE_DIR", fileDir)
-	os.Setenv("AWS_VAULT_FILE_PASSPHRASE", "password")
-
-	defer os.Unsetenv("AWS_CONFIG_FILE")
-	defer os.Unsetenv("AWS_ACCESS_KEY_ID")
-	defer os.Unsetenv("AWS_SECRET_ACCESS_KEY")
-	defer os.Unsetenv("AWS_VAULT_BACKEND")
-	defer os.Unsetenv("AWS_VAULT_FILE_DIR")
-	defer os.Unsetenv("AWS_VAULT_FILE_PASSPHRASE")
+	defer setExampleEnv(
+		"AWS_CONFIG_FILE", configFile,
+		"AWS_ACCESS_KEY_ID", "llamas",
+		"AWS_SECRET_ACCESS_KEY", "rock",
+		"AWS_VAULT_BACKEND", "file",
+		"AWS_VAULT_FILE_DIR", fileDir,
+		"AWS_VAULT_FILE_PASSPHRASE", "password",
+	)()
 
 	app := kingpin.New(`aws-vault`, ``)
 	ConfigureAddCommand(app, ConfigureGlobals(app))
