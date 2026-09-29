@@ -73,7 +73,7 @@ func ConfigureExportCommand(app *kingpin.Application, a *AwsVault) {
 		HintAction(a.MustGetProfileNames).
 		StringVar(&input.ProfileName)
 
-	cmd.Action(func(c *kingpin.ParseContext) (err error) {
+	cmd.Action(func(_ *kingpin.ParseContext) (err error) {
 		input.Config.MfaPromptMethod = a.PromptDriver(false)
 		input.Config.NonChainedGetSessionTokenDuration = input.SessionDuration
 		input.Config.ChainedGetSessionTokenDuration = input.SessionDuration
@@ -132,13 +132,14 @@ func exportCommand(input exportCommandInput, f *vault.ConfigFile, keyring keyrin
 		return fmt.Errorf("Error determining account ID: %w", err)
 	}
 
-	if input.Format == FormatTypeExportJSON {
+	switch input.Format {
+	case FormatTypeExportJSON:
 		return printJSON(input, credsProvider, accountID)
-	} else if input.Format == FormatTypeExportINI {
+	case FormatTypeExportINI:
 		return printINI(credsProvider, input.ProfileName, config.Region, accountID)
-	} else if input.Format == FormatTypeExportEnv {
+	case FormatTypeExportEnv:
 		return printEnv(input, credsProvider, config.Region, accountID, "export ")
-	} else {
+	default:
 		return printEnv(input, credsProvider, config.Region, accountID, "")
 	}
 }

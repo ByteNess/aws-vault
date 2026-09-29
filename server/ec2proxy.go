@@ -35,7 +35,7 @@ func StartProxy() error {
 	}
 
 	handler := http.NewServeMux()
-	handler.HandleFunc("/stop", func(w http.ResponseWriter, r *http.Request) {
+	handler.HandleFunc("/stop", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		go Shutdown()
 	})

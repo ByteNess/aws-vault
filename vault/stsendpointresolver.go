@@ -10,7 +10,7 @@ import (
 // getEndpointResolver resolves endpoints in accordance with
 // https://docs.aws.amazon.com/credref/latest/refdocs/setting-global-sts_regional_endpoints.html
 func getSTSEndpointResolver(stsRegionalEndpoints, endpointURL string) aws.EndpointResolverWithOptionsFunc {
-	return func(service, region string, options ...interface{}) (aws.Endpoint, error) {
+	return func(service, region string, _ ...interface{}) (aws.Endpoint, error) {
 		if endpointURL != "" {
 			log.Println("Using custom STS endpoint " + endpointURL)
 

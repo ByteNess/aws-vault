@@ -1,3 +1,4 @@
+// Package prompt asks the user for MFA codes, in the terminal or a GUI dialog.
 package prompt
 
 import (
@@ -13,7 +14,7 @@ var Methods = map[string]Func{}
 
 // Available returns the names of the available prompt methods, sorted.
 func Available() []string {
-	methods := []string{}
+	methods := make([]string, 0, len(Methods))
 	for k := range Methods {
 		methods = append(methods, k)
 	}

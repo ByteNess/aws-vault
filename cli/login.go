@@ -77,7 +77,7 @@ func ConfigureLoginCommand(app *kingpin.Application, a *AwsVault) {
 		HintAction(a.MustGetProfileNames).
 		StringVar(&input.ProfileName)
 
-	cmd.Action(func(c *kingpin.ParseContext) (err error) {
+	cmd.Action(func(_ *kingpin.ParseContext) (err error) {
 		input.Config.MfaPromptMethod = a.PromptDriver(false)
 		input.Config.NonChainedGetSessionTokenDuration = input.SessionDuration
 		input.Config.ChainedGetSessionTokenDuration = input.SessionDuration

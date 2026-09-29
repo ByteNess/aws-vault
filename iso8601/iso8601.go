@@ -1,3 +1,4 @@
+// Package iso8601 formats times in the ISO 8601 layout AWS uses.
 package iso8601
 
 import "time"

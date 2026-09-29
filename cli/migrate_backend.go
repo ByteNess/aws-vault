@@ -49,7 +49,7 @@ func ConfigureMigrateBackendCommand(app *kingpin.Application, a *AwsVault) {
 	cmd.Flag("delete-source", "Delete source credentials after successful destination verification.").
 		BoolVar(&input.DeleteSource)
 
-	cmd.Action(func(c *kingpin.ParseContext) error {
+	cmd.Action(func(_ *kingpin.ParseContext) error {
 		err := MigrateBackendCommand(input, a.KeyringConfig)
 		app.FatalIfError(err, "migrate-backend")
 		return nil

@@ -1,3 +1,5 @@
+// Package server serves credentials locally over the EC2 instance metadata and
+// ECS container credentials protocols.
 package server
 
 import (

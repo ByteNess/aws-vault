@@ -32,22 +32,22 @@ func startEc2CredentialsServer(credsProvider aws.CredentialsProvider, region str
 	log.Printf("Starting EC2 Instance Metadata server on %s", ec2CredentialsServerAddr)
 	router := http.NewServeMux()
 
-	router.HandleFunc("/latest/meta-data/iam/security-credentials/", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("/latest/meta-data/iam/security-credentials/", func(w http.ResponseWriter, _ *http.Request) {
 		fmt.Fprintf(w, "local-credentials")
 	})
 
 	// The AWS Go SDK checks the instance-id endpoint to validate the existence of EC2 Metadata
-	router.HandleFunc("/latest/meta-data/instance-id/", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("/latest/meta-data/instance-id/", func(w http.ResponseWriter, _ *http.Request) {
 		fmt.Fprintf(w, "aws-vault")
 	})
 
 	// The AWS .NET SDK checks this endpoint during obtaining credentials/refreshing them
-	router.HandleFunc("/latest/meta-data/iam/info/", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("/latest/meta-data/iam/info/", func(w http.ResponseWriter, _ *http.Request) {
 		fmt.Fprintf(w, `{"Code" : "Success"}`)
 	})
 
 	// used by AWS SDK to determine region
-	router.HandleFunc("/latest/dynamic/instance-identity/document", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("/latest/dynamic/instance-identity/document", func(w http.ResponseWriter, _ *http.Request) {
 		fmt.Fprintf(w, `{"region": "%s"}`, region)
 	})
 

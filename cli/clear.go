@@ -22,7 +22,7 @@ func ConfigureClearCommand(app *kingpin.Application, a *AwsVault) {
 		HintAction(a.MustGetProfileNames).
 		StringVar(&input.ProfileName)
 
-	cmd.Action(func(c *kingpin.ParseContext) (err error) {
+	cmd.Action(func(_ *kingpin.ParseContext) (err error) {
 		keyring, err := a.Keyring()
 		if err != nil {
 			return err

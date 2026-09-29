@@ -1,3 +1,5 @@
+// Package vault stores AWS credentials in a keyring and provides temporary
+// credentials for profiles in the AWS config file.
 package vault
 
 import (
@@ -593,7 +595,6 @@ func (t *TempCredentialsCreator) canUseGetSessionToken(c *ProfileConfig) (bool, 
 		if c.ChainedFromProfile.MfaSerial != c.MfaSerial {
 			return false, fmt.Sprintf("MFA serial doesn't match profile '%s'", c.ChainedFromProfile.ProfileName)
 		}
-
 	}
 
 	return true, ""

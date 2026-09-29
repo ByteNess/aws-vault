@@ -36,7 +36,7 @@ func ConfigureListCommand(app *kingpin.Application, a *AwsVault) {
 	cmd.Flag("credentials", "Show only the profiles with stored credential").
 		BoolVar(&input.OnlyCredentials)
 
-	cmd.Action(func(c *kingpin.ParseContext) (err error) {
+	cmd.Action(func(_ *kingpin.ParseContext) (err error) {
 		keyring, err := a.Keyring()
 		if err != nil {
 			return err

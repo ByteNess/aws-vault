@@ -1,3 +1,4 @@
+// Package cli implements the aws-vault commands.
 package cli
 
 import (
@@ -115,8 +116,9 @@ func ConfigureGlobals(app *kingpin.Application) *AwsVault {
 		KeyringConfig: keyringConfigDefaults,
 	}
 
-	backendsAvailable := []string{}
-	for _, backendType := range keyring.AvailableBackends() {
+	backends := keyring.AvailableBackends()
+	backendsAvailable := make([]string, 0, len(backends))
+	for _, backendType := range backends {
 		backendsAvailable = append(backendsAvailable, string(backendType))
 	}
 
@@ -134,7 +136,7 @@ func ConfigureGlobals(app *kingpin.Application) *AwsVault {
 		Envar("AWS_VAULT_PROMPT").
 		StringVar(&a.promptDriver)
 
-	app.Validate(func(app *kingpin.Application) error {
+	app.Validate(func(_ *kingpin.Application) error {
 		if a.promptDriver == "" {
 			return nil
 		}
@@ -225,7 +227,7 @@ func ConfigureGlobals(app *kingpin.Application) *AwsVault {
 		Envar("AWS_VAULT_BIOMETRICS").
 		BoolVar(&a.UseBiometrics)
 
-	app.PreAction(func(c *kingpin.ParseContext) error {
+	app.PreAction(func(_ *kingpin.ParseContext) error {
 		if !a.Debug {
 			log.SetOutput(io.Discard)
 		}
