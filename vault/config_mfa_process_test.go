@@ -1,7 +1,6 @@
 package vault_test
 
 import (
-	"os"
 	"testing"
 
 	"github.com/byteness/aws-vault/v7/vault"
@@ -29,7 +28,6 @@ source_profile = fooprofile
 
 func TestMfaProcessInheritedFromSourceProfile(t *testing.T) {
 	f := newConfigFile(t, issue389Config)
-	defer os.Remove(f)
 
 	cf, err := vault.LoadConfig(f)
 	if err != nil {
@@ -64,7 +62,6 @@ source_profile = source
 region = us-east-1
 `)
 	f := newConfigFile(t, cfg)
-	defer os.Remove(f)
 
 	cf, err := vault.LoadConfig(f)
 	if err != nil {

@@ -67,7 +67,7 @@ func TestProcessMfaProvider_StdinIsTTY(t *testing.T) {
 	if f, err := os.OpenFile("/dev/tty", os.O_RDWR, 0); err != nil {
 		t.Skip("no controlling terminal available (/dev/tty inaccessible), skipping TTY stdin test")
 	} else {
-		f.Close()
+		_ = f.Close()
 	}
 
 	// test -t 0 exits 0 if fd 0 (stdin) is a terminal, non-zero otherwise.

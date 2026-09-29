@@ -59,7 +59,7 @@ func TestRedirectURI(t *testing.T) {
 func TestHandleCallback_Success(t *testing.T) {
 	s := newTestCallbackServer(t)
 
-	req := httptest.NewRequest(http.MethodGet, "/oauth/callback?state="+s.state+"&code=abc123", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/oauth/callback?state="+s.state+"&code=abc123", nil)
 	rec := httptest.NewRecorder()
 	s.handleCallback(rec, req)
 
@@ -82,7 +82,7 @@ func TestHandleCallback_Success(t *testing.T) {
 func TestHandleCallback_StateMismatchDoesNotAbort(t *testing.T) {
 	s := newTestCallbackServer(t)
 
-	req := httptest.NewRequest(http.MethodGet, "/oauth/callback?state=wrong&code=abc123", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/oauth/callback?state=wrong&code=abc123", nil)
 	rec := httptest.NewRecorder()
 	s.handleCallback(rec, req)
 
@@ -96,7 +96,7 @@ func TestHandleCallback_StateMismatchDoesNotAbort(t *testing.T) {
 func TestHandleCallback_OAuthError(t *testing.T) {
 	s := newTestCallbackServer(t)
 
-	req := httptest.NewRequest(http.MethodGet, "/oauth/callback?state="+s.state+"&error=access_denied&error_description=denied+by+user", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/oauth/callback?state="+s.state+"&error=access_denied&error_description=denied+by+user", nil)
 	rec := httptest.NewRecorder()
 	s.handleCallback(rec, req)
 
@@ -116,14 +116,14 @@ func TestHandleCallback_MethodAndPath(t *testing.T) {
 	s := newTestCallbackServer(t)
 
 	rec := httptest.NewRecorder()
-	s.handleCallback(rec, httptest.NewRequest(http.MethodPost, "/oauth/callback?state="+s.state, nil))
+	s.handleCallback(rec, httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/oauth/callback?state="+s.state, nil))
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Errorf("POST status = %d, want 405", rec.Code)
 	}
 	assertNoResult(t, s)
 
 	rec = httptest.NewRecorder()
-	s.handleCallback(rec, httptest.NewRequest(http.MethodGet, "/nope", nil))
+	s.handleCallback(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/nope", nil))
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("bad-path status = %d, want 404", rec.Code)
 	}
@@ -154,7 +154,7 @@ func TestHandleCallback_PageHeaders(t *testing.T) {
 	s := newTestCallbackServer(t)
 
 	rec := httptest.NewRecorder()
-	s.handleCallback(rec, httptest.NewRequest(http.MethodGet, "/oauth/callback?state="+s.state+"&code=abc123", nil))
+	s.handleCallback(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/oauth/callback?state="+s.state+"&code=abc123", nil))
 	recvResult(t, s)
 
 	for k, want := range map[string]string{
@@ -189,7 +189,11 @@ func TestCallbackPageDeliveredBeforeShutdown(t *testing.T) {
 			close(closed)
 		}()
 
-		resp, err := http.Get(s.redirectURI() + "?state=" + s.state + "&error=access_denied")
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, s.redirectURI()+"?state="+s.state+"&error=access_denied", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatalf("run %d: %v", i, err)
 		}
@@ -205,6 +209,7 @@ func TestCallbackPageDeliveredBeforeShutdown(t *testing.T) {
 func TestDeviceCodeReason(t *testing.T) {
 	sshVars := []string{"SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"}
 	clearSSH := func(t *testing.T) {
+		t.Helper()
 		for _, v := range sshVars {
 			t.Setenv(v, "")
 		}
@@ -255,7 +260,7 @@ func TestNewSSORoleCredentialsProvider_EndpointURL(t *testing.T) {
 func TestHandleCallback_RepeatedCallbackDoesNotBlock(t *testing.T) {
 	s := newTestCallbackServer(t)
 	req := func() *http.Request {
-		return httptest.NewRequest(http.MethodGet, "/oauth/callback?state="+s.state+"&code=abc123", nil)
+		return httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/oauth/callback?state="+s.state+"&code=abc123", nil)
 	}
 
 	done := make(chan struct{})
@@ -279,7 +284,7 @@ func TestHandleCallback_ErrorIsEscaped(t *testing.T) {
 	s := newTestCallbackServer(t)
 
 	rec := httptest.NewRecorder()
-	s.handleCallback(rec, httptest.NewRequest(http.MethodGet, "/oauth/callback?state="+s.state+"&error=%3Cb%3Ex%3C%2Fb%3E", nil))
+	s.handleCallback(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/oauth/callback?state="+s.state+"&error=%3Cb%3Ex%3C%2Fb%3E", nil))
 	recvResult(t, s)
 
 	if body := rec.Body.String(); !strings.Contains(body, "<title>aws-vault | Sign-in failed</title>") {
@@ -294,7 +299,7 @@ func TestHandleCallback_MissingCode(t *testing.T) {
 	s := newTestCallbackServer(t)
 
 	rec := httptest.NewRecorder()
-	s.handleCallback(rec, httptest.NewRequest(http.MethodGet, "/oauth/callback?state="+s.state, nil))
+	s.handleCallback(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/oauth/callback?state="+s.state, nil))
 
 	if !strings.Contains(rec.Body.String(), "Sign-in failed") {
 		t.Errorf("body = %q, want the failure page", rec.Body.String())

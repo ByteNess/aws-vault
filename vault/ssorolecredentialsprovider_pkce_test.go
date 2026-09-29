@@ -41,6 +41,12 @@ func (f *fakeOIDC) fail(w http.ResponseWriter, format string, args ...any) {
 	_, _ = io.WriteString(w, `{"error":"invalid_request"}`)
 }
 
+func (f *fakeOIDC) reply(w http.ResponseWriter, v map[string]any) {
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		f.t.Errorf("encoding reply: %v", err)
+	}
+}
+
 func (f *fakeOIDC) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -49,21 +55,21 @@ func (f *fakeOIDC) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodPost && r.URL.Path == "/client/register":
 		var in struct {
 			GrantTypes   []string
-			RedirectUris []string
+			RedirectURIs []string
 			Scopes       []string
-			IssuerUrl    string
+			IssuerURL    string
 		}
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 			f.fail(w, "register: %v", err)
 			return
 		}
 		if strings.Join(in.GrantTypes, ",") != "authorization_code,refresh_token" ||
-			strings.Join(in.RedirectUris, ",") != "http://127.0.0.1/oauth/callback" ||
-			strings.Join(in.Scopes, ",") != "sso:account:access" || in.IssuerUrl != fakeStartURL {
+			strings.Join(in.RedirectURIs, ",") != "http://127.0.0.1/oauth/callback" ||
+			strings.Join(in.Scopes, ",") != "sso:account:access" || in.IssuerURL != fakeStartURL {
 			f.fail(w, "register: unexpected input %+v", in)
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{
+		f.reply(w, map[string]any{
 			"clientId": "client-id", "clientSecret": "client-secret",
 			"clientIdIssuedAt": time.Now().Unix(), "clientSecretExpiresAt": time.Now().Add(time.Hour).Unix(),
 		})
@@ -93,7 +99,7 @@ func (f *fakeOIDC) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	case r.Method == http.MethodPost && r.URL.Path == "/token":
 		var in struct {
-			ClientId, ClientSecret, GrantType, Code, CodeVerifier, RedirectUri string
+			ClientID, ClientSecret, GrantType, Code, CodeVerifier, RedirectURI string
 		}
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 			f.fail(w, "token: %v", err)
@@ -106,17 +112,17 @@ func (f *fakeOIDC) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		sum := sha256.Sum256([]byte(in.CodeVerifier))
 		switch {
-		case in.GrantType != "authorization_code" || in.ClientId != "client-id" || in.ClientSecret != "client-secret":
+		case in.GrantType != "authorization_code" || in.ClientID != "client-id" || in.ClientSecret != "client-secret":
 			f.fail(w, "token: unexpected client or grant %+v", in)
 		case in.Code != "auth-code" || f.codeUsed:
 			f.fail(w, "token: code %q unknown or already used", in.Code)
 		case base64.RawURLEncoding.EncodeToString(sum[:]) != f.challenge:
 			f.fail(w, "token: code_verifier does not match the S256 code_challenge")
-		case in.RedirectUri != f.redirectURI:
-			f.fail(w, "token: redirect_uri %q differs from the authorize request's %q", in.RedirectUri, f.redirectURI)
+		case in.RedirectURI != f.redirectURI:
+			f.fail(w, "token: redirect_uri %q differs from the authorize request's %q", in.RedirectURI, f.redirectURI)
 		default:
 			f.codeUsed = true
-			_ = json.NewEncoder(w).Encode(map[string]any{
+			f.reply(w, map[string]any{
 				"accessToken": "access-token", "refreshToken": "refresh-token", "tokenType": "Bearer", "expiresIn": 3600,
 			})
 		}
@@ -141,12 +147,17 @@ func runPKCE(t *testing.T, f *fakeOIDC) (*ssooidc.CreateTokenOutput, string, err
 			t.Errorf("browser opened %q, want the authorize endpoint on %s", u, srv.URL)
 		}
 		go func() {
-			resp, err := http.Get(u)
+			req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, u, nil)
 			if err != nil {
 				page <- "error: " + err.Error()
 				return
 			}
-			defer resp.Body.Close()
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				page <- "error: " + err.Error()
+				return
+			}
+			defer func() { _ = resp.Body.Close() }()
 			b, _ := io.ReadAll(resp.Body)
 			page <- string(b)
 		}()
