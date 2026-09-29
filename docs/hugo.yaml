@@ -101,7 +101,7 @@ params:
 
   navbar:
     displayTitle: true
-    displayLogo: false # no logo assets exist in the repo
+    displayLogo: true
     width: wide
 
   theme:
