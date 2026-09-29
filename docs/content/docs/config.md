@@ -180,6 +180,7 @@ To configure the default flag values of `aws-vault` and its subcommands:
 | `AWS_VAULT_PROFILE_ENV` | Set `AWS_PROFILE` instead of injecting `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` to allow profile-based SDK auth | `profile-env` (for `exec`) |
 | `AWS_CONFIG_FILE` | The location of the AWS config file | — |
 | `AWS_VAULT_STDOUT` | Print login URL to stdout instead of opening in default browser | `--stdout` |
+| `AWS_VAULT_DEVICE_CODE` | Use the device code flow for SSO sign-in instead of the default PKCE browser flow (see [SSO](/docs/sso#signing-in)) | `--device-code` |
 
 To override the AWS config file (used in the `exec`, `login` and `rotate` subcommands):
 
