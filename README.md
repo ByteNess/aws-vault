@@ -1,4 +1,9 @@
-# AWS Vault
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/static/images/aws-vault-lockup-dark.svg">
+    <img alt="AWS Vault" src="docs/static/images/aws-vault-lockup-light.svg" height="64">
+  </picture>
+</h1>
 
 [![Downloads](https://img.shields.io/github/downloads/byteness/aws-vault/total)](https://github.com/byteness/aws-vault/releases)
 [![Continuous Integration](https://github.com/byteness/aws-vault/workflows/Continuous%20Integration/badge.svg)](https://github.com/byteness/aws-vault/actions)

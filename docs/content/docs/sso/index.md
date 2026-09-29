@@ -52,7 +52,9 @@ The browser can only reach the callback server when it runs on the same machine,
 device code flow. `--device-code` is available on `exec`, `export` and `login`.
 
 Browsers only let a page close its own tab in limited cases, so the tab usually stays open after signing in, showing
-that you can close it.
+that you can close it:
+
+![The sign-in tab after approving access in the browser](sso-signin-success.png)
 
 ## Assuming a role with SSO
 

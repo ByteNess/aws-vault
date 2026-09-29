@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" role="img" aria-label="aws-vault">
+<rect x="0.3" y="5" width="3" height="6" rx="1" fill="#64748b"/>
+<circle cx="8.8" cy="8" r="7" fill="#334155"/>
+<circle cx="8.8" cy="8" r="5" fill="#1e293b"/>
+<path d="m6.4 5.6 2.4 2.4-2.4 2.4" fill="none" stroke="#2dd4bf" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M9.6 10.4h1.8" stroke="#e2e8f0" stroke-width="1.6" stroke-linecap="round"/>
+</svg>
