@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -382,6 +383,8 @@ var pkceSignInTimeout = 10 * time.Minute
 // newOIDCTokenPKCE generates a new OIDC token using the authorization code flow
 // with PKCE (https://datatracker.ietf.org/doc/html/rfc7636).
 func (p *SSORoleCredentialsProvider) newOIDCTokenPKCE(ctx context.Context) (*OIDCTokenData, error) {
+	scopes := p.pkceScopes()
+
 	codeVerifierBytes := make([]byte, 32)
 	if _, err := crand.Read(codeVerifierBytes); err != nil {
 		return nil, fmt.Errorf("failed to generate PKCE verifier: %w", err)
@@ -396,7 +399,7 @@ func (p *SSORoleCredentialsProvider) newOIDCTokenPKCE(ctx context.Context) (*OID
 		ClientName:   aws.String("aws-vault"),
 		ClientType:   aws.String("public"),
 		GrantTypes:   []string{"authorization_code", "refresh_token"},
-		Scopes:       []string{"sso:account:access"},
+		Scopes:       scopes,
 		IssuerUrl:    aws.String(p.StartURL),
 		RedirectUris: []string{"http://127.0.0.1/oauth/callback"},
 	})
@@ -426,7 +429,7 @@ func (p *SSORoleCredentialsProvider) newOIDCTokenPKCE(ctx context.Context) (*OID
 		"state":                 {cbServer.state},
 		"code_challenge_method": {"S256"},
 		"code_challenge":        {codeChallenge},
-		"scopes":                {"sso:account:access"},
+		"scopes":                {strings.Join(scopes, " ")},
 	}
 	authorizeURL, err := p.authorizeURL(ctx)
 	if err != nil {
@@ -469,6 +472,18 @@ func (p *SSORoleCredentialsProvider) newOIDCTokenPKCE(ctx context.Context) (*OID
 		ClientSecret:          aws.ToString(clientCreds.ClientSecret),
 		ClientSecretExpiresAt: time.Unix(clientCreds.ClientSecretExpiresAt, 0),
 	}, nil
+}
+
+// pkceDefaultScope is requested when sso_registration_scopes is unset, as in
+// the AWS CLI: the authorization code grant needs a scope.
+const pkceDefaultScope = "sso:account:access"
+
+// pkceScopes returns the configured registration scopes, or pkceDefaultScope.
+func (p *SSORoleCredentialsProvider) pkceScopes() []string {
+	if len(p.RegistrationScopes) > 0 {
+		return p.RegistrationScopes
+	}
+	return []string{pkceDefaultScope}
 }
 
 // authorizeURL derives the /authorize endpoint, which isn't a modeled operation,

@@ -27,11 +27,20 @@ const fakeStartURL = "https://d-1234567890.awsapps.com/start"
 type fakePKCEOIDC struct {
 	t    *testing.T
 	deny bool // redirect back with access_denied instead of a code
+	// scopes is the provider's sso_registration_scopes; empty expects the default
+	scopes []string
 
 	mu          sync.Mutex
 	challenge   string
 	redirectURI string
 	codeUsed    bool
+}
+
+func (f *fakePKCEOIDC) wantScopes() []string {
+	if len(f.scopes) > 0 {
+		return f.scopes
+	}
+	return []string{"sso:account:access"}
 }
 
 func (f *fakePKCEOIDC) fail(w http.ResponseWriter, format string, args ...any) {
@@ -65,7 +74,7 @@ func (f *fakePKCEOIDC) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		if strings.Join(in.GrantTypes, ",") != "authorization_code,refresh_token" ||
 			strings.Join(in.RedirectURIs, ",") != "http://127.0.0.1/oauth/callback" ||
-			strings.Join(in.Scopes, ",") != "sso:account:access" || in.IssuerURL != fakeStartURL {
+			strings.Join(in.Scopes, ",") != strings.Join(f.wantScopes(), ",") || in.IssuerURL != fakeStartURL {
 			f.fail(w, "register: unexpected input %+v", in)
 			return
 		}
@@ -83,7 +92,7 @@ func (f *fakePKCEOIDC) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		if q.Get("client_id") != "client-id" || q.Get("response_type") != "code" ||
 			q.Get("code_challenge_method") != "S256" || q.Get("code_challenge") == "" ||
-			q.Get("scopes") != "sso:account:access" || q.Get("state") == "" {
+			q.Get("scopes") != strings.Join(f.wantScopes(), " ") || q.Get("state") == "" {
 			f.fail(w, "authorize: unexpected query %v", q)
 			return
 		}
@@ -165,8 +174,9 @@ func runPKCE(t *testing.T, f *fakePKCEOIDC) (*OIDCTokenData, string, error) {
 	}
 
 	p := &SSORoleCredentialsProvider{
-		OIDCClient: ssooidc.New(ssooidc.Options{Region: "eu-west-1", BaseEndpoint: aws.String(srv.URL)}),
-		StartURL:   fakeStartURL,
+		OIDCClient:         ssooidc.New(ssooidc.Options{Region: "eu-west-1", BaseEndpoint: aws.String(srv.URL)}),
+		StartURL:           fakeStartURL,
+		RegistrationScopes: f.scopes,
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -191,6 +201,30 @@ func TestNewOIDCTokenPKCE_EndToEnd(t *testing.T) {
 	}
 	if !strings.Contains(shown, "Request approved") {
 		t.Errorf("browser showed %q, want the success page", shown)
+	}
+}
+
+// The configured scopes replace the default, and the authorize URL carries
+// them space separated, as in the AWS CLI.
+func TestNewOIDCTokenPKCE_ConfiguredScopes(t *testing.T) {
+	f := &fakePKCEOIDC{t: t, scopes: []string{"sso:account:access", "codewhisperer:completions"}}
+	if _, _, err := runPKCE(t, f); err != nil {
+		t.Fatalf("newOIDCTokenPKCE: %v", err)
+	}
+}
+
+// The client registration is kept with the token so the refresh token can be
+// redeemed later.
+func TestNewOIDCTokenPKCE_KeepsClientRegistration(t *testing.T) {
+	tok, _, err := runPKCE(t, &fakePKCEOIDC{t: t})
+	if err != nil {
+		t.Fatalf("newOIDCTokenPKCE: %v", err)
+	}
+	if tok.ClientID != "client-id" || tok.ClientSecret != "client-secret" || tok.ClientSecretExpiresAt.IsZero() {
+		t.Errorf("client registration = %q/%q/%s, want client-id/client-secret and an expiry", tok.ClientID, tok.ClientSecret, tok.ClientSecretExpiresAt)
+	}
+	if !tok.Refreshable() {
+		t.Error("a PKCE token with a refresh token should be refreshable")
 	}
 }
 
