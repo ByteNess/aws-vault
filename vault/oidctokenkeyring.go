@@ -11,10 +11,12 @@ import (
 	"github.com/byteness/keyring"
 )
 
+// OIDCTokenKeyring stores OIDC access tokens in the keyring, by SSO start URL.
 type OIDCTokenKeyring struct {
 	Keyring keyring.Keyring
 }
 
+// OIDCTokenData is the stored form of an OIDC token, with its expiry time.
 type OIDCTokenData struct {
 	Token      ssooidc.CreateTokenOutput
 	Expiration time.Time
@@ -26,10 +28,12 @@ func (o *OIDCTokenKeyring) fmtKey(startURL string) string {
 	return oidcTokenKeyPrefix + startURL
 }
 
+// IsOIDCTokenKey reports whether keyring key k holds an OIDC token.
 func IsOIDCTokenKey(k string) bool {
 	return strings.HasPrefix(k, oidcTokenKeyPrefix)
 }
 
+// Has reports whether a token is stored for startURL.
 func (o OIDCTokenKeyring) Has(startURL string) (bool, error) {
 	keys, err := o.Keys()
 	if err != nil {
@@ -45,6 +49,7 @@ func (o OIDCTokenKeyring) Has(startURL string) (bool, error) {
 	return false, nil
 }
 
+// Get returns the token for startURL. An expired token is removed and reported as not found.
 func (o OIDCTokenKeyring) Get(startURL string) (*ssooidc.CreateTokenOutput, error) {
 	item, err := o.Keyring.Get(o.fmtKey(startURL))
 	if err != nil {
@@ -70,6 +75,7 @@ func (o OIDCTokenKeyring) Get(startURL string) (*ssooidc.CreateTokenOutput, erro
 	return &val.Token, err
 }
 
+// Set stores token for startURL.
 func (o OIDCTokenKeyring) Set(startURL string, token *ssooidc.CreateTokenOutput) error {
 	val := OIDCTokenData{
 		Token:      *token,
@@ -91,10 +97,12 @@ func (o OIDCTokenKeyring) Set(startURL string, token *ssooidc.CreateTokenOutput)
 	})
 }
 
+// Remove deletes the token for startURL.
 func (o OIDCTokenKeyring) Remove(startURL string) error {
 	return o.Keyring.Remove(o.fmtKey(startURL))
 }
 
+// RemoveAll deletes all stored tokens and returns how many it deleted.
 func (o *OIDCTokenKeyring) RemoveAll() (n int, err error) {
 	allKeys, err := o.Keys()
 	if err != nil {
@@ -109,6 +117,7 @@ func (o *OIDCTokenKeyring) RemoveAll() (n int, err error) {
 	return n, nil
 }
 
+// Keys returns the start URLs that have a stored token.
 func (o *OIDCTokenKeyring) Keys() (kk []string, err error) {
 	allKeys, err := o.Keyring.Keys()
 	if err != nil {

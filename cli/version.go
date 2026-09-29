@@ -6,6 +6,7 @@ import (
 	"github.com/alecthomas/kingpin/v2"
 )
 
+// ConfigureVersionCommand registers the version command, which prints versionInfo.
 func ConfigureVersionCommand(app *kingpin.Application, versionInfo string) {
 	cmd := app.Command("version", "Print the aws-vault version and build info.")
 	cmd.Action(func(c *kingpin.ParseContext) error {

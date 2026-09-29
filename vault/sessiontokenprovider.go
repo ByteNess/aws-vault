@@ -33,7 +33,7 @@ func (p *SessionTokenProvider) Retrieve(ctx context.Context) (aws.Credentials, e
 	}, nil
 }
 
-// GetSessionToken generates a new set of temporary credentials using STS GetSessionToken
+// RetrieveStsCredentials gets a new session with STS GetSessionToken.
 func (p *SessionTokenProvider) RetrieveStsCredentials(ctx context.Context) (*ststypes.Credentials, error) {
 	var err error
 

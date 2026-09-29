@@ -69,6 +69,7 @@ func hasBackgroundServer(input execCommandInput) bool {
 	return input.StartEcsServer || input.StartEc2Server
 }
 
+// ConfigureExecCommand registers the exec command.
 func ConfigureExecCommand(app *kingpin.Application, a *AwsVault) {
 	input := execCommandInput{}
 

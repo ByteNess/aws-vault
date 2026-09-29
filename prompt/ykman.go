@@ -10,8 +10,8 @@ import (
 	"github.com/byteness/aws-vault/v7/internal/tty"
 )
 
-// YkmanProvider runs ykman to generate a OATH-TOTP token from the Yubikey device
-// To set up ykman, first run `ykman oath accounts add`
+// YkmanMfaProvider runs ykman to generate an OATH-TOTP code from a YubiKey.
+// To set up ykman, first run `ykman oath accounts add`.
 func YkmanMfaProvider(mfaSerial string) (string, error) {
 	args := []string{}
 

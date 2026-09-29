@@ -33,6 +33,7 @@ type loginCommandInput struct {
 	AutoLogout      bool
 }
 
+// ConfigureLoginCommand registers the login command.
 func ConfigureLoginCommand(app *kingpin.Application, a *AwsVault) {
 	input := loginCommandInput{}
 

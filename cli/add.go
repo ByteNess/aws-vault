@@ -18,6 +18,7 @@ type addCommandInput struct {
 	AddConfig   bool
 }
 
+// ConfigureAddCommand registers the add command.
 func ConfigureAddCommand(app *kingpin.Application, a *AwsVault) {
 	input := addCommandInput{}
 

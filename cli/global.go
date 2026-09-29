@@ -33,6 +33,7 @@ var keyringConfigDefaults = keyring.Config{
 	ProtonPassTokenFunc:      keyringPassphrasePrompt,
 }
 
+// AwsVault holds the global flags and the keyring and AWS config shared by all commands.
 type AwsVault struct {
 	Debug          bool
 	KeyringConfig  keyring.Config
@@ -49,6 +50,8 @@ func isATerminal() bool {
 	return isatty.IsTerminal(fd) || isatty.IsCygwinTerminal(fd)
 }
 
+// PromptDriver returns the prompt method for MFA codes: the terminal, unless there is none or
+// avoidTerminalPrompt is set, in which case the first other available method.
 func (a *AwsVault) PromptDriver(avoidTerminalPrompt bool) string {
 	if a.promptDriver == "" {
 		a.promptDriver = "terminal"
@@ -68,6 +71,7 @@ func (a *AwsVault) PromptDriver(avoidTerminalPrompt bool) string {
 	return a.promptDriver
 }
 
+// Keyring opens the configured keyring backend on first use and returns it.
 func (a *AwsVault) Keyring() (keyring.Keyring, error) {
 	if a.keyringImpl == nil {
 		if a.KeyringBackend != "" {
@@ -83,6 +87,7 @@ func (a *AwsVault) Keyring() (keyring.Keyring, error) {
 	return a.keyringImpl, nil
 }
 
+// AwsConfigFile loads the AWS config file on first use and returns it.
 func (a *AwsVault) AwsConfigFile() (*vault.ConfigFile, error) {
 	if a.awsConfigFile == nil {
 		var err error
@@ -95,6 +100,7 @@ func (a *AwsVault) AwsConfigFile() (*vault.ConfigFile, error) {
 	return a.awsConfigFile, nil
 }
 
+// MustGetProfileNames returns the profile names in the AWS config file, exiting if it can't be loaded.
 func (a *AwsVault) MustGetProfileNames() []string {
 	config, err := a.AwsConfigFile()
 	if err != nil {
@@ -103,6 +109,7 @@ func (a *AwsVault) MustGetProfileNames() []string {
 	return config.ProfileNames()
 }
 
+// ConfigureGlobals registers the global flags and returns the state they populate.
 func ConfigureGlobals(app *kingpin.Application) *AwsVault {
 	a := &AwsVault{
 		KeyringConfig: keyringConfigDefaults,

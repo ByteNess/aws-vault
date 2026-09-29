@@ -16,6 +16,7 @@ type removeCommandInput struct {
 	Force        bool
 }
 
+// ConfigureRemoveCommand registers the remove command.
 func ConfigureRemoveCommand(app *kingpin.Application, a *AwsVault) {
 	input := removeCommandInput{}
 

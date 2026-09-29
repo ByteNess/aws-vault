@@ -26,6 +26,7 @@ type exportCommandInput struct {
 	UseDeviceCode   bool
 }
 
+// Output formats of the export command.
 var (
 	formatTypeEnv        = "env"
 	FormatTypeExportEnv  = "export-env"
@@ -33,6 +34,7 @@ var (
 	FormatTypeExportINI  = "ini"
 )
 
+// ConfigureExportCommand registers the export command.
 func ConfigureExportCommand(app *kingpin.Application, a *AwsVault) {
 	input := exportCommandInput{}
 

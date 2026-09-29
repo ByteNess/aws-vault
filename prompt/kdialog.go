@@ -5,6 +5,7 @@ import (
 	"strings"
 )
 
+// KDialogMfaPrompt prompts for an MFA code in a KDialog window.
 func KDialogMfaPrompt(mfaSerial string) (string, error) {
 	cmd := exec.Command("kdialog", "--inputbox", mfaPromptMessage(mfaSerial), "--title", "aws-vault")
 

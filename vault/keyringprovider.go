@@ -13,6 +13,7 @@ type KeyringProvider struct {
 	CredentialsName string
 }
 
+// Retrieve returns the long-term credentials stored in the keyring.
 func (p *KeyringProvider) Retrieve(_ context.Context) (aws.Credentials, error) {
 	log.Printf("Looking up keyring for '%s'", p.CredentialsName)
 	return p.Keyring.Get(p.CredentialsName)

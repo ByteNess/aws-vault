@@ -8,10 +8,12 @@ import (
 	"github.com/byteness/keyring"
 )
 
+// CredentialKeyring stores long-term AWS credentials in the keyring, by profile name.
 type CredentialKeyring struct {
 	Keyring keyring.Keyring
 }
 
+// Keys returns the names of the stored credentials, excluding sessions and OIDC tokens.
 func (ck *CredentialKeyring) Keys() (credentialsNames []string, err error) {
 	allKeys, err := ck.Keyring.Keys()
 	if err != nil {
@@ -25,6 +27,7 @@ func (ck *CredentialKeyring) Keys() (credentialsNames []string, err error) {
 	return credentialsNames, nil
 }
 
+// Has reports whether credentials are stored under credentialsName.
 func (ck *CredentialKeyring) Has(credentialsName string) (bool, error) {
 	allKeys, err := ck.Keyring.Keys()
 	if err != nil {
@@ -38,6 +41,7 @@ func (ck *CredentialKeyring) Has(credentialsName string) (bool, error) {
 	return false, nil
 }
 
+// Get returns the credentials stored under credentialsName.
 func (ck *CredentialKeyring) Get(credentialsName string) (creds aws.Credentials, err error) {
 	item, err := ck.Keyring.Get(credentialsName)
 	if err != nil {
@@ -49,6 +53,7 @@ func (ck *CredentialKeyring) Get(credentialsName string) (creds aws.Credentials,
 	return creds, err
 }
 
+// Set stores creds under credentialsName.
 func (ck *CredentialKeyring) Set(credentialsName string, creds aws.Credentials) error {
 	bytes, err := json.Marshal(creds)
 	if err != nil {
@@ -65,6 +70,7 @@ func (ck *CredentialKeyring) Set(credentialsName string, creds aws.Credentials) 
 	})
 }
 
+// Remove deletes the credentials stored under credentialsName.
 func (ck *CredentialKeyring) Remove(credentialsName string) error {
 	return ck.Keyring.Remove(credentialsName)
 }

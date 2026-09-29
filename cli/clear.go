@@ -12,6 +12,7 @@ type clearCommandInput struct {
 	ProfileName string
 }
 
+// ConfigureClearCommand registers the clear command.
 func ConfigureClearCommand(app *kingpin.Application, a *AwsVault) {
 	input := clearCommandInput{}
 

@@ -19,6 +19,7 @@ type rotateCommandInput struct {
 	Config      vault.ProfileConfig
 }
 
+// ConfigureRotateCommand registers the rotate command.
 func ConfigureRotateCommand(app *kingpin.Application, a *AwsVault) {
 	input := rotateCommandInput{}
 

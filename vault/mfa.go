@@ -24,6 +24,8 @@ func (m Mfa) GetMfaToken() (*string, error) {
 	return nil, errors.New("No prompt found")
 }
 
+// NewMfa returns the MFA settings for config, taking the code from its mfa_token,
+// mfa_process or prompt method, in that order.
 func NewMfa(config *ProfileConfig) Mfa {
 	m := Mfa{
 		MfaSerial: config.MfaSerial,
@@ -42,6 +44,7 @@ func NewMfa(config *ProfileConfig) Mfa {
 	return m
 }
 
+// ProcessMfaProvider runs processCmd and returns its output as the MFA code.
 func ProcessMfaProvider(processCmd string) (string, error) {
 	return executeMFACommand(processCmd)
 }

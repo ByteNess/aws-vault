@@ -23,6 +23,7 @@ var oldSessionKeyPatterns = []*regexp.Regexp{
 }
 var base64URLEncodingNoPadding = base64.URLEncoding.WithPadding(base64.NoPadding)
 
+// IsOldSessionKey reports whether s is a session key in a format from an older aws-vault release.
 func IsOldSessionKey(s string) bool {
 	for _, pattern := range oldSessionKeyPatterns {
 		if pattern.MatchString(s) {
@@ -32,15 +33,18 @@ func IsOldSessionKey(s string) bool {
 	return false
 }
 
+// IsCurrentSessionKey reports whether s is a session key in the current format.
 func IsCurrentSessionKey(s string) bool {
 	_, err := NewSessionKeyFromString(s)
 	return err == nil
 }
 
+// IsSessionKey reports whether s is a session key in any format.
 func IsSessionKey(s string) bool {
 	return IsCurrentSessionKey(s) || IsOldSessionKey(s)
 }
 
+// SessionMetadata identifies a cached session; it is encoded in the session's keyring key.
 type SessionMetadata struct {
 	Type        string
 	ProfileName string
@@ -58,6 +62,7 @@ func (k *SessionMetadata) String() string {
 	)
 }
 
+// StringForMatching returns the key prefix shared by all sessions with this metadata, whatever their expiry.
 func (k *SessionMetadata) StringForMatching() string {
 	return fmt.Sprintf(
 		"%s,%s,%s,",
@@ -67,6 +72,7 @@ func (k *SessionMetadata) StringForMatching() string {
 	)
 }
 
+// NewSessionKeyFromString parses a session keyring key.
 func NewSessionKeyFromString(s string) (SessionMetadata, error) {
 	matches := sessionKeyPattern.FindStringSubmatch(s)
 	if len(matches) == 0 {
@@ -94,10 +100,12 @@ func NewSessionKeyFromString(s string) (SessionMetadata, error) {
 	}, nil
 }
 
+// SessionKeyring caches temporary session credentials in the keyring.
 type SessionKeyring struct {
 	Keyring keyring.Keyring
 }
 
+// ErrNotFound is returned when no session matches.
 var ErrNotFound = keyring.ErrKeyNotFound
 
 func (sk *SessionKeyring) lookupKeyName(key SessionMetadata) (string, error) {
@@ -113,6 +121,7 @@ func (sk *SessionKeyring) lookupKeyName(key SessionMetadata) (string, error) {
 	return key.String(), ErrNotFound
 }
 
+// Has reports whether a session matching key is cached.
 func (sk *SessionKeyring) Has(key SessionMetadata) (bool, error) {
 	_, err := sk.lookupKeyName(key)
 	if err == ErrNotFound {
@@ -125,6 +134,7 @@ func (sk *SessionKeyring) Has(key SessionMetadata) (bool, error) {
 	return false, err
 }
 
+// Get returns the cached session matching key, first removing expired and old-format sessions.
 func (sk *SessionKeyring) Get(key SessionMetadata) (creds *ststypes.Credentials, err error) {
 	_, _ = sk.RemoveOldSessions()
 
@@ -143,6 +153,7 @@ func (sk *SessionKeyring) Get(key SessionMetadata) (creds *ststypes.Credentials,
 	return creds, err
 }
 
+// Set caches creds for key, first removing expired and old-format sessions.
 func (sk *SessionKeyring) Set(key SessionMetadata, creds *ststypes.Credentials) error {
 	_, _ = sk.RemoveOldSessions()
 
@@ -181,6 +192,7 @@ func (sk *SessionKeyring) Set(key SessionMetadata, creds *ststypes.Credentials) 
 	})
 }
 
+// Remove deletes the session matching key.
 func (sk *SessionKeyring) Remove(key SessionMetadata) error {
 	keyName, err := sk.lookupKeyName(key)
 	if err != nil && err != ErrNotFound {
@@ -190,6 +202,7 @@ func (sk *SessionKeyring) Remove(key SessionMetadata) error {
 	return sk.Keyring.Remove(keyName)
 }
 
+// RemoveAll deletes all cached sessions and returns how many it deleted.
 func (sk *SessionKeyring) RemoveAll() (n int, err error) {
 	allKeys, err := sk.Keys()
 	if err != nil {
@@ -204,6 +217,7 @@ func (sk *SessionKeyring) RemoveAll() (n int, err error) {
 	return n, nil
 }
 
+// Keys returns the metadata of all cached sessions, parsed from their keyring keys.
 func (sk *SessionKeyring) Keys() (kk []SessionMetadata, err error) {
 	allKeys, err := sk.Keyring.Keys()
 	if err != nil {
@@ -231,6 +245,7 @@ func (sk *SessionKeyring) realSessionKey(key SessionMetadata) (m SessionMetadata
 	return sessKey, nil
 }
 
+// GetAllMetadata is like Keys, but looks each session up in the keyring again, failing if one lookup fails.
 func (sk *SessionKeyring) GetAllMetadata() (mm []SessionMetadata, err error) {
 	allKeys, err := sk.Keys()
 	if err != nil {
@@ -249,6 +264,7 @@ func (sk *SessionKeyring) GetAllMetadata() (mm []SessionMetadata, err error) {
 	return mm, nil
 }
 
+// RemoveForProfile deletes the cached sessions for profileName and returns how many it deleted.
 func (sk *SessionKeyring) RemoveForProfile(profileName string) (n int, err error) {
 	sessions, err := sk.GetAllMetadata()
 	if err != nil {
@@ -267,6 +283,7 @@ func (sk *SessionKeyring) RemoveForProfile(profileName string) (n int, err error
 	return n, nil
 }
 
+// RemoveOldSessions deletes expired and old-format sessions and returns how many it deleted.
 func (sk *SessionKeyring) RemoveOldSessions() (n int, err error) {
 	allKeys, err := sk.Keyring.Keys()
 	if err != nil {

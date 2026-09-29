@@ -5,10 +5,13 @@ import (
 	"sort"
 )
 
+// Func prompts for an MFA code for the given MFA serial and returns it.
 type Func func(string) (string, error)
 
+// Methods holds the available prompt methods by name; each platform registers its own.
 var Methods = map[string]Func{}
 
+// Available returns the names of the available prompt methods, sorted.
 func Available() []string {
 	methods := []string{}
 	for k := range Methods {
@@ -18,6 +21,7 @@ func Available() []string {
 	return methods
 }
 
+// Method returns the prompt method named s, and panics if there is none.
 func Method(s string) Func {
 	m, ok := Methods[s]
 	if !ok {

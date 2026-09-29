@@ -20,6 +20,7 @@ type listCommandInput struct {
 	OnlyCredentials bool
 }
 
+// ConfigureListCommand registers the list command.
 func ConfigureListCommand(app *kingpin.Application, a *AwsVault) {
 	input := listCommandInput{}
 

@@ -55,6 +55,7 @@ func (p *CredentialProcessProvider) retrieveWith(ctx context.Context, fn func(st
 	}, nil
 }
 
+// RetrieveStsCredentials runs the credential process and returns its credentials.
 func (p *CredentialProcessProvider) RetrieveStsCredentials(ctx context.Context) (*ststypes.Credentials, error) {
 	return p.callCredentialProcessWith(ctx, executeProcess)
 }
