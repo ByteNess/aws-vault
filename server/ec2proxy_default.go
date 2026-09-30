@@ -4,6 +4,7 @@
 package server
 
 import (
+	"context"
 	"errors"
 	"log"
 	"os"
@@ -14,7 +15,7 @@ import (
 // StartEc2EndpointProxyServerProcess starts a `aws-vault proxy` process
 func StartEc2EndpointProxyServerProcess() error {
 	log.Println("Starting `aws-vault proxy`")
-	cmd := exec.Command(awsVaultExecutable(), "proxy")
+	cmd := exec.CommandContext(context.Background(), awsVaultExecutable(), "proxy")
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

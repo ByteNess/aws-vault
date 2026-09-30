@@ -401,7 +401,7 @@ func getDefaultShell() string {
 func runSubProcess(command string, args []string, env []string) (int, error) {
 	log.Printf("Starting a subprocess: %s %s", command, strings.Join(args, " "))
 
-	cmd := osexec.Command(command, args...)
+	cmd := osexec.CommandContext(context.Background(), command, args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

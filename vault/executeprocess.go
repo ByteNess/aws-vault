@@ -1,12 +1,14 @@
 package vault
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"runtime"
 )
 
+// nolint: contextcheck // credential and token processes may be interactive, so they aren't cancelled with the caller
 func executeProcess(process string) (string, error) {
 	var cmdArgs []string
 	if runtime.GOOS == "windows" {
@@ -15,7 +17,7 @@ func executeProcess(process string) (string, error) {
 		cmdArgs = []string{"/bin/sh", "-c", process}
 	}
 
-	cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
+	cmd := exec.CommandContext(context.Background(), cmdArgs[0], cmdArgs[1:]...)
 	cmd.Env = os.Environ()
 	cmd.Stdin = os.Stdin
 	cmd.Stderr = os.Stderr

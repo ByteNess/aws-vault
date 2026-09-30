@@ -4,6 +4,7 @@
 package server
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os/exec"
@@ -36,8 +37,9 @@ func msgFound(localised []string, toTest string) bool {
 	return false
 }
 
+// nolint: contextcheck // the alias must be removed even when shutting down
 func runAndWrapAdminErrors(name string, arg ...string) ([]byte, error) {
-	out, err := exec.Command(name, arg...).CombinedOutput()
+	out, err := exec.CommandContext(context.Background(), name, arg...).CombinedOutput()
 	if msgFound(runAsAdministratorLocalised, string(out)) {
 		const msg = "Creation of network alias for server mode requires elevated permissions, run as administrator"
 		if err != nil {
