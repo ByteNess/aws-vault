@@ -41,7 +41,7 @@ func msgFound(localised []string, toTest string) bool {
 func runAndWrapAdminErrors(name string, arg ...string) ([]byte, error) {
 	out, err := exec.CommandContext(context.Background(), name, arg...).CombinedOutput()
 	if msgFound(runAsAdministratorLocalised, string(out)) {
-		const msg = "Creation of network alias for server mode requires elevated permissions, run as administrator"
+		const msg = "creation of network alias for server mode requires elevated permissions, run as administrator"
 		if err != nil {
 			err = fmt.Errorf("%s: %w", msg, err)
 		} else {

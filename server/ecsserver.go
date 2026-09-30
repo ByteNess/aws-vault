@@ -85,7 +85,7 @@ func NewEcsServer(ctx context.Context, baseCredsProvider aws.CredentialsProvider
 	if !lazyLoadBaseCreds {
 		_, err := credsCache.Retrieve(ctx)
 		if err != nil {
-			return nil, fmt.Errorf("Retrieving creds: %w", err)
+			return nil, fmt.Errorf("retrieving creds: %w", err)
 		}
 	}
 

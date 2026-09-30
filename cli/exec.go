@@ -41,25 +41,25 @@ type execCommandInput struct {
 
 func (input execCommandInput) validate() error {
 	if input.StartEc2Server && input.StartEcsServer {
-		return fmt.Errorf("Can't use --ec2-server with --ecs-server")
+		return fmt.Errorf("can't use --ec2-server with --ecs-server")
 	}
 	if input.StartEc2Server && input.JSONDeprecated {
-		return fmt.Errorf("Can't use --ec2-server with --json")
+		return fmt.Errorf("can't use --ec2-server with --json")
 	}
 	if input.StartEc2Server && input.NoSession {
-		return fmt.Errorf("Can't use --ec2-server with --no-session")
+		return fmt.Errorf("can't use --ec2-server with --no-session")
 	}
 	if input.StartEcsServer && input.JSONDeprecated {
-		return fmt.Errorf("Can't use --ecs-server with --json")
+		return fmt.Errorf("can't use --ecs-server with --json")
 	}
 	if input.StartEcsServer && input.NoSession {
-		return fmt.Errorf("Can't use --ecs-server with --no-session")
+		return fmt.Errorf("can't use --ecs-server with --no-session")
 	}
 	if input.StartEcsServer && input.Config.MfaPromptMethod == "terminal" {
-		return fmt.Errorf("Can't use --prompt=terminal with --ecs-server. Specify a different prompt driver")
+		return fmt.Errorf("can't use --prompt=terminal with --ecs-server, specify a different prompt driver")
 	}
 	if input.StartEc2Server && input.Config.MfaPromptMethod == "terminal" {
-		return fmt.Errorf("Can't use --prompt=terminal with --ec2-server. Specify a different prompt driver")
+		return fmt.Errorf("can't use --prompt=terminal with --ec2-server, specify a different prompt driver")
 	}
 
 	return nil
@@ -201,18 +201,18 @@ func execCommand(input execCommandInput, f *vault.ConfigFile, keyring keyring.Ke
 
 	config, err := vault.NewConfigLoader(input.Config, f, input.ProfileName).GetProfileConfig(input.ProfileName)
 	if err != nil {
-		return 0, fmt.Errorf("Error loading config: %w", err)
+		return 0, fmt.Errorf("loading config: %w", err)
 	}
 
 	ckr := &vault.CredentialKeyring{Keyring: keyring}
 	credsProvider, err := vault.NewTempCredentialsProvider(config, ckr, input.NoSession, false)
 	if err != nil {
-		return 0, fmt.Errorf("Error getting temporary credentials: %w", err)
+		return 0, fmt.Errorf("getting temporary credentials: %w", err)
 	}
 
 	accountID, err := vault.AccountIDForProfile(config, ckr)
 	if err != nil {
-		return 0, fmt.Errorf("Error determining account ID: %w", err)
+		return 0, fmt.Errorf("determining account ID: %w", err)
 	}
 
 	subshellHelp := ""
@@ -225,7 +225,7 @@ func execCommand(input execCommandInput, f *vault.ConfigFile, keyring keyring.Ke
 
 	if input.StartEc2Server {
 		if server.IsProxyRunning() {
-			return 0, fmt.Errorf("Another process is already bound to 169.254.169.254:80")
+			return 0, fmt.Errorf("another process is already bound to 169.254.169.254:80")
 		}
 
 		printHelpMessage("Warning: Starting a local EC2 credential server on 169.254.169.254:80; AWS credentials will be accessible to any process while it is running", input.ShowHelpMessages)
@@ -235,7 +235,7 @@ func execCommand(input execCommandInput, f *vault.ConfigFile, keyring keyring.Ke
 		defer server.StopProxy()
 
 		if err = server.StartEc2CredentialsServer(context.TODO(), credsProvider, config.Region); err != nil {
-			return 0, fmt.Errorf("Failed to start credential server: %w", err)
+			return 0, fmt.Errorf("starting credential server: %w", err)
 		}
 		printHelpMessage(subshellHelp, input.ShowHelpMessages)
 	} else if input.StartEcsServer {
@@ -347,7 +347,7 @@ func startEcsServerAndSetEnv(credsProvider aws.CredentialsProvider, config *vaul
 func addCredsToEnv(credsProvider aws.CredentialsProvider, profileName string, cmdEnv *environ) error {
 	creds, err := credsProvider.Retrieve(context.TODO())
 	if err != nil {
-		return fmt.Errorf("Failed to get credentials for %s: %w", profileName, err)
+		return fmt.Errorf("getting credentials for %s: %w", profileName, err)
 	}
 
 	log.Println("Setting subprocess env: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY")
@@ -440,7 +440,7 @@ func runSubProcess(command string, args []string, env []string) (int, error) {
 		}
 
 		_ = cmd.Process.Signal(os.Kill)
-		return 0, fmt.Errorf("Failed to wait for command termination: %w", err)
+		return 0, fmt.Errorf("waiting for command termination: %w", err)
 	}
 
 	// Wait returned nil so exit code should be 0, but return the process exit code explicitly for clarity.
@@ -452,7 +452,7 @@ func doExecSyscall(command string, args []string, env []string) error {
 
 	argv0, err := osexec.LookPath(command)
 	if err != nil {
-		return fmt.Errorf("Couldn't find the executable '%s': %w", command, err)
+		return fmt.Errorf("couldn't find the executable '%s': %w", command, err)
 	}
 
 	log.Printf("Found executable %s", argv0)

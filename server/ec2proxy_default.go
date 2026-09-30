@@ -24,7 +24,7 @@ func StartEc2EndpointProxyServerProcess() error {
 	}
 	time.Sleep(time.Second * 1)
 	if !IsProxyRunning() {
-		return errors.New("The EC2 Instance Metadata endpoint proxy server isn't running. Run `aws-vault proxy` as Administrator or root in the background and then try this command again")
+		return errors.New("the EC2 Instance Metadata endpoint proxy server isn't running, run `aws-vault proxy` as Administrator or root in the background and then try this command again")
 	}
 	return nil
 }

@@ -48,7 +48,7 @@ func (ck *CredentialKeyring) Get(credentialsName string) (creds aws.Credentials,
 		return creds, err
 	}
 	if err = json.Unmarshal(item.Data, &creds); err != nil {
-		return creds, fmt.Errorf("Invalid data in keyring: %v", err)
+		return creds, fmt.Errorf("invalid data in keyring: %v", err)
 	}
 	return creds, err
 }

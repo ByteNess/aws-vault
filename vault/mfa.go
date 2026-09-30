@@ -21,7 +21,7 @@ func (m Mfa) GetMfaToken() (*string, error) {
 		return aws.String(token), err
 	}
 
-	return nil, errors.New("No prompt found")
+	return nil, errors.New("no prompt found")
 }
 
 // NewMfa returns the MFA settings for config, taking the code from its mfa_token,
