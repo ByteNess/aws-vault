@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -577,9 +578,9 @@ func (cl *ConfigLoader) populateFromEnv(profile *ProfileConfig) {
 	}
 }
 
-func (cl *ConfigLoader) hydrateSourceConfig(config *ProfileConfig) error {
+func (cl *ConfigLoader) hydrateSourceConfig(config *ProfileConfig, chain []string) error {
 	if config.SourceProfileName != "" {
-		sc, err := cl.GetProfileConfig(config.SourceProfileName)
+		sc, err := cl.getProfileConfig(config.SourceProfileName, chain)
 		if err != nil {
 			return err
 		}
@@ -602,6 +603,17 @@ func (cl *ConfigLoader) hydrateSourceConfig(config *ProfileConfig) error {
 
 // GetProfileConfig loads the profile from the config file and environment variables into config
 func (cl *ConfigLoader) GetProfileConfig(profileName string) (*ProfileConfig, error) {
+	return cl.getProfileConfig(profileName, nil)
+}
+
+// getProfileConfig loads profileName, where chain is the profiles that source
+// their credentials from it, to detect source_profile loops.
+func (cl *ConfigLoader) getProfileConfig(profileName string, chain []string) (*ProfileConfig, error) {
+	chain = append(chain, profileName)
+	if slices.Contains(chain[:len(chain)-1], profileName) {
+		return nil, fmt.Errorf("loop detected in source_profile chain: %s", strings.Join(chain, " -> "))
+	}
+
 	config := cl.BaseConfig
 	config.ProfileName = profileName
 	cl.populateFromEnv(&config)
@@ -614,7 +626,7 @@ func (cl *ConfigLoader) GetProfileConfig(profileName string) (*ProfileConfig, er
 
 	cl.populateFromDefaults(&config)
 
-	err = cl.hydrateSourceConfig(&config)
+	err = cl.hydrateSourceConfig(&config, chain)
 	if err != nil {
 		return nil, err
 	}

@@ -676,3 +676,38 @@ region = us-east-1
 		})
 	}
 }
+
+func TestSourceProfileLoop(t *testing.T) {
+	f := newConfigFile(t, []byte(`
+[profile a]
+source_profile = b
+[profile b]
+source_profile = c
+[profile c]
+source_profile = a
+[profile self]
+source_profile = self
+[profile d]
+source_profile = self
+`))
+	configFile, err := vault.LoadConfig(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	configLoader := &vault.ConfigLoader{File: configFile}
+
+	_, err = configLoader.GetProfileConfig("a")
+	want := "loop detected in source_profile chain: a -> b -> c -> a"
+	if err == nil || err.Error() != want {
+		t.Fatalf("err = %v, want %q", err, want)
+	}
+
+	// a profile that sources credentials from itself uses its own stored credentials
+	config, err := configLoader.GetProfileConfig("d")
+	if err != nil {
+		t.Fatalf("GetProfileConfig(d): %v", err)
+	}
+	if config.SourceProfile == nil || config.SourceProfile.ProfileName != "self" || config.SourceProfile.SourceProfile != nil {
+		t.Fatalf("d should source from self, which has no source profile, got %+v", config.SourceProfile)
+	}
+}
