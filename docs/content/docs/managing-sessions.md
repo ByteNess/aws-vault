@@ -107,7 +107,7 @@ and limits your ability to assume the target role to 1h.
 Trying to use a duration longer than 1h may result in an error:
 
 ```
-aws-vault: error: Failed to get credentials for default: ValidationError: The requested DurationSeconds exceeds the MaxSessionDuration set for this role.
+aws-vault: error: getting credentials for default: ValidationError: The requested DurationSeconds exceeds the MaxSessionDuration set for this role.
         status code: 400, request id: aa58fa50-4a5e-11e9-9566-293ea5c350ee
 ```
 

@@ -55,16 +55,16 @@ func addCommand(input addCommandInput, keyring keyring.Keyring, awsConfigFile *v
 
 	p, _ := awsConfigFile.ProfileSection(input.ProfileName)
 	if p.SourceProfile != "" {
-		return fmt.Errorf("Your profile has a source_profile of %s, adding credentials to %s won't have any effect",
+		return fmt.Errorf("your profile has a source_profile of %s, adding credentials to %s won't have any effect",
 			p.SourceProfile, input.ProfileName)
 	}
 
 	if input.FromEnv {
 		if accessKeyID = os.Getenv("AWS_ACCESS_KEY_ID"); accessKeyID == "" {
-			return fmt.Errorf("Missing value for AWS_ACCESS_KEY_ID")
+			return fmt.Errorf("missing value for AWS_ACCESS_KEY_ID")
 		}
 		if secretKey = os.Getenv("AWS_SECRET_ACCESS_KEY"); secretKey == "" {
-			return fmt.Errorf("Missing value for AWS_SECRET_ACCESS_KEY")
+			return fmt.Errorf("missing value for AWS_SECRET_ACCESS_KEY")
 		}
 	} else {
 		var err error
@@ -101,7 +101,7 @@ func addCommand(input addCommandInput, keyring keyring.Keyring, awsConfigFile *v
 			}
 			log.Printf("Adding profile %s to config at %s", input.ProfileName, awsConfigFile.Path)
 			if err := awsConfigFile.Add(newProfileSection); err != nil {
-				return fmt.Errorf("Error adding profile: %w", err)
+				return fmt.Errorf("adding profile: %w", err)
 			}
 		}
 	}

@@ -37,5 +37,5 @@ func GetUsernameFromSession(ctx context.Context, cfg aws.Config) (string, error)
 		return arnParts[len(arnParts)-1], nil
 	}
 
-	return "", fmt.Errorf("Couldn't determine current username")
+	return "", fmt.Errorf("couldn't determine current username")
 }
