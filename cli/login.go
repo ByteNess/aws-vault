@@ -131,7 +131,7 @@ func getCredsProvider(input loginCommandInput, config *vault.ProfileConfig, f *v
 			}
 			credsProvider, err = t.GetProviderForProfile(config)
 			if err != nil {
-				return nil, fmt.Errorf("profile %s: %w", ProfileName, err)
+				return nil, fmt.Errorf("getting temporary credentials: %w", err)
 			}
 
 			return credsProvider, err
@@ -148,7 +148,7 @@ func getCredsProvider(input loginCommandInput, config *vault.ProfileConfig, f *v
 		}
 		credsProvider, err = t.GetProviderForProfile(config)
 		if err != nil {
-			return nil, fmt.Errorf("profile %s: %w", input.ProfileName, err)
+			return nil, fmt.Errorf("getting temporary credentials: %w", err)
 		}
 	}
 
