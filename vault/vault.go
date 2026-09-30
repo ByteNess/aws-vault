@@ -28,21 +28,24 @@ func init() {
 	}
 }
 
-// NewAwsConfig returns an AWS config for region, with STS endpoint resolution applied.
+// NewAwsConfig returns an AWS config for region that sends requests to endpointURL
+// if it's set, and STS requests to the global endpoint if stsRegionalEndpoints is "legacy".
 func NewAwsConfig(region, stsRegionalEndpoints, endpointURL string) aws.Config {
-	return aws.Config{
-		Region:                      region,
-		EndpointResolverWithOptions: getSTSEndpointResolver(stsRegionalEndpoints, endpointURL),
+	cfg := aws.Config{Region: region}
+	if endpointURL != "" {
+		log.Println("Using custom endpoint " + endpointURL)
+		cfg.BaseEndpoint = aws.String(endpointURL)
+	} else if stsRegionalEndpoints == "legacy" {
+		cfg.APIOptions = append(cfg.APIOptions, addLegacySTSEndpoint)
 	}
+	return cfg
 }
 
 // NewAwsConfigWithCredsProvider is like NewAwsConfig, using credsProvider for credentials.
 func NewAwsConfigWithCredsProvider(credsProvider aws.CredentialsProvider, region, stsRegionalEndpoints, endpointURL string) aws.Config {
-	return aws.Config{
-		Region:                      region,
-		Credentials:                 credsProvider,
-		EndpointResolverWithOptions: getSTSEndpointResolver(stsRegionalEndpoints, endpointURL),
-	}
+	cfg := NewAwsConfig(region, stsRegionalEndpoints, endpointURL)
+	cfg.Credentials = credsProvider
+	return cfg
 }
 
 // FormatKeyForDisplay masks all but the last four characters of an access key ID.
@@ -152,12 +155,7 @@ func NewSSORoleCredentialsProvider(k keyring.Keyring, config *ProfileConfig, use
 	cfg := NewAwsConfig(config.SSORegion, config.STSRegionalEndpoints, config.EndpointURL)
 
 	ssoRoleCredentialsProvider := &SSORoleCredentialsProvider{
-		OIDCClient: ssooidc.NewFromConfig(cfg, func(o *ssooidc.Options) {
-			// API calls get EndpointURL from the resolver; the PKCE authorize URL needs it here
-			if config.EndpointURL != "" {
-				o.BaseEndpoint = aws.String(config.EndpointURL)
-			}
-		}),
+		OIDCClient:    ssooidc.NewFromConfig(cfg),
 		StartURL:      config.SSOStartURL,
 		SSOClient:     sso.NewFromConfig(cfg),
 		AccountID:     config.SSOAccountID,
