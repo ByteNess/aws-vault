@@ -4,6 +4,7 @@
 package vault
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -12,8 +13,9 @@ import (
 	"github.com/byteness/aws-vault/v7/internal/tty"
 )
 
+// nolint: contextcheck // mfa_process may be interactive, so it isn't cancelled with the caller
 func executeMFACommand(processCmd string) (string, error) {
-	cmd := exec.Command("/bin/sh", "-c", processCmd)
+	cmd := exec.CommandContext(context.Background(), "/bin/sh", "-c", processCmd)
 
 	// Route stdin and stderr to the controlling TTY so that:
 	//   - Stderr: interactive prompts (e.g. "Touch your YubiKey...") are

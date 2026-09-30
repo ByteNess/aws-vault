@@ -4,6 +4,7 @@
 package vault
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -13,11 +14,12 @@ import (
 	"github.com/byteness/aws-vault/v7/internal/tty"
 )
 
+// nolint: contextcheck // mfa_process may be interactive, so it isn't cancelled with the caller
 func executeMFACommand(processCmd string) (string, error) {
 	// On windows, its quite involved to launch a process if the binary involved is in a path with spaces
 	// See https://github.com/golang/go/issues/17149 for details and workaround proposals
 	shell := os.Getenv("SystemRoot") + "\\System32\\cmd.exe"
-	cmd := exec.Command(shell)
+	cmd := exec.CommandContext(context.Background(), shell)
 	cmd.SysProcAttr = &syscall.SysProcAttr{CmdLine: "/C \"" + processCmd + "\""}
 
 	// Route stdin and stderr to the console so that interactive prompts

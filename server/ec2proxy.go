@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net"
@@ -29,7 +30,7 @@ func StartProxy() error {
 		return fmt.Errorf("%s: %s", strings.TrimSpace(string(output)), err.Error())
 	}
 
-	l, err := net.Listen("tcp", ec2MetadataEndpointAddr)
+	l, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", ec2MetadataEndpointAddr)
 	if err != nil {
 		return err
 	}
@@ -47,7 +48,7 @@ func StartProxy() error {
 
 // IsProxyRunning reports whether something is listening on the EC2 metadata endpoint.
 func IsProxyRunning() bool {
-	_, err := net.DialTimeout("tcp", ec2MetadataEndpointAddr, time.Millisecond*10)
+	_, err := (&net.Dialer{Timeout: time.Millisecond * 10}).DialContext(context.Background(), "tcp", ec2MetadataEndpointAddr)
 	return err == nil
 }
 
@@ -62,7 +63,14 @@ func Shutdown() {
 
 // StopProxy stops the http proxy server on the standard EC2 Instance Metadata endpoint
 func StopProxy() {
-	_, _ = http.Get(fmt.Sprintf("http://%s/stop", ec2MetadataEndpointAddr)) //nolint
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, fmt.Sprintf("http://%s/stop", ec2MetadataEndpointAddr), nil)
+	if err != nil {
+		return
+	}
+	// the proxy may already be gone, so a failed request is fine
+	if resp, err := http.DefaultClient.Do(req); err == nil {
+		_ = resp.Body.Close()
+	}
 }
 
 func awsVaultExecutable() string {

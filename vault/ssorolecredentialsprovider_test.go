@@ -18,7 +18,7 @@ import (
 // handlers can be called directly.
 func newTestCallbackServer(t *testing.T) *oauthCallbackServer {
 	t.Helper()
-	s, err := newOauthCallbackServer()
+	s, err := newOauthCallbackServer(t.Context())
 	if err != nil {
 		t.Fatalf("newOauthCallbackServer: %v", err)
 	}
@@ -177,7 +177,7 @@ func TestHandleCallback_PageHeaders(t *testing.T) {
 // already be on the wire by then.
 func TestCallbackPageDeliveredBeforeShutdown(t *testing.T) {
 	for i := 0; i < 200; i++ {
-		s, err := newOauthCallbackServer()
+		s, err := newOauthCallbackServer(t.Context())
 		if err != nil {
 			t.Fatal(err)
 		}

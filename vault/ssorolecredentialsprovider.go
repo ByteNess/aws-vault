@@ -263,12 +263,12 @@ func (p *SSORoleCredentialsProvider) newOIDCTokenPKCE(ctx context.Context) (*sso
 	}
 	log.Printf("Created new OIDC client (expires at: %s)", time.Unix(clientCreds.ClientSecretExpiresAt, 0))
 
-	cbServer, err := newOauthCallbackServer()
+	cbServer, err := newOauthCallbackServer(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create oauthCallbackServer: %w", err)
 	}
 	log.Printf("oauthCallbackServer callback endpoint: %s", cbServer.redirectURI())
-	defer cbServer.shutdown()
+	defer cbServer.shutdown() //nolint:contextcheck // must run even after ctx is cancelled
 	go func() {
 		if err := cbServer.Serve(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Printf("Failed to run oauthCallbackServer: %s", err)
@@ -360,9 +360,9 @@ func (p *SSORoleCredentialsProvider) openOrPrintURL(url string) {
 
 // newOauthCallbackServer binds a random loopback port for the OAuth2 callback,
 // which reports the authorization code on resultChan.
-func newOauthCallbackServer() (*oauthCallbackServer, error) {
+func newOauthCallbackServer(ctx context.Context) (*oauthCallbackServer, error) {
 	// loopback only: the callback carries the authorization code
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	ln, err := (&net.ListenConfig{}).Listen(ctx, "tcp", "127.0.0.1:0")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create listener: %w", err)
 	}

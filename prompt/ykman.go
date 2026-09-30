@@ -1,6 +1,7 @@
 package prompt
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -36,7 +37,7 @@ func YkmanMfaProvider(mfaSerial string) (string, error) {
 	}
 
 	log.Printf("Fetching MFA code using `ykman %s`", strings.Join(args, " "))
-	cmd := exec.Command("ykman", args...)
+	cmd := exec.CommandContext(context.Background(), "ykman", args...)
 
 	// Route stdin and stderr to the controlling TTY so that:
 	//   - Stderr: the "Touch your YubiKey..." prompt is visible even when
