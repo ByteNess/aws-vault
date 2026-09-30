@@ -28,10 +28,14 @@ type fakeOIDC struct {
 	t    *testing.T
 	deny bool // redirect back with access_denied instead of a code
 
+	refreshFails bool // reject refresh tokens with invalid_grant
+	noRotate     bool // don't issue a new refresh token on refresh
+
 	mu          sync.Mutex
 	challenge   string
 	redirectURI string
 	codeUsed    bool
+	refreshes   int
 }
 
 func (f *fakeOIDC) fail(w http.ResponseWriter, format string, args ...any) {
@@ -99,10 +103,14 @@ func (f *fakeOIDC) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	case r.Method == http.MethodPost && r.URL.Path == "/token":
 		var in struct {
-			ClientID, ClientSecret, GrantType, Code, CodeVerifier, RedirectURI string
+			ClientID, ClientSecret, GrantType, Code, CodeVerifier, RedirectURI, RefreshToken string
 		}
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 			f.fail(w, "token: %v", err)
+			return
+		}
+		if in.GrantType == "refresh_token" {
+			f.refresh(w, in.ClientID, in.ClientSecret, in.RefreshToken)
 			return
 		}
 		// RFC 7636 §4.1: 43-128 characters from the unreserved set
@@ -132,13 +140,29 @@ func (f *fakeOIDC) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// runPKCE runs the PKCE flow against f, with a "browser" that follows the
-// redirect to the callback server and returns the page it shows.
-func runPKCE(t *testing.T, f *fakeOIDC) (*ssooidc.CreateTokenOutput, string, error) {
-	t.Helper()
-	srv := httptest.NewServer(f)
-	t.Cleanup(srv.Close)
+func (f *fakeOIDC) refresh(w http.ResponseWriter, clientID, clientSecret, refreshToken string) {
+	f.refreshes++
+	if clientID != "client-id" || clientSecret != "client-secret" || refreshToken != "refresh-token" {
+		f.fail(w, "token: unexpected refresh by client %q with %q", clientID, refreshToken)
+		return
+	}
+	if f.refreshFails {
+		w.Header().Set("X-Amzn-ErrorType", "InvalidGrantException")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = io.WriteString(w, `{"error":"invalid_grant"}`)
+		return
+	}
+	out := map[string]any{"accessToken": "refreshed-token", "tokenType": "Bearer", "expiresIn": 3600}
+	if !f.noRotate {
+		out["refreshToken"] = "refresh-token-2"
+	}
+	f.reply(w, out)
+}
 
+// fakeBrowser replaces openBrowser with one that follows the redirects from
+// the authorize endpoint on srv and sends the page it ends on to the channel.
+func fakeBrowser(t *testing.T, srv *httptest.Server) <-chan string {
+	t.Helper()
 	page := make(chan string, 1)
 	orig := openBrowser
 	t.Cleanup(func() { openBrowser = orig })
@@ -163,6 +187,17 @@ func runPKCE(t *testing.T, f *fakeOIDC) (*ssooidc.CreateTokenOutput, string, err
 		}()
 		return nil
 	}
+	return page
+}
+
+// runPKCE runs the PKCE flow against f, with a "browser" that follows the
+// redirect to the callback server and returns the page it shows.
+func runPKCE(t *testing.T, f *fakeOIDC) (*ssooidc.CreateTokenOutput, string, error) {
+	t.Helper()
+	srv := httptest.NewServer(f)
+	t.Cleanup(srv.Close)
+
+	page := fakeBrowser(t, srv)
 
 	p := &SSORoleCredentialsProvider{
 		OIDCClient: ssooidc.New(ssooidc.Options{Region: "eu-west-1", BaseEndpoint: aws.String(srv.URL)}),
@@ -170,7 +205,7 @@ func runPKCE(t *testing.T, f *fakeOIDC) (*ssooidc.CreateTokenOutput, string, err
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	tok, err := p.newOIDCTokenPKCE(ctx)
+	tok, _, err := p.newOIDCTokenPKCE(ctx)
 
 	select {
 	case shown := <-page:
@@ -221,7 +256,7 @@ func TestNewOIDCTokenPKCE_Timeout(t *testing.T) {
 		OIDCClient: ssooidc.New(ssooidc.Options{Region: "eu-west-1", BaseEndpoint: aws.String(srv.URL)}),
 		StartURL:   fakeStartURL,
 	}
-	_, err := p.newOIDCTokenPKCE(context.Background())
+	_, _, err := p.newOIDCTokenPKCE(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "did not complete") {
 		t.Fatalf("err = %v, want the sign-in timeout", err)
 	}

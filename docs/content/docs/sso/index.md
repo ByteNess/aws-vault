@@ -56,6 +56,10 @@ that you can close it:
 
 ![The sign-in tab after approving access in the browser](sso-signin-success.png)
 
+The access token from signing in lasts about an hour. `aws-vault` stores it in your keyring with a refresh token, and
+renews it in the background when it's within 15 minutes of expiring, as the AWS CLI does. You only sign in again once
+your IAM Identity Center session ends, or if the renewal is refused, for example because the session was revoked.
+
 ## Assuming a role with SSO
 
 If your SSO Permission Set allows you to assume another IAM role

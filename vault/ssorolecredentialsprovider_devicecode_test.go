@@ -20,6 +20,10 @@ func TestDeviceCodeSlowDown(t *testing.T) {
 		var out any
 		switch r.URL.Path {
 		case "/client/register":
+			var in struct{ Scopes []string }
+			if err := json.NewDecoder(r.Body).Decode(&in); err != nil || !reflect.DeepEqual(in.Scopes, []string{"sso:account:access"}) {
+				t.Errorf("registered with scopes %v (%v), want sso:account:access for a refresh token", in.Scopes, err)
+			}
 			out = map[string]any{"clientId": "client-id", "clientSecret": "client-secret", "clientSecretExpiresAt": time.Now().Add(time.Hour).Unix()}
 		case "/device_authorization":
 			out = map[string]any{"deviceCode": "device-code", "userCode": "CODE", "verificationUriComplete": "https://example.com/device", "expiresIn": 600, "interval": 1}

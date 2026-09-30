@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ssooidc"
 	"github.com/byteness/keyring"
 )
@@ -20,6 +21,21 @@ type OIDCTokenKeyring struct {
 type OIDCTokenData struct {
 	Token      ssooidc.CreateTokenOutput
 	Expiration time.Time
+	// Client is the registration the token was issued to. Refreshing the token
+	// needs it; tokens stored by earlier versions don't have it.
+	Client *OIDCClient `json:",omitempty"`
+}
+
+// OIDCClient is an OIDC client registration.
+type OIDCClient struct {
+	ID        string
+	Secret    string
+	ExpiresAt time.Time
+}
+
+// refreshable reports whether the token can be refreshed without signing in again.
+func (d *OIDCTokenData) refreshable() bool {
+	return d.Client != nil && aws.ToString(d.Token.RefreshToken) != "" && time.Now().Before(d.Client.ExpiresAt)
 }
 
 const oidcTokenKeyPrefix = "oidc:"
@@ -49,8 +65,21 @@ func (o OIDCTokenKeyring) Has(startURL string) (bool, error) {
 	return false, nil
 }
 
-// Get returns the token for startURL. An expired token is removed and reported as not found.
+// Get returns the unexpired token for startURL.
 func (o OIDCTokenKeyring) Get(startURL string) (*ssooidc.CreateTokenOutput, error) {
+	d, err := o.GetData(startURL)
+	if err != nil {
+		return nil, err
+	}
+	if !time.Now().Before(d.Expiration) {
+		return nil, keyring.ErrKeyNotFound
+	}
+	return &d.Token, nil
+}
+
+// GetData returns the stored token for startURL, which may have expired if it
+// can be refreshed. A token that is neither is removed and reported as not found.
+func (o OIDCTokenKeyring) GetData(startURL string) (*OIDCTokenData, error) {
 	item, err := o.Keyring.Get(o.fmtKey(startURL))
 	if err != nil {
 		return nil, err
@@ -62,24 +91,28 @@ func (o OIDCTokenKeyring) Get(startURL string) (*ssooidc.CreateTokenOutput, erro
 		log.Printf("Invalid data in keyring: %s", err.Error())
 		return nil, keyring.ErrKeyNotFound
 	}
-	if time.Now().After(val.Expiration) {
+	if time.Now().After(val.Expiration) && !val.refreshable() {
 		log.Printf("OIDC token for '%s' expired, removing", startURL)
 		_ = o.Remove(startURL)
 		return nil, keyring.ErrKeyNotFound
 	}
 
-	secondsLeft := time.Until(val.Expiration) / time.Second
+	val.Token.ExpiresIn = int32(max(time.Until(val.Expiration)/time.Second, 0))
 
-	val.Token.ExpiresIn = int32(secondsLeft)
-
-	return &val.Token, err
+	return &val, nil
 }
 
 // Set stores token for startURL.
 func (o OIDCTokenKeyring) Set(startURL string, token *ssooidc.CreateTokenOutput) error {
+	return o.SetData(startURL, token, nil)
+}
+
+// SetData stores token for startURL, with the client registration it was issued to.
+func (o OIDCTokenKeyring) SetData(startURL string, token *ssooidc.CreateTokenOutput, client *OIDCClient) error {
 	val := OIDCTokenData{
 		Token:      *token,
 		Expiration: time.Now().Add(time.Duration(token.ExpiresIn) * time.Second),
+		Client:     client,
 	}
 
 	valJSON, err := json.Marshal(val)

@@ -29,8 +29,8 @@ import (
 
 // OIDCTokenCacher caches OIDC access tokens by SSO start URL.
 type OIDCTokenCacher interface {
-	Get(string) (*ssooidc.CreateTokenOutput, error)
-	Set(string, *ssooidc.CreateTokenOutput) error
+	GetData(string) (*OIDCTokenData, error)
+	SetData(string, *ssooidc.CreateTokenOutput, *OIDCClient) error
 	Remove(string) error
 }
 
@@ -125,34 +125,78 @@ func (p *SSORoleCredentialsProvider) getRoleCredentialsAsStsCredemtials(ctx cont
 	}, nil
 }
 
+// oidcRefreshWindow is how long before expiry a token is refreshed, as in the AWS CLI.
+const oidcRefreshWindow = 15 * time.Minute
+
 func (p *SSORoleCredentialsProvider) getOIDCToken(ctx context.Context) (token *ssooidc.CreateTokenOutput, cached bool, err error) {
+	var stored *OIDCTokenData
 	if p.OIDCTokenCache != nil {
-		token, err = p.OIDCTokenCache.Get(p.StartURL)
+		stored, err = p.OIDCTokenCache.GetData(p.StartURL)
 		if err != nil && err != keyring.ErrKeyNotFound {
 			return nil, false, err
 		}
-		if token != nil {
-			return token, true, nil
+		if stored != nil && time.Until(stored.Expiration) > oidcRefreshWindow {
+			return &stored.Token, true, nil
 		}
 	}
 
-	if reason := p.deviceCodeReason(); reason != "" {
-		log.Printf("Using the OIDC device code flow: %s", reason)
-		token, err = p.newOIDCTokenDeviceCode(ctx)
-	} else {
-		token, err = p.newOIDCTokenPKCE(ctx)
+	var client *OIDCClient
+	if stored != nil && stored.refreshable() {
+		if token, err = p.refreshOIDCToken(ctx, stored); err != nil {
+			log.Printf("Failed to refresh OIDC token for %s: %s", p.StartURL, err)
+		} else {
+			client = stored.Client
+		}
 	}
-	if err != nil {
-		return nil, false, err
+	if token == nil && stored != nil && time.Now().Before(stored.Expiration) {
+		return &stored.Token, true, nil
 	}
 
-	if p.OIDCTokenCache != nil {
-		err = p.OIDCTokenCache.Set(p.StartURL, token)
+	if token == nil {
+		if reason := p.deviceCodeReason(); reason != "" {
+			log.Printf("Using the OIDC device code flow: %s", reason)
+			token, client, err = p.newOIDCTokenDeviceCode(ctx)
+		} else {
+			token, client, err = p.newOIDCTokenPKCE(ctx)
+		}
 		if err != nil {
 			return nil, false, err
 		}
 	}
-	return token, false, err
+
+	if p.OIDCTokenCache != nil {
+		err = p.OIDCTokenCache.SetData(p.StartURL, token, client)
+		if err != nil {
+			return nil, false, err
+		}
+	}
+	return token, false, nil
+}
+
+func (p *SSORoleCredentialsProvider) refreshOIDCToken(ctx context.Context, d *OIDCTokenData) (*ssooidc.CreateTokenOutput, error) {
+	t, err := p.OIDCClient.CreateToken(ctx, &ssooidc.CreateTokenInput{
+		ClientId:     aws.String(d.Client.ID),
+		ClientSecret: aws.String(d.Client.Secret),
+		GrantType:    aws.String("refresh_token"),
+		RefreshToken: d.Token.RefreshToken,
+	})
+	if err != nil {
+		return nil, err
+	}
+	// keep the current refresh token if the service doesn't issue a new one
+	if t.RefreshToken == nil {
+		t.RefreshToken = d.Token.RefreshToken
+	}
+	log.Printf("Refreshed OIDC access token for %s (expires in: %ds)", p.StartURL, t.ExpiresIn)
+	return t, nil
+}
+
+func newOIDCClient(out *ssooidc.RegisterClientOutput) *OIDCClient {
+	return &OIDCClient{
+		ID:        aws.ToString(out.ClientId),
+		Secret:    aws.ToString(out.ClientSecret),
+		ExpiresAt: time.Unix(out.ClientSecretExpiresAt, 0),
+	}
 }
 
 // deviceCodeReason returns why to use the device code flow instead of PKCE, or
@@ -178,13 +222,15 @@ func inSSHSession() bool {
 	return false
 }
 
-func (p *SSORoleCredentialsProvider) newOIDCTokenDeviceCode(ctx context.Context) (*ssooidc.CreateTokenOutput, error) {
+func (p *SSORoleCredentialsProvider) newOIDCTokenDeviceCode(ctx context.Context) (*ssooidc.CreateTokenOutput, *OIDCClient, error) {
+	// the scope makes the service issue a refresh token, as in the AWS CLI
 	clientCreds, err := p.OIDCClient.RegisterClient(ctx, &ssooidc.RegisterClientInput{
 		ClientName: aws.String("aws-vault"),
 		ClientType: aws.String("public"),
+		Scopes:     []string{"sso:account:access"},
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	log.Printf("Created new OIDC client (expires at: %s)", time.Unix(clientCreds.ClientSecretExpiresAt, 0))
 
@@ -194,7 +240,7 @@ func (p *SSORoleCredentialsProvider) newOIDCTokenDeviceCode(ctx context.Context)
 		StartUrl:     aws.String(p.StartURL),
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	log.Printf("Created OIDC device code for %s (expires in: %ds)", p.StartURL, deviceCreds.ExpiresIn)
 
@@ -223,14 +269,14 @@ func (p *SSORoleCredentialsProvider) newOIDCTokenDeviceCode(ctx context.Context)
 			case errors.As(err, &sde):
 				retryInterval += slowDownDelay
 			case !errors.As(err, &ape):
-				return nil, err
+				return nil, nil, err
 			}
 			pollSleep(retryInterval)
 			continue
 		}
 
 		log.Printf("Created new OIDC access token for %s (expires in: %ds)", p.StartURL, t.ExpiresIn)
-		return t, nil
+		return t, newOIDCClient(clientCreds), nil
 	}
 }
 
@@ -239,10 +285,10 @@ var pkceSignInTimeout = 10 * time.Minute
 
 // newOIDCTokenPKCE generates a new OIDC token using the authorization code flow
 // with PKCE (https://datatracker.ietf.org/doc/html/rfc7636).
-func (p *SSORoleCredentialsProvider) newOIDCTokenPKCE(ctx context.Context) (*ssooidc.CreateTokenOutput, error) {
+func (p *SSORoleCredentialsProvider) newOIDCTokenPKCE(ctx context.Context) (*ssooidc.CreateTokenOutput, *OIDCClient, error) {
 	codeVerifierBytes := make([]byte, 32)
 	if _, err := crand.Read(codeVerifierBytes); err != nil {
-		return nil, fmt.Errorf("failed to generate PKCE verifier: %w", err)
+		return nil, nil, fmt.Errorf("failed to generate PKCE verifier: %w", err)
 	}
 	codeVerifier := base64.RawURLEncoding.EncodeToString(codeVerifierBytes)
 
@@ -259,13 +305,13 @@ func (p *SSORoleCredentialsProvider) newOIDCTokenPKCE(ctx context.Context) (*sso
 		RedirectUris: []string{"http://127.0.0.1/oauth/callback"},
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	log.Printf("Created new OIDC client (expires at: %s)", time.Unix(clientCreds.ClientSecretExpiresAt, 0))
 
 	cbServer, err := newOauthCallbackServer(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create oauthCallbackServer: %w", err)
+		return nil, nil, fmt.Errorf("failed to create oauthCallbackServer: %w", err)
 	}
 	log.Printf("oauthCallbackServer callback endpoint: %s", cbServer.redirectURI())
 	defer cbServer.shutdown() //nolint:contextcheck // must run even after ctx is cancelled
@@ -288,7 +334,7 @@ func (p *SSORoleCredentialsProvider) newOIDCTokenPKCE(ctx context.Context) (*sso
 	}
 	authorizeURL, err := p.authorizeURL(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	authorizeURL.RawQuery = args.Encode()
 	log.Printf("Authorize URL: %s", authorizeURL.String())
@@ -299,13 +345,13 @@ func (p *SSORoleCredentialsProvider) newOIDCTokenPKCE(ctx context.Context) (*sso
 	select {
 	case r = <-cbServer.resultChan:
 	case <-ctx.Done():
-		return nil, fmt.Errorf("aborted waiting for OAuth callback: %w", ctx.Err())
+		return nil, nil, fmt.Errorf("aborted waiting for OAuth callback: %w", ctx.Err())
 	case <-time.After(pkceSignInTimeout):
-		return nil, fmt.Errorf("SSO sign-in did not complete in the browser within %s", pkceSignInTimeout)
+		return nil, nil, fmt.Errorf("SSO sign-in did not complete in the browser within %s", pkceSignInTimeout)
 	}
 
 	if r.err != nil {
-		return nil, r.err
+		return nil, nil, r.err
 	}
 
 	tok, err := p.OIDCClient.CreateToken(ctx, &ssooidc.CreateTokenInput{
@@ -317,11 +363,11 @@ func (p *SSORoleCredentialsProvider) newOIDCTokenPKCE(ctx context.Context) (*sso
 		RedirectUri:  aws.String(redirectURI),
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	log.Printf("Created new OIDC access token for %s (expires in: %ds)", p.StartURL, tok.ExpiresIn)
-	return tok, nil
+	return tok, newOIDCClient(clientCreds), nil
 }
 
 // authorizeURL derives the /authorize endpoint, which isn't a modeled operation,
