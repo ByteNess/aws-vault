@@ -9,6 +9,7 @@ import (
 	"github.com/alecthomas/kingpin/v2"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/byteness/aws-vault/v7/vault"
 	"github.com/byteness/keyring"
 )
@@ -133,10 +134,24 @@ func rotateCommand(input rotateCommandInput, f *vault.ConfigFile, keyring keyrin
 		AccessKeyID:     *createOut.AccessKey.AccessKeyId,
 		SecretAccessKey: *createOut.AccessKey.SecretAccessKey,
 	}
+	newMasterCredsAccessKeyID := vault.FormatKeyForDisplay(newMasterCreds.AccessKeyID)
+
+	// If IAM never accepts the new key, delete it and keep the old one
+	fmt.Printf("Waiting for new access key %s to become usable\n", newMasterCredsAccessKeyID)
+	if err = waitForAccessKey(newMasterCreds, config); err != nil {
+		_, delErr := iamClient.DeleteAccessKey(context.TODO(), &iam.DeleteAccessKeyInput{
+			AccessKeyId: createOut.AccessKey.AccessKeyId,
+			UserName:    iamUserName,
+		})
+		if delErr != nil {
+			return fmt.Errorf("new access key %s never became usable (%w), and deleting it failed: %w", newMasterCredsAccessKeyID, err, delErr)
+		}
+		return fmt.Errorf("new access key %s never became usable, deleted it and kept old access key %s: %w", newMasterCredsAccessKeyID, oldMasterCredsAccessKeyID, err)
+	}
 
 	err = ckr.Set(masterCredentialsName, newMasterCreds)
 	if err != nil {
-		return fmt.Errorf("storing new access key %s: %w", vault.FormatKeyForDisplay(newMasterCreds.AccessKeyID), err)
+		return fmt.Errorf("storing new access key %s: %w", newMasterCredsAccessKeyID, err)
 	}
 
 	// Delete old sessions
@@ -165,6 +180,22 @@ func rotateCommand(input rotateCommandInput, f *vault.ConfigFile, keyring keyrin
 	fmt.Println("Finished rotating access key")
 
 	return nil
+}
+
+// Variables so tests can shorten the wait
+var (
+	accessKeyWaitTimeout  = time.Minute
+	accessKeyWaitInterval = time.Second * 2
+)
+
+// waitForAccessKey retries sts:GetCallerIdentity until IAM accepts creds. The call needs no IAM permissions or MFA
+func waitForAccessKey(creds aws.Credentials, config *vault.ProfileConfig) error {
+	provider := aws.CredentialsProviderFunc(func(context.Context) (aws.Credentials, error) { return creds, nil })
+	stsClient := sts.NewFromConfig(vault.NewAwsConfigWithCredsProvider(provider, config.Region, config.STSRegionalEndpoints, config.EndpointURL))
+	return retry(accessKeyWaitTimeout, accessKeyWaitInterval, func() error {
+		_, err := stsClient.GetCallerIdentity(context.TODO(), &sts.GetCallerIdentityInput{})
+		return err
+	})
 }
 
 func retry(maxTime time.Duration, sleep time.Duration, f func() error) (err error) {
