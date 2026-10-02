@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -29,8 +30,8 @@ import (
 
 // OIDCTokenCacher caches OIDC access tokens by SSO start URL.
 type OIDCTokenCacher interface {
-	Get(string) (*ssooidc.CreateTokenOutput, error)
-	Set(string, *ssooidc.CreateTokenOutput) error
+	Get(string) (*OIDCTokenData, error)
+	Set(string, *OIDCTokenData) error
 	Remove(string) error
 }
 
@@ -44,6 +45,12 @@ type SSORoleCredentialsProvider struct {
 	RoleName       string
 	UseStdout      bool
 	UseDeviceCode  bool
+	// RegistrationScopes are the OAuth scopes requested when registering the
+	// OIDC client (sso_registration_scopes). With scopes such as
+	// sso:account:access, IAM Identity Center returns a refresh token alongside
+	// the access token, so an expired token is renewed without a browser until
+	// the Identity Center session itself ends.
+	RegistrationScopes []string
 }
 
 // pollSleep is a variable so tests can replace it.
@@ -125,34 +132,164 @@ func (p *SSORoleCredentialsProvider) getRoleCredentialsAsStsCredemtials(ctx cont
 	}, nil
 }
 
+// oidcRefreshWindow is how long before expiry a refreshable token is renewed.
+// It matches the AWS CLI's SSOTokenProvider and keeps GetRoleCredentials from
+// being handed a token with seconds left, whose 401 would drop the cached
+// entry (refresh token included) and force a browser login.
+const oidcRefreshWindow = 15 * time.Minute
+
 func (p *SSORoleCredentialsProvider) getOIDCToken(ctx context.Context) (token *ssooidc.CreateTokenOutput, cached bool, err error) {
 	if p.OIDCTokenCache != nil {
-		token, err = p.OIDCTokenCache.Get(p.StartURL)
+		data, err := p.OIDCTokenCache.Get(p.StartURL)
 		if err != nil && err != keyring.ErrKeyNotFound {
 			return nil, false, err
 		}
-		if token != nil {
-			return token, true, nil
+		if data != nil {
+			token, needLogin, err := p.cachedOIDCToken(ctx, data)
+			if err != nil {
+				return nil, false, err
+			}
+			if !needLogin {
+				return token, true, nil
+			}
 		}
 	}
 
+	var data *OIDCTokenData
 	if reason := p.deviceCodeReason(); reason != "" {
 		log.Printf("Using the OIDC device code flow: %s", reason)
-		token, err = p.newOIDCTokenDeviceCode(ctx)
+		data, err = p.newOIDCTokenDeviceCode(ctx)
 	} else {
-		token, err = p.newOIDCTokenPKCE(ctx)
+		data, err = p.newOIDCTokenPKCE(ctx)
 	}
 	if err != nil {
 		return nil, false, err
 	}
 
 	if p.OIDCTokenCache != nil {
-		err = p.OIDCTokenCache.Set(p.StartURL, token)
+		err = p.OIDCTokenCache.Set(p.StartURL, data)
 		if err != nil {
 			return nil, false, err
 		}
 	}
-	return token, false, err
+	return &data.Token, false, nil
+}
+
+// cachedOIDCToken decides what to do with a cached entry: use it, refresh it,
+// or report that a new login is needed. It is safe against several processes
+// sharing one cache: a refresh token is single use, so when a refresh is
+// rejected the cache is re-read before anything is removed, and a transient
+// error keeps the refresh token for the next attempt.
+func (p *SSORoleCredentialsProvider) cachedOIDCToken(ctx context.Context, data *OIDCTokenData) (token *ssooidc.CreateTokenOutput, needLogin bool, err error) {
+	expiresSoon := time.Until(data.Expiration) < oidcRefreshWindow
+	if !data.Expired() && !expiresSoon {
+		return &data.Token, false, nil
+	}
+	if !data.Refreshable() {
+		if !data.Expired() {
+			return &data.Token, false, nil
+		}
+		log.Printf("OIDC token for %s expired and cannot be refreshed, starting a new login", p.StartURL)
+		if err := p.OIDCTokenCache.Remove(p.StartURL); err != nil && err != keyring.ErrKeyNotFound {
+			return nil, false, err
+		}
+		return nil, true, nil
+	}
+
+	refreshed, refreshErr := p.refreshOIDCToken(ctx, data)
+	if refreshErr == nil {
+		if err := p.OIDCTokenCache.Set(p.StartURL, refreshed); err != nil {
+			return nil, false, err
+		}
+		return &refreshed.Token, false, nil
+	}
+	if !data.Expired() {
+		log.Printf("Refreshing OIDC token for %s failed, using the current token (expires in %s): %s", p.StartURL, time.Until(data.Expiration).Round(time.Second), refreshErr)
+		return &data.Token, false, nil
+	}
+
+	// Another process may have refreshed the same entry in the meantime, in
+	// which case our refresh token was already consumed and the cache now holds
+	// a valid token that must not be discarded.
+	current, getErr := p.OIDCTokenCache.Get(p.StartURL)
+	if getErr == nil && current != nil && !current.Expired() {
+		log.Printf("OIDC token for %s was refreshed by another process, using it", p.StartURL)
+		return &current.Token, false, nil
+	}
+	if !isOIDCRejection(refreshErr) {
+		return nil, false, fmt.Errorf("refreshing OIDC token for %s: %w", p.StartURL, refreshErr)
+	}
+	log.Printf("Refreshing OIDC token for %s was rejected, starting a new login: %s", p.StartURL, refreshErr)
+	// Remove only the entry we tried to redeem; anything else was written by
+	// someone else and is theirs to manage.
+	if getErr == nil && current != nil && aws.ToString(current.Token.RefreshToken) == aws.ToString(data.Token.RefreshToken) {
+		if err := p.OIDCTokenCache.Remove(p.StartURL); err != nil && err != keyring.ErrKeyNotFound {
+			return nil, false, err
+		}
+	}
+	return nil, true, nil
+}
+
+// isOIDCRejection reports whether the OIDC service refused the refresh in a
+// way that retrying cannot fix, so a new login is the only way forward. It
+// covers the grant and client errors (a revoked or already redeemed refresh
+// token, an ended session, an expired registration) as well as the request
+// errors that would be answered the same way every time, such as scopes an
+// administrator no longer allows.
+//
+// Everything else is transient and keeps the refresh token for the next
+// attempt: transport failures, 5xx, and throttling in particular. Throttling
+// is not distinguishable by status code alone (SlowDownException is a 400 and
+// API-level throttling a 429), and it is most likely exactly when several
+// credential_process callers refresh at once, which is the burst this change
+// exists to keep out of the browser.
+func isOIDCRejection(err error) bool {
+	var (
+		accessDenied         *ssooidctypes.AccessDeniedException
+		expiredToken         *ssooidctypes.ExpiredTokenException
+		invalidClient        *ssooidctypes.InvalidClientException
+		invalidGrant         *ssooidctypes.InvalidGrantException
+		invalidRequest       *ssooidctypes.InvalidRequestException
+		invalidScope         *ssooidctypes.InvalidScopeException
+		unauthorizedClient   *ssooidctypes.UnauthorizedClientException
+		unsupportedGrantType *ssooidctypes.UnsupportedGrantTypeException
+	)
+	return errors.As(err, &accessDenied) ||
+		errors.As(err, &expiredToken) ||
+		errors.As(err, &invalidClient) ||
+		errors.As(err, &invalidGrant) ||
+		errors.As(err, &invalidRequest) ||
+		errors.As(err, &invalidScope) ||
+		errors.As(err, &unauthorizedClient) ||
+		errors.As(err, &unsupportedGrantType)
+}
+
+// refreshOIDCToken exchanges the refresh token of an expired cached token for
+// a new access token, using the client registration the token was issued to.
+func (p *SSORoleCredentialsProvider) refreshOIDCToken(ctx context.Context, data *OIDCTokenData) (*OIDCTokenData, error) {
+	t, err := p.OIDCClient.CreateToken(ctx, &ssooidc.CreateTokenInput{
+		ClientId:     aws.String(data.ClientID),
+		ClientSecret: aws.String(data.ClientSecret),
+		GrantType:    aws.String("refresh_token"),
+		RefreshToken: data.Token.RefreshToken,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if t.RefreshToken == nil {
+		// Identity Center rotates the refresh token on every use; keep the
+		// previous one if a server ever omits it rather than losing the ability
+		// to refresh.
+		t.RefreshToken = data.Token.RefreshToken
+	}
+	log.Printf("Refreshed OIDC access token for %s (expires in: %ds)", p.StartURL, t.ExpiresIn)
+
+	return &OIDCTokenData{
+		Token:                 *t,
+		ClientID:              data.ClientID,
+		ClientSecret:          data.ClientSecret,
+		ClientSecretExpiresAt: data.ClientSecretExpiresAt,
+	}, nil
 }
 
 // deviceCodeReason returns why to use the device code flow instead of PKCE, or
@@ -178,10 +315,11 @@ func inSSHSession() bool {
 	return false
 }
 
-func (p *SSORoleCredentialsProvider) newOIDCTokenDeviceCode(ctx context.Context) (*ssooidc.CreateTokenOutput, error) {
+func (p *SSORoleCredentialsProvider) newOIDCTokenDeviceCode(ctx context.Context) (*OIDCTokenData, error) {
 	clientCreds, err := p.OIDCClient.RegisterClient(ctx, &ssooidc.RegisterClientInput{
 		ClientName: aws.String("aws-vault"),
 		ClientType: aws.String("public"),
+		Scopes:     p.RegistrationScopes,
 	})
 	if err != nil {
 		return nil, err
@@ -229,8 +367,13 @@ func (p *SSORoleCredentialsProvider) newOIDCTokenDeviceCode(ctx context.Context)
 			continue
 		}
 
-		log.Printf("Created new OIDC access token for %s (expires in: %ds)", p.StartURL, t.ExpiresIn)
-		return t, nil
+		log.Printf("Created new OIDC access token for %s (expires in: %ds, refresh token: %t)", p.StartURL, t.ExpiresIn, t.RefreshToken != nil)
+		return &OIDCTokenData{
+			Token:                 *t,
+			ClientID:              aws.ToString(clientCreds.ClientId),
+			ClientSecret:          aws.ToString(clientCreds.ClientSecret),
+			ClientSecretExpiresAt: time.Unix(clientCreds.ClientSecretExpiresAt, 0),
+		}, nil
 	}
 }
 
@@ -239,7 +382,9 @@ var pkceSignInTimeout = 10 * time.Minute
 
 // newOIDCTokenPKCE generates a new OIDC token using the authorization code flow
 // with PKCE (https://datatracker.ietf.org/doc/html/rfc7636).
-func (p *SSORoleCredentialsProvider) newOIDCTokenPKCE(ctx context.Context) (*ssooidc.CreateTokenOutput, error) {
+func (p *SSORoleCredentialsProvider) newOIDCTokenPKCE(ctx context.Context) (*OIDCTokenData, error) {
+	scopes := p.pkceScopes()
+
 	codeVerifierBytes := make([]byte, 32)
 	if _, err := crand.Read(codeVerifierBytes); err != nil {
 		return nil, fmt.Errorf("failed to generate PKCE verifier: %w", err)
@@ -254,7 +399,7 @@ func (p *SSORoleCredentialsProvider) newOIDCTokenPKCE(ctx context.Context) (*sso
 		ClientName:   aws.String("aws-vault"),
 		ClientType:   aws.String("public"),
 		GrantTypes:   []string{"authorization_code", "refresh_token"},
-		Scopes:       []string{"sso:account:access"},
+		Scopes:       scopes,
 		IssuerUrl:    aws.String(p.StartURL),
 		RedirectUris: []string{"http://127.0.0.1/oauth/callback"},
 	})
@@ -284,7 +429,7 @@ func (p *SSORoleCredentialsProvider) newOIDCTokenPKCE(ctx context.Context) (*sso
 		"state":                 {cbServer.state},
 		"code_challenge_method": {"S256"},
 		"code_challenge":        {codeChallenge},
-		"scopes":                {"sso:account:access"},
+		"scopes":                {strings.Join(scopes, " ")},
 	}
 	authorizeURL, err := p.authorizeURL(ctx)
 	if err != nil {
@@ -320,8 +465,25 @@ func (p *SSORoleCredentialsProvider) newOIDCTokenPKCE(ctx context.Context) (*sso
 		return nil, err
 	}
 
-	log.Printf("Created new OIDC access token for %s (expires in: %ds)", p.StartURL, tok.ExpiresIn)
-	return tok, nil
+	log.Printf("Created new OIDC access token for %s (expires in: %ds, refresh token: %t)", p.StartURL, tok.ExpiresIn, tok.RefreshToken != nil)
+	return &OIDCTokenData{
+		Token:                 *tok,
+		ClientID:              aws.ToString(clientCreds.ClientId),
+		ClientSecret:          aws.ToString(clientCreds.ClientSecret),
+		ClientSecretExpiresAt: time.Unix(clientCreds.ClientSecretExpiresAt, 0),
+	}, nil
+}
+
+// pkceDefaultScope is requested when sso_registration_scopes is unset, as in
+// the AWS CLI: the authorization code grant needs a scope.
+const pkceDefaultScope = "sso:account:access"
+
+// pkceScopes returns the configured registration scopes, or pkceDefaultScope.
+func (p *SSORoleCredentialsProvider) pkceScopes() []string {
+	if len(p.RegistrationScopes) > 0 {
+		return p.RegistrationScopes
+	}
+	return []string{pkceDefaultScope}
 }
 
 // authorizeURL derives the /authorize endpoint, which isn't a modeled operation,
