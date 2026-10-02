@@ -100,7 +100,7 @@ func rotateCommand(input rotateCommandInput, f *vault.ConfigFile, keyring keyrin
 	// create a session to rotate the credentials
 	var credsProvider aws.CredentialsProvider
 	if input.NoSession {
-		credsProvider = vault.NewMasterCredentialsProvider(ckr, config.ProfileName)
+		credsProvider = vault.NewMasterCredentialsProvider(ckr, masterCredentialsName)
 	} else {
 		// Can't always disable sessions completely, might need to use session for MFA-Protected API Access
 		credsProvider, err = vault.NewTempCredentialsProvider(config, ckr, input.NoSession, true)
