@@ -48,11 +48,16 @@ func rotateTestServer(t *testing.T, newKeyRejections int) (*httptest.Server, *[]
 	return srv, &requests
 }
 
-func runRotate(t *testing.T, srv *httptest.Server) (*vault.CredentialKeyring, error) {
+func shortenAccessKeyWait(t *testing.T) {
 	t.Helper()
 	timeout, interval := accessKeyWaitTimeout, accessKeyWaitInterval
 	accessKeyWaitTimeout, accessKeyWaitInterval = 100*time.Millisecond, time.Millisecond
 	t.Cleanup(func() { accessKeyWaitTimeout, accessKeyWaitInterval = timeout, interval })
+}
+
+func runRotate(t *testing.T, srv *httptest.Server) (*vault.CredentialKeyring, error) {
+	t.Helper()
+	shortenAccessKeyWait(t)
 
 	configFile := writeTempConfig(t, []byte("[profile a]\nregion = us-east-1\nendpoint_url = "+srv.URL+"\n"))
 	kr := keyring.NewArrayKeyring(nil)
@@ -118,4 +123,30 @@ func TestRotateCommandKeepsOldAccessKeyWhenNewOneNeverWorks(t *testing.T) {
 		t.Fatalf("deletes = %v, want %v", deletes, want)
 	}
 	assertStoredKey(t, ckr, "AKIAOLD")
+}
+
+func TestRotateCommandNoSessionUsesSourceProfileCredentials(t *testing.T) {
+	srv, requests := rotateTestServer(t, 0)
+	shortenAccessKeyWait(t)
+
+	configFile := writeTempConfig(t, []byte("[profile base]\nregion = us-east-1\nendpoint_url = "+srv.URL+"\n\n[profile a]\nsource_profile = base\nregion = us-east-1\nendpoint_url = "+srv.URL+"\n"))
+	kr := keyring.NewArrayKeyring(nil)
+	ckr := &vault.CredentialKeyring{Keyring: kr}
+	if err := ckr.Set("base", aws.Credentials{AccessKeyID: "AKIAOLD", SecretAccessKey: "old/secret+"}); err != nil {
+		t.Fatal(err)
+	}
+
+	input := rotateCommandInput{NoSession: true, ProfileName: "a", Config: vault.ProfileConfig{MfaPromptMethod: "terminal"}}
+	if err := rotateCommand(input, configFile, kr); err != nil {
+		t.Fatal(err)
+	}
+
+	want := []string{"CreateAccessKey AKIAOLD", "GetCallerIdentity AKIANEW", "DeleteAccessKey AKIAOLD -> AKIAOLD"}
+	if !slices.Equal(*requests, want) {
+		t.Fatalf("requests = %v, want %v", *requests, want)
+	}
+	creds, err := ckr.Get("base")
+	if err != nil || creds.AccessKeyID != "AKIANEW" {
+		t.Fatalf("stored credentials = %v, %v, want AKIANEW", creds.AccessKeyID, err)
+	}
 }
