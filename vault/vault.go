@@ -353,11 +353,12 @@ func FindMasterCredentialsNameFor(profileName string, keyring *CredentialKeyring
 		return profileName, nil
 	}
 
-	if profileName == config.SourceProfileName {
+	// The config loader rejects source_profile loops, so following SourceProfile terminates
+	if config.SourceProfile == nil {
 		return "", fmt.Errorf("no master credentials found")
 	}
 
-	return FindMasterCredentialsNameFor(config.SourceProfileName, keyring, config)
+	return FindMasterCredentialsNameFor(config.SourceProfile.ProfileName, keyring, config.SourceProfile)
 }
 
 // TempCredentialsCreator creates providers of temporary credentials for profiles.

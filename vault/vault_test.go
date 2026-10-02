@@ -777,3 +777,64 @@ func captureLogs(t *testing.T) *bytes.Buffer {
 
 	return &buf
 }
+
+func TestFindMasterCredentialsNameFor(t *testing.T) {
+	f := newConfigFile(t, []byte(`
+[profile root]
+region=eu-west-1
+
+[profile middle]
+role_arn=arn:aws:iam::111111111111:role/Middle
+source_profile=root
+
+[profile leaf]
+role_arn=arn:aws:iam::111111111111:role/Leaf
+source_profile=middle
+`))
+
+	configFile, err := vault.LoadConfig(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cases := []struct {
+		name    string
+		profile string
+		stored  []string // profiles that have long-term credentials in the keyring
+		want    string
+	}{
+		{name: "stored on profile", profile: "root", stored: []string{"root"}, want: "root"},
+		{name: "stored on source profile", profile: "middle", stored: []string{"root"}, want: "root"},
+		{name: "stored two levels up", profile: "leaf", stored: []string{"root"}, want: "root"},
+		{name: "nearest stored wins", profile: "leaf", stored: []string{"root", "middle"}, want: "middle"},
+		{name: "nothing stored", profile: "leaf"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			configLoader := &vault.ConfigLoader{File: configFile, ActiveProfile: tc.profile}
+			config, err := configLoader.GetProfileConfig(tc.profile)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			ckr := newSeededKeyring(t, "")
+			for _, name := range tc.stored {
+				if err := ckr.Set(name, aws.Credentials{AccessKeyID: "id", SecretAccessKey: "secret"}); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			got, err := vault.FindMasterCredentialsNameFor(tc.profile, ckr, config)
+			if tc.want == "" {
+				if err == nil {
+					t.Fatalf("FindMasterCredentialsNameFor(%s) = %q, want an error", tc.profile, got)
+				}
+				return
+			}
+			if err != nil || got != tc.want {
+				t.Fatalf("FindMasterCredentialsNameFor(%s) = %q, %v, want %q", tc.profile, got, err, tc.want)
+			}
+		})
+	}
+}
