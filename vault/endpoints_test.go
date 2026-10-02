@@ -124,8 +124,8 @@ func TestEndpointResolution(t *testing.T) {
 		{
 			name: "endpoint_url with path", region: "eu-west-1", stsRegional: "", endpoint: "https://proxy.example.com/aws",
 			want: [4]string{
-				"https://proxy.example.com/aws signed eu-west-1/sts",
-				"https://proxy.example.com/aws signed eu-west-1/iam",
+				"https://proxy.example.com/aws/ signed eu-west-1/sts",
+				"https://proxy.example.com/aws/ signed eu-west-1/iam",
 				"https://proxy.example.com/aws/federation/credentials",
 				"https://proxy.example.com/aws/client/register",
 			},
