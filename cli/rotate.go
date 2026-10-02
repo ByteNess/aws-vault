@@ -136,22 +136,27 @@ func rotateCommand(input rotateCommandInput, f *vault.ConfigFile, keyring keyrin
 	}
 	newMasterCredsAccessKeyID := vault.FormatKeyForDisplay(newMasterCreds.AccessKeyID)
 
-	// If IAM never accepts the new key, delete it and keep the old one
-	fmt.Printf("Waiting for new access key %s to become usable\n", newMasterCredsAccessKeyID)
-	if err = waitForAccessKey(newMasterCreds, config); err != nil {
-		_, delErr := iamClient.DeleteAccessKey(context.TODO(), &iam.DeleteAccessKeyInput{
+	// If the new key can't be used, delete it and keep the old one
+	rollback := func(cause error) error {
+		_, err := iamClient.DeleteAccessKey(context.TODO(), &iam.DeleteAccessKeyInput{
 			AccessKeyId: createOut.AccessKey.AccessKeyId,
 			UserName:    iamUserName,
 		})
-		if delErr != nil {
-			return fmt.Errorf("new access key %s never became usable (%w), and deleting it failed: %w", newMasterCredsAccessKeyID, err, delErr)
+		if err != nil {
+			return fmt.Errorf("%w; deleting new access key %s also failed: %w\nDelete it with: %s",
+				cause, newMasterCredsAccessKeyID, err, deleteAccessKeyCommand(input, newMasterCreds.AccessKeyID, iamUserName))
 		}
-		return fmt.Errorf("new access key %s never became usable, deleted it and kept old access key %s: %w", newMasterCredsAccessKeyID, oldMasterCredsAccessKeyID, err)
+		return fmt.Errorf("%w; deleted new access key %s and kept old access key %s", cause, newMasterCredsAccessKeyID, oldMasterCredsAccessKeyID)
+	}
+
+	fmt.Printf("Waiting for new access key %s to become usable\n", newMasterCredsAccessKeyID)
+	if err = waitForAccessKey(newMasterCreds, config); err != nil {
+		return rollback(fmt.Errorf("new access key %s never became usable: %w", newMasterCredsAccessKeyID, err))
 	}
 
 	err = ckr.Set(masterCredentialsName, newMasterCreds)
 	if err != nil {
-		return fmt.Errorf("storing new access key %s: %w", newMasterCredsAccessKeyID, err)
+		return rollback(fmt.Errorf("storing new access key %s: %w", newMasterCredsAccessKeyID, err))
 	}
 
 	// Delete old sessions
@@ -165,7 +170,7 @@ func rotateCommand(input rotateCommandInput, f *vault.ConfigFile, keyring keyrin
 
 	// Delete the old access key
 	fmt.Printf("Deleting old access key %s\n", oldMasterCredsAccessKeyID)
-	err = retry(time.Second*20, time.Second*2, func() error {
+	err = retry(accessKeyDeleteTimeout, accessKeyWaitInterval, func() error {
 		_, err = iamClient.DeleteAccessKey(context.TODO(), &iam.DeleteAccessKeyInput{
 			AccessKeyId: &oldMasterCreds.AccessKeyID,
 			UserName:    iamUserName,
@@ -173,7 +178,8 @@ func rotateCommand(input rotateCommandInput, f *vault.ConfigFile, keyring keyrin
 		return err
 	})
 	if err != nil {
-		return fmt.Errorf("deleting old access key %s: %w", oldMasterCredsAccessKeyID, err)
+		return fmt.Errorf("deleting old access key %s: %w\nThe new access key is stored, but the old one is still active. Delete it with: %s",
+			oldMasterCredsAccessKeyID, err, deleteAccessKeyCommand(input, oldMasterCreds.AccessKeyID, iamUserName))
 	}
 	fmt.Printf("Deleted old access key %s\n", oldMasterCredsAccessKeyID)
 
@@ -182,11 +188,26 @@ func rotateCommand(input rotateCommandInput, f *vault.ConfigFile, keyring keyrin
 	return nil
 }
 
-// Variables so tests can shorten the wait
+// Variables so tests can shorten the waits
 var (
-	accessKeyWaitTimeout  = time.Minute
-	accessKeyWaitInterval = time.Second * 2
+	accessKeyWaitTimeout   = time.Minute
+	accessKeyDeleteTimeout = time.Second * 20
+	accessKeyWaitInterval  = time.Second * 2
 )
+
+// deleteAccessKeyCommand returns a command that deletes accessKeyID by hand, using the profile being rotated.
+// Access key IDs are not secret, so the full ID is shown
+func deleteAccessKeyCommand(input rotateCommandInput, accessKeyID string, userName *string) string {
+	cmd := "aws-vault exec "
+	if input.NoSession {
+		cmd += "--no-session "
+	}
+	cmd += input.ProfileName + " -- aws iam delete-access-key --access-key-id " + accessKeyID
+	if userName != nil {
+		cmd += " --user-name " + *userName
+	}
+	return cmd
+}
 
 // waitForAccessKey retries sts:GetCallerIdentity until IAM accepts creds. The call needs no IAM permissions or MFA
 func waitForAccessKey(creds aws.Credentials, config *vault.ProfileConfig) error {
