@@ -8,9 +8,9 @@ import (
 )
 
 const (
-	CREDUI_FLAGS_ALWAYS_SHOW_UI      = 0x00080
-	CREDUI_FLAGS_GENERIC_CREDENTIALS = 0x40000
-	CREDUI_FLAGS_KEEP_USERNAME       = 0x100000
+	creduiFlagsAlwaysShowUI       = 0x00080
+	creduiFlagsGenericCredentials = 0x40000
+	creduiFlagsKeepUsername       = 0x100000
 )
 
 type creduiInfoA struct {
@@ -21,25 +21,41 @@ type creduiInfoA struct {
 	hbmBanner      uintptr
 }
 
-func WinCredUiPrompt(mfaSerial string) (string, error) {
+func winCredUIPrompt(mfaSerial string) (string, error) {
+	captionText, err := syscall.UTF16PtrFromString("Enter MFA code for aws-vault")
+	if err != nil {
+		return "", err
+	}
+	messageText, err := syscall.UTF16PtrFromString(mfaPromptMessage(mfaSerial))
+	if err != nil {
+		return "", err
+	}
 	info := &creduiInfoA{
 		hwndParent:     0,
-		pszCaptionText: syscall.StringToUTF16Ptr("Enter MFA code for aws-vault"),
-		pszMessageText: syscall.StringToUTF16Ptr(mfaPromptMessage(mfaSerial)),
+		pszCaptionText: captionText,
+		pszMessageText: messageText,
 		hbmBanner:      0,
 	}
 	info.cbSize = uint32(unsafe.Sizeof(*info))
 	passwordBuf := make([]uint16, 64)
 	save := false
-	flags := CREDUI_FLAGS_ALWAYS_SHOW_UI | CREDUI_FLAGS_KEEP_USERNAME | CREDUI_FLAGS_GENERIC_CREDENTIALS
+	flags := creduiFlagsAlwaysShowUI | creduiFlagsKeepUsername | creduiFlagsGenericCredentials
 	shortSerial := strings.ReplaceAll(strings.ReplaceAll(mfaSerial, "arn:aws:iam::", ""), ":mfa", "")
+	targetName, err := syscall.BytePtrFromString("aws-vault")
+	if err != nil {
+		return "", err
+	}
+	userName, err := syscall.UTF16PtrFromString(shortSerial)
+	if err != nil {
+		return "", err
+	}
 
 	ret, _, _ := syscall.NewLazyDLL("credui.dll").NewProc("CredUIPromptForCredentialsW").Call(
 		uintptr(unsafe.Pointer(info)),
-		uintptr(unsafe.Pointer(syscall.StringBytePtr("aws-vault"))),
+		uintptr(unsafe.Pointer(targetName)),
 		0,
 		0,
-		uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr(shortSerial))),
+		uintptr(unsafe.Pointer(userName)),
 		uintptr(len(shortSerial)+1),
 		uintptr(unsafe.Pointer(&passwordBuf[0])),
 		64,
@@ -54,5 +70,5 @@ func WinCredUiPrompt(mfaSerial string) (string, error) {
 }
 
 func init() {
-	Methods["wincredui"] = WinCredUiPrompt
+	Methods["wincredui"] = winCredUIPrompt
 }

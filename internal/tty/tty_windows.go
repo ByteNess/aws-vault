@@ -19,10 +19,10 @@ func Open() (in, out *os.File, cleanup func()) {
 	out, _ = os.OpenFile("CONOUT$", os.O_WRONLY, 0)
 	return in, out, func() {
 		if in != nil {
-			in.Close()
+			_ = in.Close()
 		}
 		if out != nil {
-			out.Close()
+			_ = out.Close()
 		}
 	}
 }
