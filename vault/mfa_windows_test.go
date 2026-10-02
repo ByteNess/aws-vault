@@ -73,7 +73,7 @@ func TestProcessMfaProvider_StdinIsConsole(t *testing.T) {
 		t.Skip("console input not available (CONIN$ inaccessible), " +
 			"skipping console stdin test")
 	} else {
-		f.Close()
+		_ = f.Close()
 	}
 
 	// PowerShell [Console]::IsInputRedirected returns True when stdin is a

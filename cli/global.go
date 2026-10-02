@@ -13,8 +13,6 @@ import (
 	"github.com/byteness/aws-vault/v7/prompt"
 	"github.com/byteness/aws-vault/v7/vault"
 	"github.com/byteness/keyring"
-	"github.com/charmbracelet/huh"
-	"github.com/charmbracelet/lipgloss"
 	isatty "github.com/mattn/go-isatty"
 	"golang.org/x/term"
 )
@@ -299,7 +297,9 @@ func pickAwsProfile(profiles []string) (string, error) {
 	return ProfileName, err
 }
 
-// Maintained library github.com/charmbracelet/huh (TODO: needs more testing)
+// TODO: evaluate github.com/charmbracelet/huh as a replacement for the survey picker;
+// re-add huh and lipgloss to go.mod when restoring.
+/*
 func pickAwsProfile2(profiles []string) (string, error) {
 	var ProfileName string
 
@@ -322,6 +322,7 @@ func pickAwsProfile2(profiles []string) (string, error) {
 
 	return ProfileName, err
 }
+*/
 
 // profileResolvable reports whether profileName can be used as a target profile:
 // either it has a section in the AWS config file, or long-term credentials are
