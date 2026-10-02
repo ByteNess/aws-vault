@@ -13,7 +13,7 @@ const (
 	creduiFlagsKeepUsername       = 0x100000
 )
 
-type creduiInfoA struct {
+type creduiInfoW struct {
 	cbSize         uint32
 	hwndParent     uintptr
 	pszMessageText *uint16
@@ -30,7 +30,7 @@ func winCredUIPrompt(mfaSerial string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	info := &creduiInfoA{
+	info := &creduiInfoW{
 		hwndParent:     0,
 		pszCaptionText: captionText,
 		pszMessageText: messageText,
@@ -38,10 +38,10 @@ func winCredUIPrompt(mfaSerial string) (string, error) {
 	}
 	info.cbSize = uint32(unsafe.Sizeof(*info))
 	passwordBuf := make([]uint16, 64)
-	save := false
+	var save uint32 // a Win32 BOOL
 	flags := creduiFlagsAlwaysShowUI | creduiFlagsKeepUsername | creduiFlagsGenericCredentials
 	shortSerial := strings.ReplaceAll(strings.ReplaceAll(mfaSerial, "arn:aws:iam::", ""), ":mfa", "")
-	targetName, err := syscall.BytePtrFromString("aws-vault")
+	targetName, err := syscall.UTF16PtrFromString("aws-vault")
 	if err != nil {
 		return "", err
 	}
