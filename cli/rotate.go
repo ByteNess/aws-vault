@@ -108,6 +108,9 @@ func rotateCommand(input rotateCommandInput, f *vault.ConfigFile, keyring keyrin
 		}
 	}
 
+	// IAM takes a while to make a new access key usable, so keep using the credentials from before it was created
+	credsProvider = aws.NewCredentialsCache(credsProvider)
+
 	cfg := vault.NewAwsConfigWithCredsProvider(credsProvider, config.Region, config.STSRegionalEndpoints, config.EndpointURL)
 
 	// A username is needed for some IAM calls if the credentials have assumed a role
@@ -145,7 +148,7 @@ func rotateCommand(input rotateCommandInput, f *vault.ConfigFile, keyring keyrin
 		}
 	}
 
-	// Use new credentials to delete old access key
+	// Delete the old access key
 	fmt.Printf("Deleting old access key %s\n", oldMasterCredsAccessKeyID)
 	err = retry(time.Second*20, time.Second*2, func() error {
 		_, err = iamClient.DeleteAccessKey(context.TODO(), &iam.DeleteAccessKeyInput{
