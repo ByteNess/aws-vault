@@ -93,7 +93,7 @@ func runRotateWithKeyring(t *testing.T, srv *httptest.Server, wrap func(keyring.
 	if wrap != nil {
 		rotateKeyring = wrap(kr)
 	}
-	return ckr, rotateCommand(input, configFile, rotateKeyring)
+	return ckr, rotateCommand(input, configFile, rotateKeyring, rotateKeyring)
 }
 
 func deleteRequests(requests []string) []string {
@@ -167,7 +167,7 @@ func TestRotateCommandNoSessionUsesSourceProfileCredentials(t *testing.T) {
 	}
 
 	input := rotateCommandInput{NoSession: true, ProfileName: "a", Config: vault.ProfileConfig{MfaPromptMethod: "terminal"}}
-	if err := rotateCommand(input, configFile, kr); err != nil {
+	if err := rotateCommand(input, configFile, kr, kr); err != nil {
 		t.Fatal(err)
 	}
 
