@@ -67,7 +67,9 @@ sends it only to AWS. If sign-in isn't completed within 10 minutes, `aws-vault` 
 `aws-vault` uses the device code flow instead, which shows a URL and code to confirm in any browser, when:
 
 * `--device-code` is passed, or `AWS_VAULT_DEVICE_CODE` is set
-* `--stdout` is passed, or `AWS_VAULT_STDOUT` is set, since the URL may then be opened on another machine
+* `--stdout` is passed to `exec` or `export`, or `AWS_VAULT_STDOUT` is set for them, since the URL may then be
+  opened on another machine. `login --stdout` only prints the console login URL, so SSO sign-in still opens the
+  browser; pass `--device-code` to sign in from another machine.
 * it runs in an SSH session (`SSH_CONNECTION`, `SSH_CLIENT` or `SSH_TTY` is set)
 
 The browser can only reach the callback server when it runs on the same machine, which is why these cases use the
