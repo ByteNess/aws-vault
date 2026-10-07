@@ -136,7 +136,7 @@ func TestCachedSession_LockMiss_ThenCacheHit_NoRefresh(t *testing.T) {
 	p := NewCachedSessionProvider(key, provider, sk, 0, true)
 	p.sessionLock = lock
 	p.sessionLockWait = 5 * time.Second
-	p.sessionSleep = func(ctx context.Context, d time.Duration) error {
+	p.sessionSleep = func(_ context.Context, _ time.Duration) error {
 		return sk.Set(key, creds)
 	}
 

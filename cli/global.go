@@ -221,6 +221,10 @@ func (a *AwsVault) keyringLockKey() string {
 		if a.KeyringConfig.OPVaultID != "" {
 			return backend + ":" + a.KeyringConfig.OPVaultID
 		}
+	case keyring.InvalidBackend, keyring.KeyCtlBackend, keyring.WinHelloBackend,
+		keyring.PassageBackend, keyring.ProtonPassBackend:
+		// No backend-specific config to split the lock key on; these fall
+		// through to the backend name below.
 	}
 	// Fall back to backend name alone. When backend is empty (auto-selected),
 	// all configs share the "aws-vault" lock key. This is overly conservative
