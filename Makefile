@@ -1,18 +1,20 @@
 VERSION=$(shell git describe --tags --candidates=1 --dirty)
 BUILD_FLAGS=-ldflags="-s -w -X main.Version=$(VERSION)" -trimpath
 CERT_ID ?= Developer ID Application: ByteNess (R)
-SRC=$(shell find . -name '*.go') go.mod
 INSTALL_DIR ?= ~/bin
+GOTEST_FLAGS ?= -race
 .PHONY: binaries clean release install snapshot run docs-serve docs-build
+# Go's build cache skips unchanged work, so always invoke go build
+.PHONY: aws-vault aws-vault-darwin-amd64 aws-vault-darwin-arm64 aws-vault-freebsd-amd64 aws-vault-linux-amd64 aws-vault-linux-arm64 aws-vault-linux-ppc64le aws-vault-linux-arm7 aws-vault-windows-386.exe aws-vault-windows-amd64.exe aws-vault-windows-arm64.exe
 
 ifeq ($(shell uname), Darwin)
-aws-vault: $(SRC)
+aws-vault:
 	go build -ldflags="-s -w -X main.Version=$(VERSION)" -o $@ .
 	codesign --options runtime --timestamp --sign "$(CERT_ID)" $@
 
 build: aws-vault
 else
-aws-vault: $(SRC)
+aws-vault:
 	go build -ldflags="-s -w -X main.Version=$(VERSION)" -o $@ .
 
 build: aws-vault
@@ -36,7 +38,7 @@ run:
 	go run .
 
 test: ## Run tests
-	go test -v ./...
+	go test $(GOTEST_FLAGS) ./...
 
 fmt: **/*.go ## Formt Golang code
 	go fmt ./...
@@ -73,34 +75,34 @@ ubuntu-latest: aws-vault-linux-amd64 aws-vault-linux-arm64 aws-vault-linux-ppc64
 
 macos-latest: aws-vault-darwin-amd64 aws-vault-darwin-arm64
 
-aws-vault-darwin-amd64: $(SRC)
+aws-vault-darwin-amd64:
 	GOOS=darwin GOARCH=amd64 CGO_ENABLED=1 SDKROOT=$(shell xcrun --sdk macosx --show-sdk-path) go build $(BUILD_FLAGS) -o $@ .
 
-aws-vault-darwin-arm64: $(SRC)
+aws-vault-darwin-arm64:
 	GOOS=darwin GOARCH=arm64 CGO_ENABLED=1 SDKROOT=$(shell xcrun --sdk macosx --show-sdk-path) go build $(BUILD_FLAGS) -o $@ .
 
-aws-vault-freebsd-amd64: $(SRC)
+aws-vault-freebsd-amd64:
 	GOOS=freebsd GOARCH=amd64 go build $(BUILD_FLAGS) -o $@ .
 
-aws-vault-linux-amd64: $(SRC)
+aws-vault-linux-amd64:
 	GOOS=linux GOARCH=amd64 go build $(BUILD_FLAGS) -o $@ .
 
-aws-vault-linux-arm64: $(SRC)
+aws-vault-linux-arm64:
 	GOOS=linux GOARCH=arm64 go build $(BUILD_FLAGS) -o $@ .
 
-aws-vault-linux-ppc64le: $(SRC)
+aws-vault-linux-ppc64le:
 	GOOS=linux GOARCH=ppc64le go build $(BUILD_FLAGS) -o $@ .
 
-aws-vault-linux-arm7: $(SRC)
+aws-vault-linux-arm7:
 	GOOS=linux GOARCH=arm GOARM=7 go build $(BUILD_FLAGS) -o $@ .
 
-aws-vault-windows-386.exe: $(SRC)
+aws-vault-windows-386.exe:
 	GOOS=windows GOARCH=386 go build $(BUILD_FLAGS) -o $@ .
 
-aws-vault-windows-amd64.exe: $(SRC)
+aws-vault-windows-amd64.exe:
 	GOOS=windows GOARCH=amd64 go build $(BUILD_FLAGS) -o $@ .
 
-aws-vault-windows-arm64.exe: $(SRC)
+aws-vault-windows-arm64.exe:
 	GOOS=windows GOARCH=arm64 go build $(BUILD_FLAGS) -o $@ .
 
 aws-vault-darwin-amd64.dmg: aws-vault-darwin-amd64
