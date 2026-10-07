@@ -72,32 +72,32 @@ func TestIsSSORateLimitError(t *testing.T) {
 
 func TestJitterDelayRange(t *testing.T) {
 	base := 10 * time.Second
-	min := time.Duration(float64(base) * ssoRetryAfterJitterMin)
-	max := time.Duration(float64(base) * ssoRetryAfterJitterMax)
+	lo := time.Duration(float64(base) * ssoRetryAfterJitterMin)
+	hi := time.Duration(float64(base) * ssoRetryAfterJitterMax)
 
 	for i := 0; i < 10; i++ {
 		delay := jitterDelay(base)
-		if delay < min || max < delay {
-			t.Fatalf("expected delay in range %s-%s, got %s", min, max, delay)
+		if delay < lo || hi < delay {
+			t.Fatalf("expected delay in range %s-%s, got %s", lo, hi, delay)
 		}
 	}
 }
 
 func TestJitteredBackoffProgression(t *testing.T) {
 	base := 200 * time.Millisecond
-	max := 5 * time.Second
+	capDelay := 5 * time.Second
 
 	// Each attempt should double the cap: 200ms, 400ms, 800ms, 1600ms, 3200ms, 5000ms (capped)
 	for attempt := 1; attempt <= 8; attempt++ {
 		expectedCap := base << uint(attempt-1)
-		if max < expectedCap {
-			expectedCap = max
+		if capDelay < expectedCap {
+			expectedCap = capDelay
 		}
 		minDelay := time.Duration(float64(expectedCap) * ssoRetryAfterJitterMin)
 		maxDelay := time.Duration(float64(expectedCap) * ssoRetryAfterJitterMax)
 
 		for i := 0; i < 20; i++ {
-			delay := jitteredBackoff(base, max, attempt)
+			delay := jitteredBackoff(base, capDelay, attempt)
 			if delay < minDelay || maxDelay < delay {
 				t.Fatalf("attempt %d: expected delay in range %s-%s, got %s",
 					attempt, minDelay, maxDelay, delay)
@@ -108,16 +108,16 @@ func TestJitteredBackoffProgression(t *testing.T) {
 
 func TestJitteredBackoffRespectsMax(t *testing.T) {
 	base := 200 * time.Millisecond
-	max := 5 * time.Second
+	capDelay := 5 * time.Second
 
-	// At high attempt numbers the cap should be max, not overflow.
+	// At high attempt numbers the cap should be capDelay, not overflow.
 	// This includes attempts 37+ where base<<(attempt-1) overflows int64;
-	// the delay must stay clamped to max, not collapse to base.
-	minDelay := time.Duration(float64(max) * ssoRetryAfterJitterMin)
-	maxDelay := time.Duration(float64(max) * ssoRetryAfterJitterMax)
+	// the delay must stay clamped to capDelay, not collapse to base.
+	minDelay := time.Duration(float64(capDelay) * ssoRetryAfterJitterMin)
+	maxDelay := time.Duration(float64(capDelay) * ssoRetryAfterJitterMax)
 	for attempt := 20; attempt <= 60; attempt++ {
 		for i := 0; i < 10; i++ {
-			delay := jitteredBackoff(base, max, attempt)
+			delay := jitteredBackoff(base, capDelay, attempt)
 			if maxDelay < delay {
 				t.Fatalf("attempt %d: delay %s exceeds max jittered cap %s", attempt, delay, maxDelay)
 			}
@@ -130,7 +130,7 @@ func TestJitteredBackoffRespectsMax(t *testing.T) {
 
 func TestJitteredBackoffDoublesPerAttempt(t *testing.T) {
 	base := 1 * time.Second
-	max := 1 * time.Hour // very high max so we never hit the cap
+	maxDelay := 1 * time.Hour // very high cap so we never hit it
 
 	// Verify the cap doubles by checking that the median of many samples
 	// roughly doubles. Instead, verify the deterministic cap calculation:
@@ -140,7 +140,7 @@ func TestJitteredBackoffDoublesPerAttempt(t *testing.T) {
 		minBound := time.Duration(float64(expectedCap) * ssoRetryAfterJitterMin)
 		maxBound := time.Duration(float64(expectedCap) * ssoRetryAfterJitterMax)
 
-		delay := jitteredBackoff(base, max, attempt)
+		delay := jitteredBackoff(base, maxDelay, attempt)
 		if delay < minBound || maxBound < delay {
 			t.Fatalf("attempt %d: expected delay in [%s, %s], got %s",
 				attempt, minBound, maxBound, delay)
@@ -180,11 +180,11 @@ func TestJitterRetryAfterNegativeBase(t *testing.T) {
 func TestGetRoleCredentialsTimeoutOnPersistentRateLimit(t *testing.T) {
 	// Set up an HTTP server that always returns 429 with a TooManyRequestsException
 	// body that the AWS SDK will deserialize into a TooManyRequestsException error.
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("X-Amzn-Errortype", "TooManyRequestsException")
 		w.WriteHeader(http.StatusTooManyRequests)
-		fmt.Fprint(w, `{"__type":"TooManyRequestsException","message":"Rate exceeded"}`)
+		_, _ = fmt.Fprint(w, `{"__type":"TooManyRequestsException","message":"Rate exceeded"}`)
 	}))
 	defer srv.Close()
 
