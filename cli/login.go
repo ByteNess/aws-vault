@@ -63,7 +63,7 @@ func ConfigureLoginCommand(app *kingpin.Application, a *AwsVault) {
 	cmd.Flag("region", "The AWS region").
 		StringVar(&input.Config.Region)
 
-	cmd.Flag("stdout", "Print login URL to stdout instead of opening in default browser").
+	cmd.Flag("stdout", "Print the console login URL to stdout instead of opening it in the default browser").
 		OverrideDefaultFromEnvar("AWS_VAULT_STDOUT").
 		Short('s').
 		BoolVar(&input.UseStdout)
@@ -83,7 +83,7 @@ func ConfigureLoginCommand(app *kingpin.Application, a *AwsVault) {
 		input.Config.ChainedGetSessionTokenDuration = input.SessionDuration
 		input.Config.AssumeRoleDuration = input.SessionDuration
 		input.Config.GetFederationTokenDuration = input.SessionDuration
-		input.Config.SSOUseStdout = input.UseStdout
+		// --stdout is for the console URL only, not SSOUseStdout.
 		input.Config.SSOUseDeviceCode = input.UseDeviceCode
 		keyring, err := a.Keyring()
 		if err != nil {
