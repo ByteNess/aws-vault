@@ -37,7 +37,7 @@ jobs:
           #go-version-file: 'go.mod'
           check-latest: true
       - name: Run tests
-        run: make test #go test -race ./...
+        run: make test
   lint:
     permissions:
       contents: read  # for actions/checkout to fetch code
