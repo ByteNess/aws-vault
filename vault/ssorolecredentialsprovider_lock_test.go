@@ -408,3 +408,24 @@ func TestGetOIDCTokenWithLock_RefreshesUnderTheLock(t *testing.T) {
 		})
 	}
 }
+
+// A lock waiter's timeout is a safety net for a holder that is alive but
+// stuck. It must outlast the longest thing a holder does legitimately, or
+// every waiter gives up on a holder that is about to finish. A holder that
+// dies releases its lock at once, so a long wait costs nothing then.
+func TestLockTimeoutsOutlastTheHolder(t *testing.T) {
+	// The SSO lock holder can be in a browser sign-in for up to
+	// defaultPKCESignInTimeout.
+	if defaultSSOLockTimeout <= defaultPKCESignInTimeout {
+		t.Errorf("SSO lock wait %s does not outlast a %s browser sign-in", defaultSSOLockTimeout, defaultPKCESignInTimeout)
+	}
+	// The session lock holder runs the whole retrieval: waiting for or doing
+	// that sign-in, then GetRoleCredentials with up to ssoRetryTimeout of 429
+	// retries.
+	if holder := defaultSSOLockTimeout + ssoRetryTimeout; defaultSessionLockTimeout < holder {
+		t.Errorf("session lock wait %s is shorter than its holder can take (%s)", defaultSessionLockTimeout, holder)
+	}
+	if p := newTestSSORoleProvider(); p.ssoLockTimeout != defaultSSOLockTimeout {
+		t.Errorf("provider SSO lock wait = %s, want %s", p.ssoLockTimeout, defaultSSOLockTimeout)
+	}
+}
