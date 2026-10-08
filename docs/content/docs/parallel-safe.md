@@ -17,6 +17,8 @@ The `--parallel-safe` flag (or `AWS_VAULT_PARALLEL_SAFE=true`) enables cross-pro
 
 This applies to **all backends** (keychain, file, pass, secret-service, etc.).
 
+The lock files live in a per-user directory, `aws-vault/locks` under the user cache directory: `~/Library/Caches` on macOS, `$XDG_CACHE_HOME` or `~/.cache` on Linux, and `%LocalAppData%` on Windows. Locks therefore never cross user accounts on a shared host, and other local users cannot create or hold them.
+
 ## Trade-offs
 
 - Keyring operations are serialized, which adds a small amount of latency per operation. In practice this is negligible because the operations themselves are fast.
