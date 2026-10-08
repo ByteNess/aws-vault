@@ -164,6 +164,7 @@ func NewSSORoleCredentialsProvider(k keyring.Keyring, config *ProfileConfig, use
 		RoleName:      config.SSORoleName,
 		UseStdout:     config.SSOUseStdout,
 		UseDeviceCode: config.SSOUseDeviceCode,
+		Browser:       config.SSOBrowser,
 
 		RegistrationScopes: ParseSSORegistrationScopes(config.SSORegistrationScopes),
 	}

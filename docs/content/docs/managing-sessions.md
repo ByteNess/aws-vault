@@ -34,6 +34,12 @@ You can use the `aws-vault login` command to open a browser window and login to 
 aws-vault login myprofile
 ```
 
+To use a browser other than your default one, pass `--browser` or set `AWS_VAULT_BROWSER`:
+
+```shell
+aws-vault login --browser google-chrome myprofile
+```
+
 > [!NOTE]
 > When using multi-session support in AWS Management Console you might need to avoid using auto-logout using
 > `--auto-logout` or `-a`.

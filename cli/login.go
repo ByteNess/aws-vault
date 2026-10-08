@@ -19,13 +19,13 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/byteness/aws-vault/v7/vault"
 	"github.com/byteness/keyring"
-	"github.com/skratchdot/open-golang/open"
 )
 
 type loginCommandInput struct {
 	ProfileName     string
 	UseStdout       bool
 	UseDeviceCode   bool
+	Browser         string
 	Path            string
 	Config          vault.ProfileConfig
 	SessionDuration time.Duration
@@ -72,6 +72,10 @@ func ConfigureLoginCommand(app *kingpin.Application, a *AwsVault) {
 		OverrideDefaultFromEnvar("AWS_VAULT_DEVICE_CODE").
 		BoolVar(&input.UseDeviceCode)
 
+	cmd.Flag("browser", "Browser to open the AWS Console and SSO sign-in pages in instead of the default browser, e.g. google-chrome, or \"Google Chrome\" on macOS").
+		Envar("AWS_VAULT_BROWSER").
+		StringVar(&input.Browser)
+
 	cmd.Arg("profile", "Name of the profile. If none given, credentials will be sourced from env vars").
 		Default(os.Getenv("AWS_PROFILE")).
 		HintAction(a.MustGetProfileNames).
@@ -85,6 +89,7 @@ func ConfigureLoginCommand(app *kingpin.Application, a *AwsVault) {
 		input.Config.GetFederationTokenDuration = input.SessionDuration
 		// --stdout is for the console URL only, not SSOUseStdout.
 		input.Config.SSOUseDeviceCode = input.UseDeviceCode
+		input.Config.SSOBrowser = input.Browser
 		keyring, err := a.Keyring()
 		if err != nil {
 			return err
@@ -235,7 +240,7 @@ func loginCommand(ctx context.Context, input loginCommandInput, f *vault.ConfigF
 
 	if input.UseStdout {
 		fmt.Println(loginURL)
-	} else if err = open.Run(loginURL); err != nil {
+	} else if err = vault.OpenBrowser(loginURL, input.Browser); err != nil {
 		return fmt.Errorf("opening %s: %w", loginURL, err)
 	}
 

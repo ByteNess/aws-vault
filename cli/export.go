@@ -24,6 +24,7 @@ type exportCommandInput struct {
 	NoSession       bool
 	UseStdout       bool
 	UseDeviceCode   bool
+	Browser         string
 }
 
 // Output formats of the export command.
@@ -68,6 +69,10 @@ func ConfigureExportCommand(app *kingpin.Application, a *AwsVault) {
 		OverrideDefaultFromEnvar("AWS_VAULT_DEVICE_CODE").
 		BoolVar(&input.UseDeviceCode)
 
+	cmd.Flag("browser", "Browser to open the SSO sign-in page in instead of the default browser, e.g. google-chrome, or \"Google Chrome\" on macOS").
+		Envar("AWS_VAULT_BROWSER").
+		StringVar(&input.Browser)
+
 	cmd.Arg("profile", "Name of the profile").
 		//Required().
 		HintAction(a.MustGetProfileNames).
@@ -80,6 +85,7 @@ func ConfigureExportCommand(app *kingpin.Application, a *AwsVault) {
 		input.Config.AssumeRoleDuration = input.SessionDuration
 		input.Config.SSOUseStdout = input.UseStdout
 		input.Config.SSOUseDeviceCode = input.UseDeviceCode
+		input.Config.SSOBrowser = input.Browser
 
 		f, err := a.AwsConfigFile()
 		if err != nil {

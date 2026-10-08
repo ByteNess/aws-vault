@@ -181,6 +181,7 @@ To configure the default flag values of `aws-vault` and its subcommands:
 | `AWS_CONFIG_FILE` | The location of the AWS config file | — |
 | `AWS_VAULT_STDOUT` | Print the URL to stdout instead of opening it in the default browser: the console login URL for `login`, the SSO sign-in URL for `exec` and `export` | `--stdout` |
 | `AWS_VAULT_DEVICE_CODE` | Use the device code flow for SSO sign-in instead of the default PKCE browser flow (see [SSO](/docs/sso#signing-in)) | `--device-code` |
+| `AWS_VAULT_BROWSER` | Browser to open the SSO sign-in page in and, for `login`, the AWS Console, instead of the default browser (see [SSO](/docs/sso#signing-in)) | `--browser` |
 
 To override the AWS config file (used in the `exec`, `login` and `rotate` subcommands):
 
