@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -333,5 +336,75 @@ func TestGetOIDCToken_WorkNotCancelledByLockTimeout(t *testing.T) {
 	}
 	if lock.unlockCalls != 1 {
 		t.Fatalf("expected 1 unlock, got %d", lock.unlockCalls)
+	}
+}
+
+// recordingLock is a ProcessLock whose state another goroutine, such as a
+// fake OIDC server, can read without a data race.
+type recordingLock struct{ held atomic.Bool }
+
+func (l *recordingLock) TryLock() (bool, error) { l.held.Store(true); return true, nil }
+func (l *recordingLock) Unlock() error          { l.held.Store(false); return nil }
+func (l *recordingLock) Path() string           { return "recording.lock" }
+
+// A refresh token is single use, so with the lock enabled the refresh_token
+// exchange must happen while the lock is held. Otherwise every process that
+// sees a token needing a refresh redeems it at once, all but one are
+// rejected, and the losers can end up starting a new sign-in.
+func TestGetOIDCTokenWithLock_RefreshesUnderTheLock(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		expiration time.Duration
+	}{
+		{"expired", -time.Minute},
+		{"inside the refresh window", oidcRefreshWindow / 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := &fakeOIDC{}
+			lock := &recordingLock{}
+			var tokenCalls, unlockedTokenCalls atomic.Int32
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/token" {
+					tokenCalls.Add(1)
+					if !lock.held.Load() {
+						unlockedTokenCalls.Add(1)
+					}
+				}
+				f.ServeHTTP(w, r)
+			}))
+			t.Cleanup(srv.Close)
+
+			cache := &memOIDCCache{data: map[string]*OIDCTokenData{}}
+			p := newTestSSORoleProvider()
+			p.OIDCClient = ssooidc.New(ssooidc.Options{
+				Region:           "us-east-1",
+				BaseEndpoint:     aws.String(srv.URL),
+				HTTPClient:       srv.Client(),
+				RetryMaxAttempts: 1,
+			})
+			p.OIDCTokenCache = cache
+			p.ssoTokenLock = lock
+			p.UseSSOTokenLock = true
+			entry := expiredRefreshableToken()
+			entry.Expiration = time.Now().Add(tc.expiration)
+			cache.data[p.StartURL] = entry
+
+			token, _, err := p.getOIDCToken(context.Background())
+			if err != nil {
+				t.Fatalf("getOIDCToken: %v", err)
+			}
+			if aws.ToString(token.AccessToken) != "access-2" {
+				t.Errorf("AccessToken = %q, want the refreshed access-2", aws.ToString(token.AccessToken))
+			}
+			if n := tokenCalls.Load(); n != 1 {
+				t.Errorf("CreateToken calls = %d, want 1 refresh", n)
+			}
+			if n := unlockedTokenCalls.Load(); n != 0 {
+				t.Errorf("%d CreateToken call(s) made without holding the SSO lock", n)
+			}
+			if n := len(f.calls("/device_authorization")); n != 0 {
+				t.Errorf("device authorization started %d time(s), want 0", n)
+			}
+		})
 	}
 }
