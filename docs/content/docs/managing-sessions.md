@@ -84,6 +84,13 @@ Cached sessions can use a different keyring backend or backend configuration fro
 session setting is specified, both use the same keyring instance as before. Session settings inherit the corresponding
 primary settings unless explicitly overridden. OIDC tokens remain in the primary keyring.
 
+Sessions cached before enabling a separate session keyring remain in the primary keyring; they are not migrated.
+Run `aws-vault clear` to remove cached sessions from both keyrings.
+
+Separating storage within the same backend requires location options, such as a directory, prefix, or vault.
+`wincred`, `winhello`, `kwallet`, and `keyctl` have no such options in aws-vault, so use a different
+`--session-backend` for these.
+
 Environment variables keep the configuration consistent across commands. For example, Passage can use a
 passphrase-protected identity for long-lived credentials and a separate identity without a passphrase for cached
 sessions:
