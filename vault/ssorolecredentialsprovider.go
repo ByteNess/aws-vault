@@ -255,15 +255,21 @@ func (p *SSORoleCredentialsProvider) getRoleCredentialsAsStsCredentials(ctx cont
 const oidcRefreshWindow = 15 * time.Minute
 
 func (p *SSORoleCredentialsProvider) getOIDCToken(ctx context.Context) (token *ssooidc.CreateTokenOutput, cached bool, err error) {
-	token, cached, needLogin, err := p.cachedOrRefreshedOIDCToken(ctx)
-	if err != nil || !needLogin {
-		return token, cached, err
-	}
-
 	if !p.UseSSOTokenLock {
+		token, cached, needLogin, err := p.cachedOrRefreshedOIDCToken(ctx)
+		if err != nil || !needLogin {
+			return token, cached, err
+		}
 		return p.createAndCacheOIDCToken(ctx)
 	}
 
+	// With the lock, only a token that needs nothing doing is used without
+	// it. A refresh spends a single-use refresh token, so it happens under the
+	// lock just like a sign-in.
+	token, ok, err := p.usableCachedOIDCToken()
+	if err != nil || ok {
+		return token, ok, err
+	}
 	return p.getOIDCTokenWithLock(ctx)
 }
 
@@ -293,10 +299,12 @@ func (p *SSORoleCredentialsProvider) cachedOrRefreshedOIDCToken(ctx context.Cont
 	return token, true, false, nil
 }
 
-// validCachedOIDCToken is the read-only check used while waiting for the SSO
-// lock. It never refreshes and never signs in, so waiters poll the keyring
-// instead of the OIDC service while the holder does the work.
-func (p *SSORoleCredentialsProvider) validCachedOIDCToken() (token *ssooidc.CreateTokenOutput, ok bool, err error) {
+// usableCachedOIDCToken returns the cached token if it can be used as it is:
+// still valid, and either outside the refresh window or not refreshable at
+// all, which is the same test cachedOIDCToken starts with. It never touches
+// the network, so it serves both as the fast path that skips the lock and as
+// the check waiters poll while the holder refreshes or signs in.
+func (p *SSORoleCredentialsProvider) usableCachedOIDCToken() (token *ssooidc.CreateTokenOutput, ok bool, err error) {
 	if p.OIDCTokenCache == nil {
 		return nil, false, nil
 	}
@@ -306,6 +314,9 @@ func (p *SSORoleCredentialsProvider) validCachedOIDCToken() (token *ssooidc.Crea
 		return nil, false, err
 	}
 	if data == nil || data.Expired() {
+		return nil, false, nil
+	}
+	if data.Refreshable() && time.Until(data.Expiration) < oidcRefreshWindow {
 		return nil, false, nil
 	}
 	return &data.Token, true, nil
@@ -373,7 +384,7 @@ func (p *SSORoleCredentialsProvider) getOIDCTokenWithLock(ctx context.Context) (
 			fmt.Fprintf(os.Stderr, format, args...)
 		},
 	}, "SSO token", func() (processLockResult[oidcTokenResult], error) {
-		token, ok, err := p.validCachedOIDCToken()
+		token, ok, err := p.usableCachedOIDCToken()
 		if err != nil {
 			return processLockResult[oidcTokenResult]{}, err
 		}
@@ -382,8 +393,9 @@ func (p *SSORoleCredentialsProvider) getOIDCTokenWithLock(ctx context.Context) (
 		}
 		return processLockResult[oidcTokenResult]{}, nil
 	}, func() (oidcTokenResult, error) {
-		// Recheck under the lock — another process may have filled the cache,
-		// and the refresh token is redeemed here so only one process spends it.
+		// Recheck under the lock — another process may have filled the cache.
+		// Otherwise refresh or sign in here, so only one process spends the
+		// refresh token or opens the browser.
 		token, cached, needLogin, err := p.cachedOrRefreshedOIDCToken(ctx)
 		if err != nil {
 			return oidcTokenResult{}, err
