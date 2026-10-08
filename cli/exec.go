@@ -35,6 +35,7 @@ type execCommandInput struct {
 	NoSession        bool
 	UseStdout        bool
 	UseDeviceCode    bool
+	Browser          string
 	ShowHelpMessages bool
 	UseProfileEnv    bool
 }
@@ -117,6 +118,10 @@ func ConfigureExecCommand(app *kingpin.Application, a *AwsVault) {
 		OverrideDefaultFromEnvar("AWS_VAULT_DEVICE_CODE").
 		BoolVar(&input.UseDeviceCode)
 
+	cmd.Flag("browser", "Browser to open the SSO sign-in page in instead of the default browser, e.g. google-chrome, or \"Google Chrome\" on macOS").
+		Envar("AWS_VAULT_BROWSER").
+		StringVar(&input.Browser)
+
 	cmd.Flag("profile-env", "Set AWS_PROFILE instead of injecting AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY").
 		OverrideDefaultFromEnvar("AWS_VAULT_PROFILE_ENV").
 		BoolVar(&input.UseProfileEnv)
@@ -140,6 +145,7 @@ func ConfigureExecCommand(app *kingpin.Application, a *AwsVault) {
 		input.Config.AssumeRoleDuration = input.SessionDuration
 		input.Config.SSOUseStdout = input.UseStdout
 		input.Config.SSOUseDeviceCode = input.UseDeviceCode
+		input.Config.SSOBrowser = input.Browser
 		input.ShowHelpMessages = !a.Debug && input.Command == "" && isATerminal() && os.Getenv("AWS_VAULT_DISABLE_HELP_MESSAGE") != "1"
 
 		f, err := a.AwsConfigFile()

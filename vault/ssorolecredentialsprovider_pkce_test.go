@@ -151,7 +151,7 @@ func runPKCE(t *testing.T, f *fakePKCEOIDC) (*OIDCTokenData, string, error) {
 	page := make(chan string, 1)
 	orig := openBrowser
 	t.Cleanup(func() { openBrowser = orig })
-	openBrowser = func(u string) error {
+	openBrowser = func(u, _ string) error {
 		if !strings.HasPrefix(u, srv.URL+"/authorize?") {
 			t.Errorf("browser opened %q, want the authorize endpoint on %s", u, srv.URL)
 		}
@@ -248,7 +248,7 @@ func TestNewOIDCTokenPKCE_Timeout(t *testing.T) {
 
 	origOpen, origTimeout := openBrowser, pkceSignInTimeout
 	t.Cleanup(func() { openBrowser, pkceSignInTimeout = origOpen, origTimeout })
-	openBrowser = func(string) error { return nil } // the user never signs in
+	openBrowser = func(string, string) error { return nil } // the user never signs in
 	pkceSignInTimeout = 50 * time.Millisecond
 
 	p := &SSORoleCredentialsProvider{

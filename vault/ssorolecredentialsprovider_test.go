@@ -257,6 +257,37 @@ func TestNewSSORoleCredentialsProvider_EndpointURL(t *testing.T) {
 	}
 }
 
+func TestNewSSORoleCredentialsProvider_Browser(t *testing.T) {
+	cp, err := NewSSORoleCredentialsProvider(nil, &ProfileConfig{SSORegion: "eu-west-1", SSOBrowser: "firefox"}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := cp.(*SSORoleCredentialsProvider).Browser; got != "firefox" {
+		t.Errorf("Browser = %q, want %q", got, "firefox")
+	}
+}
+
+func TestOpenOrPrintURL_Browser(t *testing.T) {
+	var opened []string
+	orig := openBrowser
+	t.Cleanup(func() { openBrowser = orig })
+	openBrowser = func(_, browser string) error {
+		opened = append(opened, browser)
+		return nil
+	}
+
+	(&SSORoleCredentialsProvider{Browser: "firefox"}).openOrPrintURL("https://example.com")
+	if len(opened) != 1 || opened[0] != "firefox" {
+		t.Errorf("opened with %q, want [firefox]", opened)
+	}
+
+	opened = nil
+	(&SSORoleCredentialsProvider{Browser: "firefox", UseStdout: true}).openOrPrintURL("https://example.com")
+	if len(opened) != 0 {
+		t.Errorf("opened with %q, want no browser with UseStdout", opened)
+	}
+}
+
 func TestHandleCallback_RepeatedCallbackDoesNotBlock(t *testing.T) {
 	s := newTestCallbackServer(t)
 	req := func() *http.Request {

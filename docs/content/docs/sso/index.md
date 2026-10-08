@@ -75,6 +75,20 @@ sends it only to AWS. If sign-in isn't completed within 10 minutes, `aws-vault` 
 The browser can only reach the callback server when it runs on the same machine, which is why these cases use the
 device code flow. `--device-code` is available on `exec`, `export` and `login`.
 
+To open the sign-in page in a browser other than your default one, pass `--browser` or set `AWS_VAULT_BROWSER`
+(available on `exec`, `export` and `login`). The value is an executable on Linux and an application name on macOS:
+
+```shell
+AWS_VAULT_BROWSER=google-chrome aws-vault exec work
+aws-vault exec --browser "Google Chrome" work # macOS
+```
+
+On Linux, `aws-vault` runs the named browser directly rather than through its desktop entry, so a Flatpak browser
+needs its exported launcher (e.g. `/var/lib/flatpak/exports/bin/org.mozilla.firefox`). A browser that isn't already
+running starts from the terminal running `aws-vault`, so Ctrl-C closes it too.
+
+`login --stdout --browser <browser>` signs in to SSO in that browser and prints the console login URL.
+
 Browsers only let a page close its own tab in limited cases, so the tab usually stays open after signing in, showing
 that you can close it:
 

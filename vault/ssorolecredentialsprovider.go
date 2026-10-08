@@ -45,6 +45,7 @@ type SSORoleCredentialsProvider struct {
 	RoleName       string
 	UseStdout      bool
 	UseDeviceCode  bool
+	Browser        string
 	// RegistrationScopes are the OAuth scopes requested when registering the
 	// OIDC client (sso_registration_scopes). With scopes such as
 	// sso:account:access, IAM Identity Center returns a refresh token alongside
@@ -505,16 +506,30 @@ func (p *SSORoleCredentialsProvider) authorizeURL(ctx context.Context) (*url.URL
 }
 
 // openBrowser is a variable so tests can replace it.
-var openBrowser = open.Run
+var openBrowser = OpenBrowser
 
-// openOrPrintURL opens url in the default browser, or only prints it if UseStdout is set.
+// OpenBrowser opens url in browser, or in the default browser if browser is "".
+// A named browser is started without waiting: launchers such as google-chrome
+// only return once a newly started browser exits.
+func OpenBrowser(url, browser string) error {
+	if browser == "" {
+		return open.Run(url)
+	}
+	return open.StartWith(url, browser)
+}
+
+// openOrPrintURL opens url in the browser, or only prints it if UseStdout is set.
 func (p *SSORoleCredentialsProvider) openOrPrintURL(url string) {
 	if p.UseStdout {
 		fmt.Fprintf(os.Stderr, "Open the SSO authorization page in a browser (use Ctrl-C to abort)\n%s\n", url)
 	} else {
-		fmt.Fprintf(os.Stderr, "Opening the SSO authorization page in your default browser (use Ctrl-C to abort)\n%s\n", url)
+		browser := p.Browser
+		if browser == "" {
+			browser = "your default browser"
+		}
+		fmt.Fprintf(os.Stderr, "Opening the SSO authorization page in %s (use Ctrl-C to abort)\n%s\n", browser, url)
 		log.Println("Opening SSO authorization page in browser")
-		if err := openBrowser(url); err != nil {
+		if err := openBrowser(url, p.Browser); err != nil {
 			log.Printf("Failed to open browser: %s", err)
 		}
 	}
