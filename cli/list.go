@@ -112,13 +112,21 @@ func listCommand(input listCommandInput, awsConfigFile *vault.ConfigFile, keyrin
 		return err
 	}
 
-	var sessions []vault.SessionMetadata
-	for _, kr := range sessionKeyrings(keyring, sessionKeyring) {
+	var cachedSessionLabels []string
+	sessionLabelsByProfile := map[string][]string{}
+	for i, kr := range sessionKeyrings(keyring, sessionKeyring) {
 		var mm []vault.SessionMetadata
 		if mm, err = (&vault.SessionKeyring{Keyring: kr}).GetAllMetadata(); err != nil {
 			return err
 		}
-		sessions = append(sessions, mm...)
+		for _, sess := range mm {
+			label := sessionLabel(sess)
+			if i > 0 {
+				label += " (unused)"
+			}
+			cachedSessionLabels = append(cachedSessionLabels, label)
+			sessionLabelsByProfile[sess.ProfileName] = append(sessionLabelsByProfile[sess.ProfileName], label)
+		}
 	}
 
 	credentialsSet := make(map[string]bool, len(credentialsNames))
@@ -152,20 +160,13 @@ func listCommand(input listCommandInput, awsConfigFile *vault.ConfigFile, keyrin
 		profileNamesSet[ps.Name] = true
 	}
 
-	sessionsByProfile := make(map[string][]vault.SessionMetadata, len(sessions))
-	for _, sess := range sessions {
-		sessionsByProfile[sess.ProfileName] = append(sessionsByProfile[sess.ProfileName], sess)
-	}
-
 	allSessionLabels := []string{}
 	for _, startURL := range tokens {
 		if label, ok := oidcTokenLabels[startURL]; ok {
 			allSessionLabels = append(allSessionLabels, label)
 		}
 	}
-	for _, sess := range sessions {
-		allSessionLabels = append(allSessionLabels, sessionLabel(sess))
-	}
+	allSessionLabels = append(allSessionLabels, cachedSessionLabels...)
 
 	if input.OnlyCredentials {
 		for _, c := range credentialsNames {
@@ -226,9 +227,7 @@ func listCommand(input listCommandInput, awsConfigFile *vault.ConfigFile, keyrin
 		}
 
 		// check session keyring
-		for _, sess := range sessionsByProfile[profileName] {
-			sessionLabels = append(sessionLabels, sessionLabel(sess))
-		}
+		sessionLabels = append(sessionLabels, sessionLabelsByProfile[profileName]...)
 
 		if len(sessionLabels) > 0 {
 			row("%s\t\n", strings.Join(sessionLabels, ", "))

@@ -205,9 +205,10 @@ func (a *AwsVault) Keyrings() (keyring.Keyring, keyring.Keyring, error) {
 	return credentials, sessions, nil
 }
 
-// sessionKeyrings returns the keyrings that may hold cached sessions. A nil
-// sessions means sessions share the primary keyring. Otherwise primary is
-// included too, as it keeps sessions cached before a separate keyring was set up.
+// sessionKeyrings returns the keyrings that may hold cached sessions, the one in
+// use first. A nil sessions means sessions share the primary keyring. Otherwise
+// primary is included too, as it keeps sessions cached before a separate keyring
+// was set up.
 func sessionKeyrings(primary, sessions keyring.Keyring) []keyring.Keyring {
 	if sessions == nil {
 		return []keyring.Keyring{primary}
