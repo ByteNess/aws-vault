@@ -217,7 +217,7 @@ region = us-east-1
 func captureListOutput(t *testing.T, input listCommandInput, configFile *vault.ConfigFile, kr keyring.Keyring) string {
 	t.Helper()
 	var buf bytes.Buffer
-	if err := listCommand(input, configFile, kr, kr, &buf); err != nil {
+	if err := listCommand(input, configFile, kr, nil, &buf); err != nil {
 		t.Fatalf("listCommand error: %v", err)
 	}
 	return buf.String()
@@ -350,5 +350,21 @@ func TestListCommandBothSetPrefersSSOSession(t *testing.T) {
 	if !found {
 		t.Errorf("expected %q under both-profile (sso-session url has the token); "+
 			"inline-first precedence hides it. output:\n%s", label, output)
+	}
+}
+
+func TestListCommandShowsSessionsFromBothKeyrings(t *testing.T) {
+	configFile := writeTempConfig(t, listTestConfig)
+	primary := keyring.NewArrayKeyring(nil)
+	sessions := keyring.NewArrayKeyring(nil)
+	setTestSession(t, primary, "sso-profile")
+	setTestSession(t, sessions, "no-creds-profile")
+
+	var buf bytes.Buffer
+	if err := listCommand(listCommandInput{OnlySessions: true}, configFile, primary, sessions, &buf); err != nil {
+		t.Fatalf("listCommand error: %v", err)
+	}
+	if got := strings.Count(buf.String(), "sts.GetSessionToken:"); got != 2 {
+		t.Errorf("listed %d sessions, want 2:\n%s", got, buf.String())
 	}
 }

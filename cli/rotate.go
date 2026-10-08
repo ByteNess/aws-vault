@@ -46,6 +46,9 @@ func ConfigureRotateCommand(app *kingpin.Application, a *AwsVault) {
 		if err != nil {
 			return err
 		}
+		if !a.hasSeparateSessionKeyring() {
+			sessionKeyring = nil
+		}
 
 		if input.ProfileName == "" {
 			// If no profile provided select from configured AWS profiles
@@ -160,10 +163,9 @@ func rotateCommand(input rotateCommandInput, f *vault.ConfigFile, keyring, sessi
 	}
 
 	// Delete old sessions
-	sk := &vault.SessionKeyring{Keyring: sessionKeyring}
 	profileNames, err := getProfilesInChain(input.ProfileName, configLoader)
 	for _, profileName := range profileNames {
-		if n, _ := sk.RemoveForProfile(profileName); n > 0 {
+		if n, _ := removeSessionsForProfile(profileName, keyring, sessionKeyring); n > 0 {
 			fmt.Printf("Deleted %d sessions for %s\n", n, profileName)
 		}
 	}

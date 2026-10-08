@@ -43,10 +43,14 @@ func ConfigureClearCommand(app *kingpin.Application, a *AwsVault) {
 
 // clearCommand removes cached sessions and OIDC tokens. A nil sessionKeyring
 // means sessions share the primary keyring.
-func clearCommand(input clearCommandInput, awsConfigFile *vault.ConfigFile, keyring, sessionKeyring keyring.Keyring) error {
-	numSessionsRemoved, err := clearSessions(input, keyring)
-	if err != nil {
-		return err
+func clearCommand(input clearCommandInput, awsConfigFile *vault.ConfigFile, keyring, sessionKeyring keyring.Keyring) (err error) {
+	var numSessionsRemoved int
+	for _, kr := range sessionKeyrings(keyring, sessionKeyring) {
+		var n int
+		if n, err = clearSessions(input, kr); err != nil {
+			return err
+		}
+		numSessionsRemoved += n
 	}
 
 	oidcTokens := &vault.OIDCTokenKeyring{Keyring: keyring}
@@ -69,14 +73,6 @@ func clearCommand(input clearCommandInput, awsConfigFile *vault.ConfigFile, keyr
 				}
 			}
 		}
-	}
-
-	if sessionKeyring != nil {
-		n, err := clearSessions(input, sessionKeyring)
-		if err != nil {
-			return err
-		}
-		numSessionsRemoved += n
 	}
 
 	fmt.Printf("Cleared %d sessions.\n", numSessionsRemoved+numTokensRemoved)

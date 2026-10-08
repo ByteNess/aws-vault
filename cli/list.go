@@ -41,6 +41,9 @@ func ConfigureListCommand(app *kingpin.Application, a *AwsVault) {
 		if err != nil {
 			return err
 		}
+		if !a.hasSeparateSessionKeyring() {
+			sessionKeyring = nil
+		}
 		awsConfigFile, err := a.AwsConfigFile()
 		if err != nil {
 			return err
@@ -95,10 +98,9 @@ func oidcLabel(sessionName, startURL string) string {
 	return fmt.Sprintf("oidc:%s", id)
 }
 
-func listCommand(input listCommandInput, awsConfigFile *vault.ConfigFile, keyring, sessionKeyringImpl keyring.Keyring, out io.Writer) (err error) {
+func listCommand(input listCommandInput, awsConfigFile *vault.ConfigFile, keyring, sessionKeyring keyring.Keyring, out io.Writer) (err error) {
 	credentialKeyring := &vault.CredentialKeyring{Keyring: keyring}
 	oidcTokenKeyring := &vault.OIDCTokenKeyring{Keyring: credentialKeyring.Keyring}
-	sessionKeyring := &vault.SessionKeyring{Keyring: sessionKeyringImpl}
 
 	credentialsNames, err := credentialKeyring.Keys()
 	if err != nil {
@@ -110,9 +112,13 @@ func listCommand(input listCommandInput, awsConfigFile *vault.ConfigFile, keyrin
 		return err
 	}
 
-	sessions, err := sessionKeyring.GetAllMetadata()
-	if err != nil {
-		return err
+	var sessions []vault.SessionMetadata
+	for _, kr := range sessionKeyrings(keyring, sessionKeyring) {
+		var mm []vault.SessionMetadata
+		if mm, err = (&vault.SessionKeyring{Keyring: kr}).GetAllMetadata(); err != nil {
+			return err
+		}
+		sessions = append(sessions, mm...)
 	}
 
 	credentialsSet := make(map[string]bool, len(credentialsNames))

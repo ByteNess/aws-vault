@@ -205,6 +205,30 @@ func (a *AwsVault) Keyrings() (keyring.Keyring, keyring.Keyring, error) {
 	return credentials, sessions, nil
 }
 
+// sessionKeyrings returns the keyrings that may hold cached sessions. A nil
+// sessions means sessions share the primary keyring. Otherwise primary is
+// included too, as it keeps sessions cached before a separate keyring was set up.
+func sessionKeyrings(primary, sessions keyring.Keyring) []keyring.Keyring {
+	if sessions == nil {
+		return []keyring.Keyring{primary}
+	}
+	return []keyring.Keyring{sessions, primary}
+}
+
+// removeSessionsForProfile deletes the cached sessions for profileName from
+// sessionKeyrings and returns how many it deleted.
+func removeSessionsForProfile(profileName string, primary, sessions keyring.Keyring) (n int, err error) {
+	for _, kr := range sessionKeyrings(primary, sessions) {
+		var removed int
+		removed, err = (&vault.SessionKeyring{Keyring: kr}).RemoveForProfile(profileName)
+		n += removed
+		if err != nil {
+			return n, err
+		}
+	}
+	return n, nil
+}
+
 // AwsConfigFile loads the AWS config file on first use and returns it.
 func (a *AwsVault) AwsConfigFile() (*vault.ConfigFile, error) {
 	if a.awsConfigFile == nil {
