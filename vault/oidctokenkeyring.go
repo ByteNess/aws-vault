@@ -156,9 +156,19 @@ func (o *OIDCTokenKeyring) Keys() (kk []string, err error) {
 
 	for _, k := range allKeys {
 		if IsOIDCTokenKey(k) {
-			kk = append(kk, strings.TrimPrefix(k, oidcTokenKeyPrefix))
+			kk = append(kk, restoreSchemeSeparator(strings.TrimPrefix(k, oidcTokenKeyPrefix)))
 		}
 	}
 
 	return kk, nil
+}
+
+// restoreSchemeSeparator turns "https:/host" back into "https://host". The pass
+// and passage backends store keys as file paths, which collapses the "//".
+func restoreSchemeSeparator(startURL string) string {
+	i := strings.Index(startURL, ":/")
+	if i <= 0 || strings.HasPrefix(startURL[i:], "://") {
+		return startURL
+	}
+	return startURL[:i] + "://" + startURL[i+2:]
 }
