@@ -24,9 +24,9 @@ The lock files live in a per-user directory, `aws-vault/locks` under the user ca
 - Keyring operations are serialized, which adds a small amount of latency per operation. In practice this is negligible because the operations themselves are fast.
 - **All concurrent invocations must use `--parallel-safe`**. If some processes enable it and others don't, the unprotected processes ignore the locks entirely. This is undefined behavior and may still cause races. Set `AWS_VAULT_PARALLEL_SAFE=true` in your environment to ensure consistent use.
 
-## The `login` command
+## Commands
 
-The `login` command is intentionally excluded from `--parallel-safe`. Console login sessions are inherently single-use — you cannot meaningfully log in to multiple AWS consoles in parallel — so there is no concurrent-access problem for `--parallel-safe` to solve. The `exec`, `export`, and `rotate` commands all support `--parallel-safe`.
+`exec`, `export`, `login` and `rotate` all honour `--parallel-safe`. A console session from `login` is single-use, but getting one still reads and writes the same session cache and SSO token as `exec` and `export`, and can start the same SSO sign-in, so it takes the same locks.
 
 ## Limitations
 

@@ -161,12 +161,6 @@ func (a *AwsVault) Keyring() (keyring.Keyring, error) {
 	return raw, nil
 }
 
-// RawKeyring returns the keyring without the parallel-safe lock wrapper.
-// Used by commands like login that are excluded from --parallel-safe.
-func (a *AwsVault) RawKeyring() (keyring.Keyring, error) {
-	return a.rawKeyring()
-}
-
 func (a *AwsVault) rawKeyring() (keyring.Keyring, error) {
 	if a.rawKeyringImpl == nil {
 		if a.KeyringBackend != "" {
