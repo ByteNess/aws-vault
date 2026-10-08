@@ -53,10 +53,12 @@ const (
 	// reassure the user that the process isn't hung.
 	defaultSessionLockWarnAfter = 5 * time.Second
 
-	// defaultSessionLockTimeout is a safety net: if the lock holder is hung,
-	// waiters give up after this duration rather than blocking indefinitely.
-	// 2 minutes matches the keyring lock timeout.
-	defaultSessionLockTimeout = 2 * time.Minute
+	// defaultSessionLockTimeout is a safety net for a lock holder that is
+	// alive but stuck; one that dies releases the lock at once. The holder
+	// runs the whole credential retrieval under the lock, so the wait has to
+	// outlast it: for SSO, waiting for or doing a sign-in (defaultSSOLockTimeout)
+	// and then GetRoleCredentials, which retries 429s for up to ssoRetryTimeout.
+	defaultSessionLockTimeout = defaultSSOLockTimeout + ssoRetryTimeout
 )
 
 // NewCachedSessionProvider creates a CachedSessionProvider with production

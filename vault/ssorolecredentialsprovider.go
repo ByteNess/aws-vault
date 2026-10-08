@@ -89,11 +89,14 @@ const (
 	// reassure the user that the process isn't hung.
 	defaultSSOLockWarnAfter = 5 * time.Second
 
-	// defaultSSOLockTimeout is a safety net: if the lock holder is hung
-	// (e.g. a browser auth that was abandoned), waiters give up after this
-	// duration rather than blocking indefinitely. 2 minutes matches the
-	// keyring lock timeout.
-	defaultSSOLockTimeout = 2 * time.Minute
+	// defaultSSOLockTimeout is a safety net for a lock holder that is alive
+	// but stuck; one that dies releases the lock at once. It has to outlast
+	// the longest thing the holder does legitimately, or every waiter gives up
+	// on a holder that is about to finish: a browser sign-in, bounded by
+	// defaultPKCESignInTimeout (the device code flow is bounded by the device
+	// code's expiry, which Identity Center sets to the same 10 minutes), plus
+	// the registration and token calls around it.
+	defaultSSOLockTimeout = defaultPKCESignInTimeout + time.Minute
 
 	// ssoRetryTimeout is a pathological safety net: if GetRoleCredentials is still
 	// returning 429s after this duration, give up and surface the error to the user.
@@ -636,8 +639,11 @@ func (p *SSORoleCredentialsProvider) sleepPoll(ctx context.Context, d time.Durat
 	return nil
 }
 
-// pkceSignInTimeout bounds the wait for the browser, as in the AWS CLI.
-var pkceSignInTimeout = 10 * time.Minute
+// defaultPKCESignInTimeout bounds the wait for the browser, as in the AWS CLI.
+const defaultPKCESignInTimeout = 10 * time.Minute
+
+// pkceSignInTimeout is a variable so tests can shorten it.
+var pkceSignInTimeout = defaultPKCESignInTimeout
 
 // newOIDCTokenPKCE generates a new OIDC token using the authorization code flow
 // with PKCE (https://datatracker.ietf.org/doc/html/rfc7636).
