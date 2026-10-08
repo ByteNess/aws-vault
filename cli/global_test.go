@@ -5,8 +5,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/alecthomas/kingpin/v2"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	ststypes "github.com/aws/aws-sdk-go-v2/service/sts/types"
 	"github.com/byteness/aws-vault/v7/vault"
 	"github.com/byteness/keyring"
 )
@@ -274,5 +277,51 @@ func TestMissingProfileInheritsDefault(t *testing.T) {
 	if config.SSOAccountID != "222222222222" {
 		t.Fatalf("expected missing profile to inherit default SSO account %q, got %q",
 			"222222222222", config.SSOAccountID)
+	}
+}
+
+func setTestSession(t *testing.T, kr keyring.Keyring, profileName string) {
+	t.Helper()
+	expires := time.Now().Add(time.Hour)
+	if err := (&vault.SessionKeyring{Keyring: kr}).Set(vault.SessionMetadata{
+		Type:        "sts.GetSessionToken",
+		ProfileName: profileName,
+	}, &ststypes.Credentials{
+		AccessKeyId:     aws.String("AKIAEXAMPLE"),
+		SecretAccessKey: aws.String("secret"),
+		SessionToken:    aws.String("token"),
+		Expiration:      &expires,
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRemoveSessionsForProfileRemovesFromBothKeyrings(t *testing.T) {
+	primary := keyring.NewArrayKeyring(nil)
+	sessions := keyring.NewArrayKeyring(nil)
+	setTestSession(t, primary, "sso-profile")
+	setTestSession(t, sessions, "sso-profile")
+	setTestSession(t, sessions, "no-creds-profile")
+
+	n, err := removeSessionsForProfile("sso-profile", primary, sessions)
+	if err != nil || n != 2 {
+		t.Fatalf("removeSessionsForProfile = %d, %v, want 2", n, err)
+	}
+
+	if keys, err := (&vault.SessionKeyring{Keyring: primary}).Keys(); err != nil || len(keys) != 0 {
+		t.Errorf("primary keyring still contains sessions %v, err: %v", keys, err)
+	}
+	if keys, err := (&vault.SessionKeyring{Keyring: sessions}).Keys(); err != nil || len(keys) != 1 {
+		t.Errorf("session keyring has sessions %v, err: %v, want only no-creds-profile", keys, err)
+	}
+}
+
+func TestRemoveSessionsForProfileSharedKeyring(t *testing.T) {
+	kr := keyring.NewArrayKeyring(nil)
+	setTestSession(t, kr, "sso-profile")
+
+	n, err := removeSessionsForProfile("sso-profile", kr, nil)
+	if err != nil || n != 1 {
+		t.Fatalf("removeSessionsForProfile = %d, %v, want 1", n, err)
 	}
 }

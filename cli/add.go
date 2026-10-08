@@ -40,6 +40,9 @@ func ConfigureAddCommand(app *kingpin.Application, a *AwsVault) {
 		if err != nil {
 			return err
 		}
+		if !a.hasSeparateSessionKeyring() {
+			sessionKeyring = nil
+		}
 		awsConfigFile, err := a.AwsConfigFile()
 		if err != nil {
 			return err
@@ -88,8 +91,7 @@ func addCommand(input addCommandInput, keyring, sessionKeyring keyring.Keyring, 
 
 	fmt.Printf("Added credentials to profile %q in vault\n", input.ProfileName)
 
-	sk := &vault.SessionKeyring{Keyring: sessionKeyring}
-	if n, _ := sk.RemoveForProfile(input.ProfileName); n > 0 {
+	if n, _ := removeSessionsForProfile(input.ProfileName, keyring, sessionKeyring); n > 0 {
 		fmt.Printf("Deleted %d existing sessions.\n", n)
 	}
 
