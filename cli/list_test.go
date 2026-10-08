@@ -361,10 +361,30 @@ func TestListCommandShowsSessionsFromBothKeyrings(t *testing.T) {
 	setTestSession(t, sessions, "no-creds-profile")
 
 	var buf bytes.Buffer
-	if err := listCommand(listCommandInput{OnlySessions: true}, configFile, primary, sessions, &buf); err != nil {
+	if err := listCommand(listCommandInput{}, configFile, primary, sessions, &buf); err != nil {
 		t.Fatalf("listCommand error: %v", err)
 	}
-	if got := strings.Count(buf.String(), "sts.GetSessionToken:"); got != 2 {
-		t.Errorf("listed %d sessions, want 2:\n%s", got, buf.String())
+	output := buf.String()
+	if got := strings.Count(output, "sts.GetSessionToken:"); got != 2 {
+		t.Errorf("listed %d sessions, want 2:\n%s", got, output)
+	}
+	for _, line := range strings.Split(output, "\n") {
+		unused := strings.Contains(line, "(unused)")
+		if strings.HasPrefix(line, "sso-profile ") && !unused {
+			t.Errorf("session left in the primary keyring not marked unused: %q", line)
+		}
+		if strings.HasPrefix(line, "no-creds-profile ") && unused {
+			t.Errorf("session in the session keyring marked unused: %q", line)
+		}
+	}
+}
+
+func TestListCommandSharedKeyringSessionsNotMarkedUnused(t *testing.T) {
+	configFile := writeTempConfig(t, listTestConfig)
+	kr := keyring.NewArrayKeyring(nil)
+	setTestSession(t, kr, "sso-profile")
+
+	if output := captureListOutput(t, listCommandInput{}, configFile, kr); strings.Contains(output, "(unused)") {
+		t.Errorf("session in a shared keyring marked unused:\n%s", output)
 	}
 }
