@@ -124,3 +124,22 @@ func TestOIDCTokenKeyringGetReadsLegacyEntry(t *testing.T) {
 		t.Errorf("ExpiresIn = %d, want remaining seconds", got.Token.ExpiresIn)
 	}
 }
+
+// The pass and passage backends list "oidc:https://..." back as "oidc:https:/...".
+func TestOIDCTokenKeyringFindsTokenWithCollapsedSchemeSeparator(t *testing.T) {
+	kr := keyring.NewArrayKeyring([]keyring.Item{{Key: "oidc:https:/example.awsapps.com/start", Data: []byte(`{}`)}})
+	tk := &vault.OIDCTokenKeyring{Keyring: kr}
+	startURL := "https://example.awsapps.com/start"
+
+	if has, err := tk.Has(startURL); err != nil || !has {
+		t.Fatalf("Has: got %v, %v, want true", has, err)
+	}
+
+	keys, err := tk.Keys()
+	if err != nil {
+		t.Fatalf("Keys: %v", err)
+	}
+	if len(keys) != 1 || keys[0] != startURL {
+		t.Errorf("Keys = %v, want [%s]", keys, startURL)
+	}
+}
