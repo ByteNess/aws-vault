@@ -42,7 +42,9 @@ Options:
                        passphrase is $AWS_VAULT_FILE_PASSPHRASE, or
                        "aws-vault-parallel-safe-stress" if that is unset.
   --no-parallel-safe   Run without --parallel-safe, for comparison
-  --max-seconds N      Fail if the run takes longer than N seconds
+  --max-seconds N      Fail if the run took longer than N seconds (checked
+                       once every process has finished, so it does not stop
+                       a hung run)
   -h, --help           Show this help
 
 The run signs in through your browser once per SSO start URL unless the
@@ -57,6 +59,15 @@ usage() {
 die() {
   printf 'aws-vault-parallel-safe-stress: %s\n' "$*" >&2
   exit 1
+}
+
+need_value() {
+  if (( $2 < 2 ))
+  then
+    printf "Option '%s' needs a value\n" "$1" >&2
+    usage
+    exit 1
+  fi
 }
 
 config=''
@@ -80,34 +91,42 @@ do
       exit 0
       ;;
     --config)
+      need_value "$1" "$#"
       config=${2-}
       shift 2
       ;;
     --role)
+      need_value "$1" "$#"
       role=${2-}
       shift 2
       ;;
     --profile)
+      need_value "$1" "$#"
       profile=${2-}
       shift 2
       ;;
     --parallel)
+      need_value "$1" "$#"
       parallel=${2-}
       shift 2
       ;;
     --runs)
+      need_value "$1" "$#"
       runs=${2-}
       shift 2
       ;;
     --aws-vault)
+      need_value "$1" "$#"
       aws_vault=${2-}
       shift 2
       ;;
     --backend)
+      need_value "$1" "$#"
       backend=${2-}
       shift 2
       ;;
     --store-dir)
+      need_value "$1" "$#"
       store_dir=${2-}
       shift 2
       ;;
@@ -116,6 +135,7 @@ do
       shift
       ;;
     --max-seconds)
+      need_value "$1" "$#"
       max_seconds=${2-}
       shift 2
       ;;
@@ -124,6 +144,7 @@ do
       shift
       ;;
     --sso-start-url)
+      need_value "$1" "$#"
       directories+=(--sso-start-url "${2-}")
       shift 2
       ;;
@@ -227,11 +248,23 @@ then
   fi
   config=$tmpdir/discovered.config
 fi
-config=$(cd -- "$(dirname -- "$config")" && pwd)/$(basename -- "$config")
+if ! config_dir=$(cd -- "$(dirname -- "$config")" && pwd)
+then
+  die "cannot resolve the directory of '$config'"
+fi
+config=$config_dir/$(basename -- "$config")
 
 passphrase=$(LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 32)
+kept_store_passphrase=${AWS_VAULT_FILE_PASSPHRASE:-aws-vault-parallel-safe-stress}
 unset AWS_VAULT AWS_PROFILE AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
-unset AWS_VAULT_FILE_DIR AWS_VAULT_KEYCHAIN_NAME AWS_VAULT_SESSION_BACKEND
+while IFS= read -r name
+do
+  case $name in
+    AWS_VAULT_SESSION_*|AWS_VAULT_FILE_*|AWS_VAULT_KEYCHAIN_*|AWS_VAULT_PASS_*|AWS_VAULT_PASSAGE_*|AWS_VAULT_SECRET_SERVICE_*|AWS_VAULT_OP_*|AWS_VAULT_PROTON_PASS_*|AWS_VAULT_KWALLET_*|AWS_VAULT_WINCRED_*)
+      unset "$name"
+      ;;
+  esac
+done < <(compgen -e)
 export AWS_CONFIG_FILE=$config
 export AWS_VAULT_BACKEND=$backend
 export AWS_VAULT_PARALLEL_SAFE=$parallel_safe
@@ -242,7 +275,7 @@ then
   then
     store_dir=$tmpdir/store
   else
-    passphrase=${AWS_VAULT_FILE_PASSPHRASE:-aws-vault-parallel-safe-stress}
+    passphrase=$kept_store_passphrase
   fi
   if ! mkdir -p -- "$store_dir"
   then
@@ -269,14 +302,39 @@ else
 fi
 
 awk '
-  /^\[profile / { name = $2; sub(/\]$/, "", name); next }
-  /^\[/ { name = ""; next }
-  name != "" && $1 == "sso_start_url" { print name "\t" $3; name = "" }
+  function trim(s) { sub(/^[[:space:]]+/, "", s); sub(/[[:space:]]+$/, "", s); return s }
+  /^[[:space:]]*\[/ {
+    header = $0
+    sub(/^[[:space:]]*\[/, "", header)
+    sub(/\][[:space:]]*$/, "", header)
+    header = trim(header)
+    kind = ""
+    if (header == "default") { kind = "profile"; name = "default" }
+    else if (header ~ /^profile[[:space:]]/) { kind = "profile"; name = trim(substr(header, 8)) }
+    else if (header ~ /^sso-session[[:space:]]/) { kind = "session"; name = trim(substr(header, 12)) }
+    if (kind == "profile" && !(name in listed)) { listed[name] = 1; order[++count] = name }
+    next
+  }
+  kind != "" && index($0, "=") {
+    key = trim(substr($0, 1, index($0, "=") - 1))
+    value = trim(substr($0, index($0, "=") + 1))
+    if (kind == "profile" && key == "sso_start_url") profile_url[name] = value
+    if (kind == "profile" && key == "sso_session") profile_session[name] = value
+    if (kind == "session" && key == "sso_start_url") session_url[name] = value
+  }
+  END {
+    for (i = 1; i <= count; i++) {
+      p = order[i]
+      url = profile_url[p]
+      if (url == "" && profile_session[p] != "") url = session_url[profile_session[p]]
+      if (url != "") print p "\t" url
+    }
+  }
 ' "$config" > "$tmpdir/profiles.tsv"
 
 if [[ ! -s $tmpdir/profiles.tsv ]]
 then
-  die "no profiles with sso_start_url in '$config'"
+  die "no SSO profiles in '$config'"
 fi
 
 if [[ $mode == same ]]
@@ -285,43 +343,53 @@ then
   then
     IFS=$'\t' read -r profile _ < "$tmpdir/profiles.tsv"
   fi
-  start_urls=$(awk -F '\t' -v p="$profile" '$1 == p { print $2 }' "$tmpdir/profiles.tsv" | sort -u | wc -l | tr -d ' ')
+  profile_url=$(awk -F '\t' -v p="$profile" '$1 == p { print $2; exit }' "$tmpdir/profiles.tsv")
+  if [[ -z $profile_url ]]
+  then
+    die "no SSO profile named '$profile' in '$config'"
+  fi
   for (( i = 1; i <= runs; i += 1 ))
   do
-    printf '%s\n' "$i"
-  done > "$tmpdir/jobs.txt"
-  job_count=$runs
+    printf '%s\t%s\n' "$profile" "$profile_url"
+  done > "$tmpdir/jobs.tsv"
 else
-  cut -f 1 "$tmpdir/profiles.tsv" > "$tmpdir/jobs.txt"
-  start_urls=$(cut -f 2 "$tmpdir/profiles.tsv" | sort -u | wc -l | tr -d ' ')
-  job_count=$(wc -l < "$tmpdir/jobs.txt" | tr -d ' ')
+  cp -- "$tmpdir/profiles.tsv" "$tmpdir/jobs.tsv"
 fi
+job_count=$(wc -l < "$tmpdir/jobs.tsv" | tr -d ' ')
+start_urls=$(cut -f 2 "$tmpdir/jobs.tsv" | sort -u | wc -l | tr -d ' ')
 
 printf 'aws-vault: %s (%s)\n' "$aws_vault" "$("$aws_vault" --version 2>&1)"
 printf 'mode: %s, jobs: %s, parallel: %s, parallel-safe: %s, backend: %s\n' "$mode" "$job_count" "$parallel" "$parallel_safe" "$backend"
 printf 'SSO start URLs: %s\n' "$start_urls"
 
 run_job() {
-  local job=$1
+  local job=$1 profile
+  IFS=$'\t' read -r profile _ < <(sed -n "${job}p" "$STRESS_JOBS")
   if [[ $STRESS_MODE == same ]]
   then
-    "$STRESS_AWS_VAULT" exec "$STRESS_PROFILE" -- true > /dev/null 2> "$STRESS_LOGS/$job.err"
+    "$STRESS_AWS_VAULT" exec "$profile" -- true > /dev/null 2> "$STRESS_LOGS/$job.err"
   else
-    "$STRESS_AWS_VAULT" export --format=json "$job" > /dev/null 2> "$STRESS_LOGS/$job.err"
+    "$STRESS_AWS_VAULT" export --format=json "$profile" > /dev/null 2> "$STRESS_LOGS/$job.err"
   fi
   printf '%s\n' "$?" > "$STRESS_STATUS/$job"
 }
 export -f run_job
 
 start=$SECONDS
-STRESS_MODE=$mode STRESS_PROFILE=$profile STRESS_AWS_VAULT=$aws_vault STRESS_LOGS=$tmpdir/logs STRESS_STATUS=$tmpdir/status \
-  xargs -P "$parallel" -n 1 bash -c 'run_job "$1"' _ < "$tmpdir/jobs.txt"
+for (( job = 1; job <= job_count; job += 1 ))
+do
+  printf '%s\n' "$job"
+done | STRESS_MODE=$mode STRESS_AWS_VAULT=$aws_vault STRESS_JOBS=$tmpdir/jobs.tsv STRESS_LOGS=$tmpdir/logs STRESS_STATUS=$tmpdir/status \
+  xargs -P "$parallel" -n 1 bash -c 'run_job "$1"' _
 duration=$(( SECONDS - start ))
 
 succeeded=0
 failed=0
-while IFS= read -r job
+job=0
+: > "$tmpdir/sign-ins.txt"
+while IFS=$'\t' read -r profile url
 do
+  (( job += 1 ))
   status=''
   if [[ -r $tmpdir/status/$job ]]
   then
@@ -332,11 +400,16 @@ do
     (( succeeded += 1 ))
   else
     (( failed += 1 ))
-    printf 'FAILED %s: %s\n' "$job" "$(tail -n 1 "$tmpdir/logs/$job.err" 2>/dev/null)"
+    printf 'FAILED %s: %s\n' "$profile" "$(tail -n 1 "$tmpdir/logs/$job.err" 2>/dev/null)"
   fi
-done < "$tmpdir/jobs.txt"
+  count=$(grep -c 'the SSO authorization page' "$tmpdir/logs/$job.err" 2>/dev/null)
+  for (( i = 0; i < ${count:-0}; i += 1 ))
+  do
+    printf '%s\n' "$url" >> "$tmpdir/sign-ins.txt"
+  done
+done < "$tmpdir/jobs.tsv"
 
-sign_ins=$(cat "$tmpdir"/logs/*.err | grep -c 'the SSO authorization page')
+sign_ins=$(wc -l < "$tmpdir/sign-ins.txt" | tr -d ' ')
 
 printf 'succeeded: %s, failed: %s, SSO sign-ins started: %s, duration: %ss\n' "$succeeded" "$failed" "$sign_ins" "$duration"
 
@@ -345,10 +418,16 @@ if (( 0 < failed ))
 then
   (( problems += 1 ))
 fi
-if [[ $parallel_safe == true ]] && (( start_urls < sign_ins ))
+if [[ $parallel_safe == true ]]
 then
-  printf 'More SSO sign-ins (%s) than start URLs (%s): the SSO lock did not serialize them\n' "$sign_ins" "$start_urls"
-  (( problems += 1 ))
+  while read -r count url
+  do
+    if (( 1 < count ))
+    then
+      printf '%s SSO sign-ins for %s: the SSO lock did not serialize them\n' "$count" "$url"
+      (( problems += 1 ))
+    fi
+  done < <(sort "$tmpdir/sign-ins.txt" | uniq -c)
 fi
 if (( 0 < max_seconds && max_seconds < duration ))
 then

@@ -25,9 +25,10 @@ Start URLs without a valid token in ~/.aws/sso/cache are signed in to with
 `aws sso login`, using the device code flow when AWS_VAULT_DEVICE_CODE is
 true, as aws-vault does.
 
-The config file has one profile per account and role, named
-sso-<directory>-<account id>-<role>, with sso_registration_scopes set so
-that aws-vault can refresh its OIDC token without a browser.
+The config file has an [sso-session sso-<directory>] section per start URL,
+with sso_registration_scopes set so that aws-vault can refresh its OIDC
+token without a browser, and a profile per account and role, named
+sso-<directory>-<account id>-<role>, that uses it.
 EOF
 }
 
@@ -38,6 +39,15 @@ usage() {
 die() {
   printf 'aws-vault-collect-sso-profiles: %s\n' "$*" >&2
   exit 1
+}
+
+need_value() {
+  if (( $2 < 2 ))
+  then
+    printf "Option '%s' needs a value\n" "$1" >&2
+    usage
+    exit 1
+  fi
 }
 
 role=''
@@ -111,18 +121,22 @@ do
       exit 0
       ;;
     --role)
+      need_value "$1" "$#"
       role=${2-}
       shift 2
       ;;
     --output)
+      need_value "$1" "$#"
       output=${2-}
       shift 2
       ;;
     --parallel)
+      need_value "$1" "$#"
       parallel=${2-}
       shift 2
       ;;
     --sso-start-url)
+      need_value "$1" "$#"
       add_start_url "${2-}"
       shift 2
       ;;
@@ -144,14 +158,18 @@ done
 
 if [[ -n $from_config ]]
 then
-  while IFS= read -r directory
-  do
-    directories+=("$directory")
-  done < <(start_urls_from_config)
-  if (( 0 == ${#directories[@]} ))
+  if ! config_urls=$(start_urls_from_config)
+  then
+    exit 1
+  fi
+  if [[ -z $config_urls ]]
   then
     die "no sso_start_url and sso_region pairs in ${AWS_CONFIG_FILE:-$HOME/.aws/config}"
   fi
+  while IFS= read -r directory
+  do
+    directories+=("$directory")
+  done <<< "$config_urls"
 fi
 if (( 0 == ${#directories[@]} ))
 then
@@ -203,20 +221,19 @@ directory_id() {
 }
 
 cached_token() {
-  local start_url=$1 min_ttl=$2 cache_dir=$HOME/.aws/sso/cache
-  local files=("$cache_dir"/*.json)
-  if [[ ! -e ${files[0]} ]]
-  then
-    return 1
-  fi
-  jq -r -s --arg url "$start_url" --argjson min_ttl "$min_ttl" '
-    [ .[]
-      | select(.startUrl == $url and .accessToken != null)
-      | {accessToken, exp: (try (.expiresAt | sub("\\.[0-9]+"; "") | sub("UTC$"; "Z") | fromdateiso8601) catch null)}
-      | select(.exp != null and .exp > (now + $min_ttl))
-    ]
-    | sort_by(.exp) | last | .accessToken // empty
-  ' "${files[@]}" 2>/dev/null
+  local start_url=$1 min_ttl=$2 file
+  for file in "$HOME"/.aws/sso/cache/*.json
+  do
+    if [[ -r $file ]]
+    then
+      jq -r --arg url "$start_url" --argjson min_ttl "$min_ttl" '
+        select(.startUrl == $url and .accessToken != null)
+        | (try (.expiresAt | sub("\\.[0-9]+"; "") | sub("UTC$"; "Z") | fromdateiso8601) catch null) as $exp
+        | select($exp != null and (now + $min_ttl) < $exp)
+        | "\($exp)\t\(.accessToken)"
+      ' "$file" 2>/dev/null
+    fi
+  done | sort -n | tail -n 1 | cut -f 2
 }
 
 sso_login() {
@@ -241,12 +258,17 @@ export AWS_RETRY_MODE=adaptive
 export AWS_MAX_ATTEMPTS=10
 
 list_roles() {
-  local token=$1 region=$2 account_id=$3
+  local token_file=$1 region=$2 account_id=$3 input=$4
+  if ! jq --arg account "$account_id" '. + {accountId: $account}' "$token_file" > "$input"
+  then
+    return 1
+  fi
   AWS_REGION=$region AWS_CONFIG_FILE=/dev/null AWS_SHARED_CREDENTIALS_FILE=/dev/null \
-    aws sso list-account-roles --access-token "$token" --account-id "$account_id" --output json
+    aws sso list-account-roles --cli-input-json "file://$input" --output json
 }
 export -f list_roles
 
+umask 077
 seen=$'\n'
 unique=()
 for directory in "${directories[@]}"
@@ -262,12 +284,19 @@ directories=("${unique[@]}")
 : > "$tmpdir/roles.tsv"
 failures=0
 index=0
+dir_ids=$'\n'
+: > "$tmpdir/sessions.tsv"
 for directory in "${directories[@]}"
 do
   (( index += 1 ))
   start_url=${directory%=*}
   region=${directory##*=}
   dir_id=$(directory_id "$start_url" "$index")
+  if [[ $dir_ids == *$'\n'"$dir_id"$'\n'* ]]
+  then
+    dir_id=$dir_id-$index
+  fi
+  dir_ids+="$dir_id"$'\n'
 
   token=$(cached_token "$start_url" 600)
   if [[ -z $token ]]
@@ -288,8 +317,12 @@ do
     continue
   fi
 
+  if ! jq -n --arg token "$token" '{accessToken: $token}' > "$tmpdir/token.json"
+  then
+    die 'could not write the access token to a temporary file'
+  fi
   if ! accounts=$(AWS_REGION=$region AWS_CONFIG_FILE=/dev/null AWS_SHARED_CREDENTIALS_FILE=/dev/null \
-    aws sso list-accounts --access-token "$token" --output json --query 'accountList[].accountId')
+    aws sso list-accounts --cli-input-json "file://$tmpdir/token.json" --output json --query 'accountList[].accountId')
   then
     printf 'Listing accounts in %s failed, skipping it\n' "$start_url" >&2
     (( failures += 1 ))
@@ -298,10 +331,12 @@ do
   printf '%s\n' "$accounts" | jq -r '.[]' > "$tmpdir/accounts.txt"
   printf '%s: %s accounts\n' "$dir_id" "$(wc -l < "$tmpdir/accounts.txt" | tr -d ' ')" >&2
 
+  printf '%s\t%s\t%s\n' "$dir_id" "$start_url" "$region" >> "$tmpdir/sessions.tsv"
+
   rm -rf -- "$tmpdir/roles"
   mkdir -- "$tmpdir/roles"
-  TOKEN=$token REGION=$region OUT=$tmpdir/roles xargs -P "$parallel" -n 1 bash -c '
-    if list_roles "$TOKEN" "$REGION" "$1" > "$OUT/$1.json"
+  TOKEN_FILE=$tmpdir/token.json REGION=$region OUT=$tmpdir/roles xargs -P "$parallel" -n 1 bash -c '
+    if list_roles "$TOKEN_FILE" "$REGION" "$1" "$OUT/$1.input.json" > "$OUT/$1.json"
     then
       exit 0
     fi
@@ -320,7 +355,7 @@ do
     jq -r --arg role "$role" --arg url "$start_url" --arg region "$region" --arg dir "$dir_id" '
       .roleList[]
       | select($role == "" or .roleName == $role)
-      | [$dir, .accountId, .roleName, $url, $region] | @tsv
+      | [$dir, .accountId, .roleName, $region] | @tsv
     ' "$tmpdir/roles/$account_id.json" >> "$tmpdir/roles.tsv"
   done < "$tmpdir/accounts.txt"
 done
@@ -330,16 +365,23 @@ then
   die 'no matching accounts and roles found'
 fi
 
-if ! sort -u "$tmpdir/roles.tsv" | while IFS=$'\t' read -r dir_id account_id role_name start_url region
-do
-  printf '[profile sso-%s-%s-%s]\n' "$dir_id" "$account_id" "${role_name//[^A-Za-z0-9_-]/_}"
-  printf 'sso_start_url = %s\n' "$start_url"
-  printf 'sso_region = %s\n' "$region"
-  printf 'sso_account_id = %s\n' "$account_id"
-  printf 'sso_role_name = %s\n' "$role_name"
-  printf 'sso_registration_scopes = sso:account:access\n'
-  printf 'region = %s\n\n' "$region"
-done > "$output"
+if ! {
+  while IFS=$'\t' read -r dir_id start_url region
+  do
+    printf '[sso-session sso-%s]\n' "$dir_id"
+    printf 'sso_start_url = %s\n' "$start_url"
+    printf 'sso_region = %s\n' "$region"
+    printf 'sso_registration_scopes = sso:account:access\n\n'
+  done < "$tmpdir/sessions.tsv"
+  sort -u "$tmpdir/roles.tsv" | while IFS=$'\t' read -r dir_id account_id role_name region
+  do
+    printf '[profile sso-%s-%s-%s]\n' "$dir_id" "$account_id" "$role_name"
+    printf 'sso_session = sso-%s\n' "$dir_id"
+    printf 'sso_account_id = %s\n' "$account_id"
+    printf 'sso_role_name = %s\n' "$role_name"
+    printf 'region = %s\n\n' "$region"
+  done
+} > "$output"
 then
   die "could not write '$output'"
 fi
