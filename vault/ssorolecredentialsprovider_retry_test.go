@@ -204,7 +204,8 @@ func TestGetRoleCredentialsTimeoutOnPersistentRateLimit(t *testing.T) {
 	p.RoleName = "TestRole"
 	p.ssoNow = clock.Now
 	p.ssoSleep = clock.Sleep
-	p.ssoLogf = func(string, ...any) {} // suppress log output
+	p.ssoLogf = func(string, ...any) {}
+	p.RetryRateLimit = true
 
 	// Provide a cached OIDC token so getOIDCToken succeeds
 	cache := &testTokenCache{

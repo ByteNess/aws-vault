@@ -219,7 +219,7 @@ func TestGetOIDCToken_LockHeldThroughCacheSet(t *testing.T) {
 	}
 }
 
-func TestGetOIDCToken_UseStdout_SkipsLock(t *testing.T) {
+func TestGetOIDCToken_UseStdout_TakesLock(t *testing.T) {
 	freshToken := newTestOIDCTokenData("fresh")
 	lock := &testLock{tryResults: []bool{true}}
 	cache := &testTokenCache{}
@@ -243,8 +243,8 @@ func TestGetOIDCToken_UseStdout_SkipsLock(t *testing.T) {
 	if token != &freshToken.Token {
 		t.Fatalf("unexpected token returned")
 	}
-	if lock.tryCalls != 0 {
-		t.Fatalf("expected no lock attempts, got %d", lock.tryCalls)
+	if lock.tryCalls != 1 {
+		t.Fatalf("expected 1 lock attempt, got %d", lock.tryCalls)
 	}
 }
 

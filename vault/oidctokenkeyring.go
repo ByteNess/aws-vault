@@ -79,6 +79,15 @@ func (o OIDCTokenKeyring) Has(startURL string) (bool, error) {
 // returned with Token.ExpiresIn set to 0 so the caller can redeem the refresh
 // token. Callers must check Expired() before using Token.AccessToken.
 func (o OIDCTokenKeyring) Get(startURL string) (*OIDCTokenData, error) {
+	return o.get(startURL, true)
+}
+
+// Peek is like Get but never removes an expired token.
+func (o OIDCTokenKeyring) Peek(startURL string) (*OIDCTokenData, error) {
+	return o.get(startURL, false)
+}
+
+func (o OIDCTokenKeyring) get(startURL string, removeExpired bool) (*OIDCTokenData, error) {
 	item, err := o.Keyring.Get(o.fmtKey(startURL))
 	if err != nil {
 		return nil, err
@@ -92,8 +101,10 @@ func (o OIDCTokenKeyring) Get(startURL string) (*OIDCTokenData, error) {
 	}
 	if val.Expired() {
 		if !val.Refreshable() {
-			log.Printf("OIDC token for '%s' expired, removing", startURL)
-			_ = o.Remove(startURL)
+			if removeExpired {
+				log.Printf("OIDC token for '%s' expired, removing", startURL)
+				_ = o.Remove(startURL)
+			}
 			return nil, keyring.ErrKeyNotFound
 		}
 		log.Printf("OIDC token for '%s' expired, but has a refresh token", startURL)
