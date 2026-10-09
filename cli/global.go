@@ -163,25 +163,6 @@ func (a *AwsVault) Keyring() (keyring.Keyring, error) {
 	return a.lockedKeyringImpl, nil
 }
 
-// RawKeyrings returns the primary and session keyrings without the
-// parallel-safe lock wrapper. Used by commands like login that are excluded
-// from --parallel-safe.
-func (a *AwsVault) RawKeyrings() (keyring.Keyring, keyring.Keyring, error) {
-	credentials, err := a.rawKeyring()
-	if err != nil {
-		return nil, nil, err
-	}
-	if !a.hasSeparateSessionKeyring() {
-		log.Println("Using primary keyring for sessions")
-		return credentials, credentials, nil
-	}
-	sessions, err := a.rawSessionKeyring()
-	if err != nil {
-		return nil, nil, err
-	}
-	return credentials, sessions, nil
-}
-
 func (a *AwsVault) rawKeyring() (keyring.Keyring, error) {
 	if a.keyringImpl == nil {
 		if a.KeyringBackend != "" {
