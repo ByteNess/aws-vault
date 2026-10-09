@@ -18,6 +18,10 @@ Options:
   --parallel N         Concurrent list-account-roles calls (default: 10)
   -h, --help           Show this help
 
+Start URLs without a valid token in ~/.aws/sso/cache are signed in to with
+`aws sso login`, using the device code flow when AWS_VAULT_DEVICE_CODE is
+true, as aws-vault does.
+
 The config file has one profile per account and role, named
 sso-<directory>-<account id>-<role>, with sso_registration_scopes set so
 that aws-vault can refresh its OIDC token without a browser.
@@ -148,8 +152,14 @@ sso_login() {
     printf 'sso_region = %s\n' "$region"
     printf 'sso_registration_scopes = sso:account:access\n'
   } > "$login_config"
+  local login_args=(--profile login)
+  case ${AWS_VAULT_DEVICE_CODE-} in
+    1|t|T|true|TRUE|True)
+      login_args+=(--use-device-code)
+      ;;
+  esac
   AWS_CONFIG_FILE=$login_config AWS_SHARED_CREDENTIALS_FILE=/dev/null \
-    aws sso login --profile login
+    aws sso login "${login_args[@]}"
 }
 
 export AWS_RETRY_MODE=adaptive
