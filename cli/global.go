@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/AlecAivazis/survey/v2"
@@ -110,11 +111,14 @@ type AwsVault struct {
 	SessionKeyringBackend   string
 	promptDriver            string
 	sessionKeyringOverrides keyringConfigOverrides
+	ParallelSafe            bool
 
-	keyringImpl        keyring.Keyring
-	sessionKeyringImpl keyring.Keyring
-	awsConfigFile      *vault.ConfigFile
-	UseBiometrics      bool
+	keyringImpl              keyring.Keyring
+	sessionKeyringImpl       keyring.Keyring
+	lockedKeyringImpl        keyring.Keyring
+	lockedSessionKeyringImpl keyring.Keyring
+	awsConfigFile            *vault.ConfigFile
+	UseBiometrics            bool
 }
 
 func isATerminal() bool {
@@ -143,15 +147,44 @@ func (a *AwsVault) PromptDriver(avoidTerminalPrompt bool) string {
 	return a.promptDriver
 }
 
-// Keyring opens the configured keyring backend on first use and returns it.
+// Keyring opens the configured keyring backend on first use and returns it,
+// wrapped in a cross-process lock when --parallel-safe is set.
 func (a *AwsVault) Keyring() (keyring.Keyring, error) {
+	raw, err := a.rawKeyring()
+	if err != nil {
+		return nil, err
+	}
+	if !a.ParallelSafe {
+		return raw, nil
+	}
+	if a.lockedKeyringImpl == nil {
+		a.lockedKeyringImpl = vault.NewLockedKeyring(raw, keyringLockKey(a.KeyringBackend, a.KeyringConfig))
+	}
+	return a.lockedKeyringImpl, nil
+}
+
+func (a *AwsVault) openKeyring(backend string, config keyring.Config) (keyring.Keyring, error) {
+	if !a.ParallelSafe {
+		return keyring.Open(config)
+	}
+
+	var kr keyring.Keyring
+	err := vault.WithKeyringLock(keyringLockKey(backend, config), func() error {
+		var err error
+		kr, err = keyring.Open(config)
+		return err
+	})
+	return kr, err
+}
+
+func (a *AwsVault) rawKeyring() (keyring.Keyring, error) {
 	if a.keyringImpl == nil {
 		if a.KeyringBackend != "" {
 			a.KeyringConfig.AllowedBackends = []keyring.BackendType{keyring.BackendType(a.KeyringBackend)}
 		}
 		var err error
 		log.Println("Opening primary keyring")
-		a.keyringImpl, err = keyring.Open(a.KeyringConfig)
+		a.keyringImpl, err = a.openKeyring(a.KeyringBackend, a.KeyringConfig)
 		if err != nil {
 			return nil, err
 		}
@@ -160,30 +193,115 @@ func (a *AwsVault) Keyring() (keyring.Keyring, error) {
 	return a.keyringImpl, nil
 }
 
+// keyringLockKey returns a key for the cross-process keyring lock that
+// identifies the underlying store, so that processes using the same store
+// share a lock however they specify it, and different stores don't contend.
+func keyringLockKey(backend string, config keyring.Config) string {
+	if backend == "" {
+		backends := keyring.AvailableBackends()
+		if len(backends) == 0 {
+			return "aws-vault"
+		}
+		backend = string(backends[0])
+	}
+
+	switch keyring.BackendType(backend) {
+	case keyring.KeychainBackend:
+		if config.KeychainName != "" {
+			return backend + ":" + config.KeychainName
+		}
+	case keyring.FileBackend:
+		if config.FileDir != "" {
+			return backend + ":" + canonicalStoreDir(config.FileDir, "", "")
+		}
+	case keyring.PassBackend:
+		return backend + ":" + canonicalStoreDir(config.PassDir, "PASSWORD_STORE_DIR", ".password-store")
+	case keyring.PassageBackend:
+		return backend + ":" + canonicalStoreDir(config.PassDir, "PASSAGE_DIR", filepath.Join(".passage", "store"))
+	case keyring.SecretServiceBackend:
+		if config.LibSecretCollectionName != "" {
+			return backend + ":" + config.LibSecretCollectionName
+		}
+	case keyring.KWalletBackend:
+		if config.KWalletFolder != "" {
+			return backend + ":" + config.KWalletFolder
+		}
+	case keyring.WinCredBackend:
+		if config.WinCredPrefix != "" {
+			return backend + ":" + config.WinCredPrefix
+		}
+	case keyring.OPBackend, keyring.OPConnectBackend, keyring.OPDesktopBackend:
+		if config.OPVaultID != "" {
+			return backend + ":" + config.OPVaultID
+		}
+	}
+	return backend
+}
+
+// canonicalStoreDir resolves a store directory the way the keyring backends
+// do: an empty dir falls back to envVar, then to homeRel under the home
+// directory, and ~ is expanded. The result is absolute and clean.
+func canonicalStoreDir(dir, envVar, homeRel string) string {
+	if dir == "" && envVar != "" {
+		dir = os.Getenv(envVar)
+	}
+	if dir == "" && homeRel != "" {
+		if home, err := os.UserHomeDir(); err == nil {
+			dir = filepath.Join(home, homeRel)
+		}
+	}
+	if expanded, err := keyring.ExpandTilde(dir); err == nil {
+		dir = expanded
+	}
+	if abs, err := filepath.Abs(dir); err == nil {
+		dir = abs
+	}
+	return filepath.Clean(dir)
+}
+
 func (a *AwsVault) hasSeparateSessionKeyring() bool {
 	return a.SessionKeyringBackend != "" || a.sessionKeyringOverrides.configured()
 }
 
-// SessionKeyring opens the session keyring on first use, defaulting to the primary keyring.
+func (a *AwsVault) sessionKeyringBackend() string {
+	if a.SessionKeyringBackend != "" {
+		return a.SessionKeyringBackend
+	}
+	return a.KeyringBackend
+}
+
+// SessionKeyring opens the session keyring on first use, defaulting to the
+// primary keyring, wrapped in a cross-process lock when --parallel-safe is set.
 func (a *AwsVault) SessionKeyring() (keyring.Keyring, error) {
 	if !a.hasSeparateSessionKeyring() {
 		log.Println("Using primary keyring for sessions")
 		return a.Keyring()
 	}
 
+	raw, err := a.rawSessionKeyring()
+	if err != nil {
+		return nil, err
+	}
+	if !a.ParallelSafe {
+		return raw, nil
+	}
+	if a.lockedSessionKeyringImpl == nil {
+		config := a.sessionKeyringOverrides.apply(a.KeyringConfig)
+		a.lockedSessionKeyringImpl = vault.NewLockedKeyring(raw, keyringLockKey(a.sessionKeyringBackend(), config))
+	}
+	return a.lockedSessionKeyringImpl, nil
+}
+
+func (a *AwsVault) rawSessionKeyring() (keyring.Keyring, error) {
 	if a.sessionKeyringImpl == nil {
 		config := a.sessionKeyringOverrides.apply(a.KeyringConfig)
-		backend := a.KeyringBackend
-		if a.SessionKeyringBackend != "" {
-			backend = a.SessionKeyringBackend
-		}
-		if backend != "" {
+		if backend := a.sessionKeyringBackend(); backend != "" {
 			config.AllowedBackends = []keyring.BackendType{keyring.BackendType(backend)}
 		}
 
 		var err error
 		log.Println("Opening session keyring")
-		a.sessionKeyringImpl, err = keyring.Open(config)
+		a.sessionKeyringImpl, err = a.openKeyring(a.sessionKeyringBackend(), config)
 		if err != nil {
 			return nil, err
 		}
@@ -424,6 +542,10 @@ func ConfigureGlobals(app *kingpin.Application) *AwsVault {
 	app.Flag("biometrics", "Use biometric authentication if supported").
 		Envar("AWS_VAULT_BIOMETRICS").
 		BoolVar(&a.UseBiometrics)
+
+	app.Flag("parallel-safe", "Enable cross-process locking for keyring operations, session caching, and SSO token refresh and sign-in").
+		Envar("AWS_VAULT_PARALLEL_SAFE").
+		BoolVar(&a.ParallelSafe)
 
 	app.PreAction(func(_ *kingpin.ParseContext) error {
 		if !a.Debug {

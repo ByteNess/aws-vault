@@ -96,6 +96,81 @@ func TestSessionKeyringDefaultsToPrimaryKeyring(t *testing.T) {
 	}
 }
 
+func TestParallelSafeFlagAndEnvironment(t *testing.T) {
+	tests := []struct {
+		name string
+		env  string
+		args []string
+		want bool
+	}{
+		{name: "default", args: []string{"noop"}, want: false},
+		{name: "flag", args: []string{"--parallel-safe", "noop"}, want: true},
+		{name: "environment", env: "true", args: []string{"noop"}, want: true},
+		{name: "flag overrides environment", env: "true", args: []string{"--no-parallel-safe", "noop"}, want: false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("AWS_VAULT_PARALLEL_SAFE", tc.env)
+			app := kingpin.New("aws-vault", "")
+			a := ConfigureGlobals(app)
+			app.Command("noop", "")
+			if _, err := app.Parse(tc.args); err != nil {
+				t.Fatal(err)
+			}
+			if a.ParallelSafe != tc.want {
+				t.Fatalf("ParallelSafe = %t, want %t", a.ParallelSafe, tc.want)
+			}
+		})
+	}
+}
+
+func TestParallelSafeSessionKeyringSharesPrimaryLock(t *testing.T) {
+	primary := keyring.NewArrayKeyring(nil)
+	a := &AwsVault{keyringImpl: primary, ParallelSafe: true}
+
+	credentials, sessions, err := a.Keyrings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if credentials == primary {
+		t.Fatal("expected the primary keyring to be wrapped in a lock")
+	}
+	if sessions != credentials {
+		t.Fatal("expected sessions to use the locked primary keyring by default")
+	}
+}
+
+func TestParallelSafeSeparateSessionKeyringIsLocked(t *testing.T) {
+	primary := keyring.NewArrayKeyring(nil)
+	separate := keyring.NewArrayKeyring(nil)
+	a := &AwsVault{
+		keyringImpl:           primary,
+		sessionKeyringImpl:    separate,
+		SessionKeyringBackend: "file",
+		ParallelSafe:          true,
+	}
+
+	credentials, sessions, err := a.Keyrings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sessions == separate {
+		t.Fatal("expected the session keyring to be wrapped in a lock")
+	}
+	if sessions == credentials {
+		t.Fatal("expected sessions to use the separate session keyring")
+	}
+
+	again, err := a.SessionKeyring()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again != sessions {
+		t.Fatal("expected the locked session keyring to be reused")
+	}
+}
+
 func TestSessionKeyringOverridesConfigured(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -114,6 +189,201 @@ func TestSessionKeyringOverridesConfigured(t *testing.T) {
 				t.Fatal("session override was not detected")
 			}
 		})
+	}
+}
+
+func TestKeyringLockKey(t *testing.T) {
+	t.Setenv("PASSWORD_STORE_DIR", "")
+	t.Setenv("PASSAGE_DIR", "")
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	abs := func(dir string) string {
+		t.Helper()
+		a, err := filepath.Abs(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return a
+	}
+
+	tests := []struct {
+		name    string
+		backend string
+		config  keyring.Config
+		want    string
+	}{
+		// Keychain backend
+		{
+			name:    "keychain with keychain name",
+			backend: "keychain",
+			config:  keyring.Config{KeychainName: "my-keychain"},
+			want:    "keychain:my-keychain",
+		},
+		{
+			name:    "keychain with empty keychain name",
+			backend: "keychain",
+			config:  keyring.Config{},
+			want:    "keychain",
+		},
+
+		// File backend
+		{
+			name:    "file with file dir",
+			backend: "file",
+			config:  keyring.Config{FileDir: "/tmp/keys"},
+			want:    "file:" + abs("/tmp/keys"),
+		},
+		{
+			name:    "file with tilde dir matches the expanded dir",
+			backend: "file",
+			config:  keyring.Config{FileDir: "~/.awsvault/keys/"},
+			want:    "file:" + filepath.Join(home, ".awsvault", "keys"),
+		},
+		{
+			name:    "file with empty file dir",
+			backend: "file",
+			config:  keyring.Config{},
+			want:    "file",
+		},
+
+		// Pass and passage backends: one lock per store, whatever the prefix
+		{
+			name:    "pass with dir and prefix",
+			backend: "pass",
+			config:  keyring.Config{PassDir: "/store", PassPrefix: "aws"},
+			want:    "pass:" + abs("/store"),
+		},
+		{
+			name:    "pass with dir only",
+			backend: "pass",
+			config:  keyring.Config{PassDir: "/store"},
+			want:    "pass:" + abs("/store"),
+		},
+		{
+			name:    "pass with prefix only uses the default store",
+			backend: "pass",
+			config:  keyring.Config{PassPrefix: "aws"},
+			want:    "pass:" + filepath.Join(home, ".password-store"),
+		},
+		{
+			name:    "pass with neither dir nor prefix uses the default store",
+			backend: "pass",
+			config:  keyring.Config{},
+			want:    "pass:" + filepath.Join(home, ".password-store"),
+		},
+		{
+			name:    "passage with empty dir uses the default store",
+			backend: "passage",
+			config:  keyring.Config{},
+			want:    "passage:" + filepath.Join(home, ".passage", "store"),
+		},
+
+		// Secret-service backend
+		{
+			name:    "secret-service with collection name",
+			backend: "secret-service",
+			config:  keyring.Config{LibSecretCollectionName: "awsvault"},
+			want:    "secret-service:awsvault",
+		},
+		{
+			name:    "secret-service with empty collection name",
+			backend: "secret-service",
+			config:  keyring.Config{},
+			want:    "secret-service",
+		},
+
+		// KWallet backend
+		{
+			name:    "kwallet with folder",
+			backend: "kwallet",
+			config:  keyring.Config{KWalletFolder: "aws-vault"},
+			want:    "kwallet:aws-vault",
+		},
+		{
+			name:    "kwallet with empty folder",
+			backend: "kwallet",
+			config:  keyring.Config{},
+			want:    "kwallet",
+		},
+
+		// WinCred backend
+		{
+			name:    "wincred with prefix",
+			backend: "wincred",
+			config:  keyring.Config{WinCredPrefix: "aws-vault"},
+			want:    "wincred:aws-vault",
+		},
+		{
+			name:    "wincred with empty prefix",
+			backend: "wincred",
+			config:  keyring.Config{},
+			want:    "wincred",
+		},
+
+		// 1Password backends (all share OPVaultID)
+		{
+			name:    "op with vault ID",
+			backend: "op",
+			config:  keyring.Config{OPVaultID: "vault-123"},
+			want:    "op:vault-123",
+		},
+		{
+			name:    "op with empty vault ID",
+			backend: "op",
+			config:  keyring.Config{},
+			want:    "op",
+		},
+		{
+			name:    "op-connect with vault ID",
+			backend: "op-connect",
+			config:  keyring.Config{OPVaultID: "vault-456"},
+			want:    "op-connect:vault-456",
+		},
+		{
+			name:    "op-connect with empty vault ID",
+			backend: "op-connect",
+			config:  keyring.Config{},
+			want:    "op-connect",
+		},
+		{
+			name:    "op-desktop with vault ID",
+			backend: "op-desktop",
+			config:  keyring.Config{OPVaultID: "vault-789"},
+			want:    "op-desktop:vault-789",
+		},
+		{
+			name:    "op-desktop with empty vault ID",
+			backend: "op-desktop",
+			config:  keyring.Config{},
+			want:    "op-desktop",
+		},
+
+		// Fallback cases
+		{
+			name:    "unknown backend falls back to backend name",
+			backend: "some-unknown-backend",
+			config:  keyring.Config{},
+			want:    "some-unknown-backend",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := keyringLockKey(tt.backend, tt.config)
+			if got != tt.want {
+				t.Errorf("keyringLockKey() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestKeyringLockKeyEmptyBackendUsesFirstAvailable(t *testing.T) {
+	first := string(keyring.AvailableBackends()[0])
+	got := keyringLockKey("", keyring.Config{})
+	if got != first && !strings.HasPrefix(got, first+":") {
+		t.Fatalf("keyringLockKey(\"\", {}) = %q, want a key for backend %q", got, first)
 	}
 }
 

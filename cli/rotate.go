@@ -15,9 +15,10 @@ import (
 )
 
 type rotateCommandInput struct {
-	NoSession   bool
-	ProfileName string
-	Config      vault.ProfileConfig
+	NoSession    bool
+	ProfileName  string
+	Config       vault.ProfileConfig
+	ParallelSafe bool
 }
 
 // ConfigureRotateCommand registers the rotate command.
@@ -36,6 +37,7 @@ func ConfigureRotateCommand(app *kingpin.Application, a *AwsVault) {
 		StringVar(&input.ProfileName)
 
 	cmd.Action(func(_ *kingpin.ParseContext) (err error) {
+		input.ParallelSafe = a.ParallelSafe
 		input.Config.MfaPromptMethod = a.PromptDriver(false)
 
 		f, err := a.AwsConfigFile()
@@ -106,7 +108,7 @@ func rotateCommand(input rotateCommandInput, f *vault.ConfigFile, keyring, sessi
 		credsProvider = vault.NewMasterCredentialsProvider(ckr, masterCredentialsName)
 	} else {
 		// Can't always disable sessions completely, might need to use session for MFA-Protected API Access
-		credsProvider, err = vault.NewTempCredentialsProvider(config, ckr, sessionKeyring, input.NoSession, true)
+		credsProvider, err = vault.NewTempCredentialsProvider(config, ckr, sessionKeyring, input.NoSession, true, input.ParallelSafe)
 		if err != nil {
 			return fmt.Errorf("getting temporary credentials: %w", err)
 		}

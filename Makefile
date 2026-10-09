@@ -3,22 +3,37 @@ BUILD_FLAGS=-ldflags="-s -w -X main.Version=$(VERSION)" -trimpath
 CERT_ID ?= Developer ID Application: ByteNess (R)
 INSTALL_DIR ?= ~/bin
 GOTEST_FLAGS ?= -race
-.PHONY: binaries clean release install snapshot run docs-serve docs-build
+.PHONY: binaries clean release install snapshot run check-fmt docs-serve docs-build
 # Go's build cache skips unchanged work, so always invoke go build
 .PHONY: aws-vault aws-vault-darwin-amd64 aws-vault-darwin-arm64 aws-vault-freebsd-amd64 aws-vault-linux-amd64 aws-vault-linux-arm64 aws-vault-linux-ppc64le aws-vault-linux-arm7 aws-vault-windows-386.exe aws-vault-windows-amd64.exe aws-vault-windows-arm64.exe
 
 ifeq ($(shell uname), Darwin)
-aws-vault:
+aws-vault: | check-fmt
 	go build -ldflags="-s -w -X main.Version=$(VERSION)" -o $@ .
 	codesign --options runtime --timestamp --sign "$(CERT_ID)" $@
 
 build: aws-vault
 else
-aws-vault:
+aws-vault: | check-fmt
 	go build -ldflags="-s -w -X main.Version=$(VERSION)" -o $@ .
 
 build: aws-vault
 endif
+
+check-fmt: ## Fail if any Go files need gofmt
+	@files=$$(go list -f '{{$$d := .Dir}}{{range .GoFiles}}{{$$d}}/{{.}}{{"\n"}}{{end}}{{range .CgoFiles}}{{$$d}}/{{.}}{{"\n"}}{{end}}{{range .TestGoFiles}}{{$$d}}/{{.}}{{"\n"}}{{end}}{{range .XTestGoFiles}}{{$$d}}/{{.}}{{"\n"}}{{end}}{{range .IgnoredGoFiles}}{{$$d}}/{{.}}{{"\n"}}{{end}}' ./...) || exit 1; \
+	if [ -z "$$files" ]; then \
+		echo "go list found no Go files to check."; \
+		exit 1; \
+	fi; \
+	out=$$(printf '%s\n' "$$files" | tr '\n' '\0' | xargs -0 gofmt -l) || exit 1; \
+	if [ -n "$$out" ]; then \
+		echo "The following files are not gofmt'd:"; \
+		echo "$$out"; \
+		echo; \
+		echo "Run 'make fmt' to fix."; \
+		exit 1; \
+	fi
 
 install: aws-vault
 	mkdir -p $(INSTALL_DIR)

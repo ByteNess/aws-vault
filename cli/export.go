@@ -25,6 +25,7 @@ type exportCommandInput struct {
 	UseStdout       bool
 	UseDeviceCode   bool
 	Browser         string
+	ParallelSafe    bool
 }
 
 // Output formats of the export command.
@@ -79,6 +80,7 @@ func ConfigureExportCommand(app *kingpin.Application, a *AwsVault) {
 		StringVar(&input.ProfileName)
 
 	cmd.Action(func(_ *kingpin.ParseContext) (err error) {
+		input.ParallelSafe = a.ParallelSafe
 		input.Config.MfaPromptMethod = a.PromptDriver(false)
 		input.Config.NonChainedGetSessionTokenDuration = input.SessionDuration
 		input.Config.ChainedGetSessionTokenDuration = input.SessionDuration
@@ -128,7 +130,7 @@ func exportCommand(input exportCommandInput, f *vault.ConfigFile, keyring, sessi
 	}
 
 	ckr := &vault.CredentialKeyring{Keyring: keyring}
-	credsProvider, err := vault.NewTempCredentialsProvider(config, ckr, sessionKeyring, input.NoSession, false)
+	credsProvider, err := vault.NewTempCredentialsProvider(config, ckr, sessionKeyring, input.NoSession, false, input.ParallelSafe)
 	if err != nil {
 		return fmt.Errorf("getting temporary credentials: %w", err)
 	}

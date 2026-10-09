@@ -1,6 +1,6 @@
 ---
 title: Desktop apps
-weight: 13
+weight: 14
 ---
 
 You can use desktop apps with temporary credentials from AWS Vault too! For example on macOS run
