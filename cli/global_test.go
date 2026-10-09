@@ -192,6 +192,21 @@ func TestSessionKeyringOverridesConfigured(t *testing.T) {
 }
 
 func TestKeyringLockKey(t *testing.T) {
+	t.Setenv("PASSWORD_STORE_DIR", "")
+	t.Setenv("PASSAGE_DIR", "")
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	abs := func(dir string) string {
+		t.Helper()
+		a, err := filepath.Abs(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return a
+	}
+
 	tests := []struct {
 		name    string
 		backend string
@@ -217,7 +232,13 @@ func TestKeyringLockKey(t *testing.T) {
 			name:    "file with file dir",
 			backend: "file",
 			config:  keyring.Config{FileDir: "/tmp/keys"},
-			want:    "file:/tmp/keys",
+			want:    "file:" + abs("/tmp/keys"),
+		},
+		{
+			name:    "file with tilde dir matches the expanded dir",
+			backend: "file",
+			config:  keyring.Config{FileDir: "~/.awsvault/keys/"},
+			want:    "file:" + filepath.Join(home, ".awsvault", "keys"),
 		},
 		{
 			name:    "file with empty file dir",
@@ -226,30 +247,36 @@ func TestKeyringLockKey(t *testing.T) {
 			want:    "file",
 		},
 
-		// Pass backend: dir and prefix combinations
+		// Pass and passage backends: one lock per store, whatever the prefix
 		{
 			name:    "pass with dir and prefix",
 			backend: "pass",
 			config:  keyring.Config{PassDir: "/store", PassPrefix: "aws"},
-			want:    "pass:/store:aws",
+			want:    "pass:" + abs("/store"),
 		},
 		{
 			name:    "pass with dir only",
 			backend: "pass",
 			config:  keyring.Config{PassDir: "/store"},
-			want:    "pass:/store",
+			want:    "pass:" + abs("/store"),
 		},
 		{
-			name:    "pass with prefix only",
+			name:    "pass with prefix only uses the default store",
 			backend: "pass",
 			config:  keyring.Config{PassPrefix: "aws"},
-			want:    "pass:aws",
+			want:    "pass:" + filepath.Join(home, ".password-store"),
 		},
 		{
-			name:    "pass with neither dir nor prefix",
+			name:    "pass with neither dir nor prefix uses the default store",
 			backend: "pass",
 			config:  keyring.Config{},
-			want:    "pass",
+			want:    "pass:" + filepath.Join(home, ".password-store"),
+		},
+		{
+			name:    "passage with empty dir uses the default store",
+			backend: "passage",
+			config:  keyring.Config{},
+			want:    "passage:" + filepath.Join(home, ".passage", "store"),
 		},
 
 		// Secret-service backend
@@ -340,10 +367,10 @@ func TestKeyringLockKey(t *testing.T) {
 			want:    "some-unknown-backend",
 		},
 		{
-			name:    "empty backend falls back to aws-vault",
+			name:    "empty backend uses the first available backend",
 			backend: "",
 			config:  keyring.Config{},
-			want:    "aws-vault",
+			want:    keyringLockKey(string(keyring.AvailableBackends()[0]), keyring.Config{}),
 		},
 	}
 
