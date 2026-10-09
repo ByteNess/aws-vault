@@ -1,7 +1,6 @@
 package vault
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"testing"
@@ -24,16 +23,15 @@ func (l *testUnlockErrLock) Unlock() error {
 
 func newTestLockedKeyring(inner keyring.Keyring, lock ProcessLock, clock *testClock) *lockedKeyring {
 	return &lockedKeyring{
-		inner:       inner,
-		lock:        lock,
-		lockKey:     "test",
-		lockTimeout: defaultKeyringLockTimeout,
-		lockWait:    100 * time.Millisecond,
-		lockLog:     15 * time.Second,
-		warnAfter:   5 * time.Second,
-		lockNow:     clock.Now,
-		lockSleep:   clock.Sleep,
-		lockLogf:    func(string, ...any) {},
+		inner:     inner,
+		lock:      lock,
+		lockKey:   "test",
+		lockWait:  100 * time.Millisecond,
+		lockLog:   15 * time.Second,
+		warnAfter: 5 * time.Second,
+		lockNow:   clock.Now,
+		lockSleep: clock.Sleep,
+		lockLogf:  func(string, ...any) {},
 	}
 }
 
@@ -62,35 +60,6 @@ func TestLockedKeyring_LockWaitRetries(t *testing.T) {
 	}
 	if lock.unlockCalls != 1 {
 		t.Fatalf("expected 1 unlock, got %d", lock.unlockCalls)
-	}
-}
-
-func TestLockedKeyring_Timeout(t *testing.T) {
-	// Lock is never acquired. With a short lockTimeout the context should
-	// time out and withLock should return context.DeadlineExceeded.
-	lock := &testLock{} // tryResults is empty so TryLock always returns false
-	kr := keyring.NewArrayKeyring(nil)
-	clock := &testClock{now: time.Unix(0, 0)}
-
-	lk := newTestLockedKeyring(kr, lock, clock)
-	// Use a very short real timeout so the test completes quickly.
-	lk.lockTimeout = 50 * time.Millisecond
-	// Use real sleep so the context deadline fires from wall-clock time.
-	lk.lockSleep = defaultContextSleep
-	lk.lockWait = 10 * time.Millisecond
-
-	_, err := lk.Keys()
-	if err == nil {
-		t.Fatal("expected timeout error, got nil")
-	}
-	// The context should have been cancelled via timeout. The error will
-	// be context.DeadlineExceeded because withLock uses context.WithTimeout.
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("expected context.DeadlineExceeded, got: %v", err)
-	}
-	// Verify that at least one lock attempt was made before timing out.
-	if lock.tryCalls < 1 {
-		t.Fatalf("expected at least 1 lock attempt, got %d", lock.tryCalls)
 	}
 }
 
@@ -133,4 +102,24 @@ type failingKeyring struct {
 
 func (k *failingKeyring) Remove(string) error {
 	return k.removeErr
+}
+
+func TestLockedKeyring_WaitsWithoutTimeout(t *testing.T) {
+	waits := int((15 * time.Minute) / (100 * time.Millisecond))
+	lock := &testLock{tryResults: append(make([]bool, waits), true)}
+	kr := keyring.NewArrayKeyring([]keyring.Item{{Key: "k", Data: []byte("v")}})
+	clock := &testClock{now: time.Unix(0, 0)}
+
+	lk := newTestLockedKeyring(kr, lock, clock)
+
+	item, err := lk.Get("k")
+	if err != nil {
+		t.Fatalf("unexpected error after a long wait: %v", err)
+	}
+	if string(item.Data) != "v" {
+		t.Fatalf("unexpected item data %q", item.Data)
+	}
+	if clock.sleepCalls != waits {
+		t.Fatalf("expected %d sleeps, got %d", waits, clock.sleepCalls)
+	}
 }

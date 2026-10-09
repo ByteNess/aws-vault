@@ -30,5 +30,5 @@ The `login` command is intentionally excluded from `--parallel-safe`. Console lo
 
 ## Limitations
 
-- The keyring lock wait loop cannot be cancelled by the caller because the `keyring.Keyring` interface is not context-aware. If a lock holder hangs (e.g. a stuck `gpg` subprocess in the `pass` backend), waiters will time out after 2 minutes rather than waiting indefinitely.
+- Waiting processes have no time limit: they wait as long as the lock holder is working, which can include a browser sign-in or an MFA or keychain prompt, and print a "Waiting for … lock" message while they do. A lock is released as soon as its holder exits, so a crashed process cannot leave it held. If a lock holder hangs (e.g. a stuck `gpg` subprocess in the `pass` backend), stop it or press Ctrl-C in the waiting process.
 - SSO rate-limit retries (HTTP 429 on `GetRoleCredentials`) will retry for up to 5 minutes before giving up with an error.

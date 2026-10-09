@@ -59,7 +59,6 @@ type SSORoleCredentialsProvider struct {
 	ssoTokenLock    ProcessLock
 	ssoLockWait     time.Duration
 	ssoLockLog      time.Duration
-	ssoLockTimeout  time.Duration
 	ssoNow          func() time.Time
 	ssoSleep        func(context.Context, time.Duration) error
 	ssoLogf         lockLogger
@@ -89,12 +88,6 @@ const (
 	// flashing the message on normal lock contention, short enough to
 	// reassure the user that the process isn't hung.
 	defaultSSOLockWarnAfter = 5 * time.Second
-
-	// defaultSSOLockTimeout is a safety net: if the lock holder is hung
-	// (e.g. a browser auth that was abandoned), waiters give up after this
-	// duration rather than blocking indefinitely. 2 minutes matches the
-	// keyring lock timeout.
-	defaultSSOLockTimeout = 2 * time.Minute
 
 	// ssoRetryTimeout is a pathological safety net: if GetRoleCredentials is still
 	// returning 429s after this duration, give up and surface the error to the user.
@@ -126,7 +119,6 @@ const (
 func (p *SSORoleCredentialsProvider) initSSODefaults() {
 	p.ssoLockWait = defaultSSOLockWaitDelay
 	p.ssoLockLog = defaultSSOLockLogEvery
-	p.ssoLockTimeout = defaultSSOLockTimeout
 	p.ssoNow = time.Now
 	p.ssoSleep = defaultContextSleep
 	p.ssoLogf = log.Printf
@@ -327,10 +319,7 @@ type oidcTokenResult struct {
 }
 
 func (p *SSORoleCredentialsProvider) getOIDCTokenWithLock(ctx context.Context) (token *ssooidc.CreateTokenOutput, cached bool, err error) {
-	waitCtx, cancel := context.WithTimeout(ctx, p.ssoLockTimeout)
-	defer cancel()
-
-	result, err := withProcessLock(waitCtx, p.ssoTokenLock, lockWaiterOpts{
+	result, err := withProcessLock(ctx, p.ssoTokenLock, lockWaiterOpts{
 		LockPath:  p.ssoTokenLock.Path(),
 		WarnMsg:   "Waiting for SSO lock at %s\n",
 		LogMsg:    "Waiting for SSO lock at %s",

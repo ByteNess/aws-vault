@@ -286,45 +286,6 @@ func TestGetOIDCToken_LockWaitLogs(t *testing.T) {
 	}
 }
 
-func TestGetOIDCToken_WorkNotCancelledByLockTimeout(t *testing.T) {
-	// The lock-wait timeout should only bound how long we wait for the
-	// lock, not how long the work takes. Simulate work that takes longer
-	// than the lock-wait timeout and verify it completes.
-	freshToken := newTestOIDCTokenData("fresh")
-	lock := &testLock{tryResults: []bool{true}}
-	cache := &testTokenCache{setLock: lock}
-
-	p := newTestSSORoleProvider()
-	p.OIDCTokenCache = cache
-	p.ssoTokenLock = lock
-	p.UseSSOTokenLock = true
-	p.ssoLockTimeout = 10 * time.Millisecond
-	p.newOIDCTokenFn = func(ctx context.Context) (*OIDCTokenData, error) {
-		// Work takes longer than the lock-wait timeout.
-		// If the timeout incorrectly cancels work, ctx.Err() fires.
-		select {
-		case <-time.After(50 * time.Millisecond):
-			return freshToken, nil
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		}
-	}
-
-	token, cached, err := p.getOIDCToken(context.Background())
-	if err != nil {
-		t.Fatalf("unexpected error (work cancelled by lock-wait timeout?): %v", err)
-	}
-	if cached {
-		t.Fatalf("expected non-cached token")
-	}
-	if token != &freshToken.Token {
-		t.Fatalf("unexpected token returned")
-	}
-	if lock.unlockCalls != 1 {
-		t.Fatalf("expected 1 unlock, got %d", lock.unlockCalls)
-	}
-}
-
 func TestGetOIDCToken_ExpiredCachedToken_LoginUnderLock(t *testing.T) {
 	expiredToken := &OIDCTokenData{
 		Token:      ssooidc.CreateTokenOutput{AccessToken: aws.String("expired")},
@@ -360,5 +321,36 @@ func TestGetOIDCToken_ExpiredCachedToken_LoginUnderLock(t *testing.T) {
 	}
 	if lock.unlockCalls != 1 {
 		t.Fatalf("expected 1 unlock, got %d", lock.unlockCalls)
+	}
+}
+
+func TestGetOIDCToken_WaitsWithoutTimeout(t *testing.T) {
+	freshToken := newTestOIDCTokenData("fresh")
+	waits := int((15 * time.Minute) / (5 * time.Second))
+	lock := &testLock{tryResults: append(make([]bool, waits), true)}
+	cache := &testTokenCache{setLock: lock}
+	clock := &testClock{now: time.Unix(0, 0)}
+
+	p := newTestSSORoleProvider()
+	p.OIDCTokenCache = cache
+	p.ssoTokenLock = lock
+	p.UseSSOTokenLock = true
+	p.ssoLockWait = 5 * time.Second
+	p.ssoNow = clock.Now
+	p.ssoSleep = clock.Sleep
+	p.ssoLogf = func(string, ...any) {}
+	p.newOIDCTokenFn = func(context.Context) (*OIDCTokenData, error) {
+		return freshToken, nil
+	}
+
+	token, _, err := p.getOIDCToken(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error after a long wait: %v", err)
+	}
+	if token != &freshToken.Token {
+		t.Fatalf("unexpected token returned")
+	}
+	if clock.sleepCalls != waits {
+		t.Fatalf("expected %d sleeps, got %d", waits, clock.sleepCalls)
 	}
 }
