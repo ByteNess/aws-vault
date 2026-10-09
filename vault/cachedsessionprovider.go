@@ -23,18 +23,17 @@ type StsSessionProvider interface {
 // CachedSessionProvider retrieves cached credentials from the keyring, or if no credentials are cached
 // retrieves temporary credentials using the CredentialsFunc
 type CachedSessionProvider struct {
-	SessionKey         SessionMetadata
-	SessionProvider    StsSessionProvider
-	Keyring            *SessionKeyring
-	ExpiryWindow       time.Duration
-	UseSessionLock     bool
-	sessionLock        ProcessLock
-	sessionLockWait    time.Duration
-	sessionLockLog     time.Duration
-	sessionLockTimeout time.Duration
-	sessionNow         func() time.Time
-	sessionSleep       func(context.Context, time.Duration) error
-	sessionLogf        lockLogger
+	SessionKey      SessionMetadata
+	SessionProvider StsSessionProvider
+	Keyring         *SessionKeyring
+	ExpiryWindow    time.Duration
+	UseSessionLock  bool
+	sessionLock     ProcessLock
+	sessionLockWait time.Duration
+	sessionLockLog  time.Duration
+	sessionNow      func() time.Time
+	sessionSleep    func(context.Context, time.Duration) error
+	sessionLogf     lockLogger
 }
 
 const (
@@ -52,11 +51,6 @@ const (
 	// flashing the message on normal lock contention, short enough to
 	// reassure the user that the process isn't hung.
 	defaultSessionLockWarnAfter = 5 * time.Second
-
-	// defaultSessionLockTimeout is a safety net: if the lock holder is hung,
-	// waiters give up after this duration rather than blocking indefinitely.
-	// 2 minutes matches the keyring lock timeout.
-	defaultSessionLockTimeout = 2 * time.Minute
 )
 
 // NewCachedSessionProvider creates a CachedSessionProvider with production
@@ -64,18 +58,17 @@ const (
 // (sessionLock, sessionNow, etc.) after construction to inject mocks.
 func NewCachedSessionProvider(key SessionMetadata, provider StsSessionProvider, keyring *SessionKeyring, expiryWindow time.Duration, useSessionLock bool) *CachedSessionProvider {
 	return &CachedSessionProvider{
-		SessionKey:         key,
-		SessionProvider:    provider,
-		Keyring:            keyring,
-		ExpiryWindow:       expiryWindow,
-		UseSessionLock:     useSessionLock,
-		sessionLock:        NewDefaultLock("aws-vault.session", key.StringForMatching()),
-		sessionLockWait:    defaultSessionLockWaitDelay,
-		sessionLockLog:     defaultSessionLockLogEvery,
-		sessionLockTimeout: defaultSessionLockTimeout,
-		sessionNow:         time.Now,
-		sessionSleep:       defaultContextSleep,
-		sessionLogf:        log.Printf,
+		SessionKey:      key,
+		SessionProvider: provider,
+		Keyring:         keyring,
+		ExpiryWindow:    expiryWindow,
+		UseSessionLock:  useSessionLock,
+		sessionLock:     NewDefaultLock("aws-vault.session", key.StringForMatching()),
+		sessionLockWait: defaultSessionLockWaitDelay,
+		sessionLockLog:  defaultSessionLockLogEvery,
+		sessionNow:      time.Now,
+		sessionSleep:    defaultContextSleep,
+		sessionLogf:     log.Printf,
 	}
 }
 
@@ -110,10 +103,7 @@ func (p *CachedSessionProvider) getCachedSession() (creds *ststypes.Credentials,
 }
 
 func (p *CachedSessionProvider) getSessionWithLock(ctx context.Context) (*ststypes.Credentials, error) {
-	waitCtx, cancel := context.WithTimeout(ctx, p.sessionLockTimeout)
-	defer cancel()
-
-	return withProcessLock(waitCtx, p.sessionLock, lockWaiterOpts{
+	return withProcessLock(ctx, p.sessionLock, lockWaiterOpts{
 		LockPath:  p.sessionLock.Path(),
 		WarnMsg:   "Waiting for session lock at %s\n",
 		LogMsg:    "Waiting for session lock at %s",

@@ -17,23 +17,15 @@ type lockedKeyring struct {
 	// mu serializes in-process access. The flock only coordinates across
 	// processes; without this mutex, concurrent goroutines in the same
 	// process could race on the try-lock loop.
-	//
-	// NOTE: mu.Lock() blocks without a timeout. The 2-minute timeout
-	// (lockTimeout) only applies to the flock wait loop inside withLock.
-	// If a keyring operation hangs while holding mu (e.g. a stuck gpg
-	// subprocess), other goroutines in the same process will block
-	// indefinitely. The keyring.Keyring interface is not context-aware,
-	// so there is no clean way to cancel in-flight operations.
 	mu sync.Mutex
 
-	lockKey     string
-	lockTimeout time.Duration
-	lockWait    time.Duration
-	lockLog     time.Duration
-	warnAfter   time.Duration
-	lockNow     func() time.Time
-	lockSleep   func(context.Context, time.Duration) error
-	lockLogf    lockLogger
+	lockKey   string
+	lockWait  time.Duration
+	lockLog   time.Duration
+	warnAfter time.Duration
+	lockNow   func() time.Time
+	lockSleep func(context.Context, time.Duration) error
+	lockLogf  lockLogger
 }
 
 const (
@@ -51,29 +43,21 @@ const (
 	// flashing the message on normal lock contention, short enough to
 	// reassure the user that the process isn't hung.
 	defaultKeyringLockWarnAfter = 5 * time.Second
-
-	// defaultKeyringLockTimeout is a safety net: the keyring.Keyring interface
-	// is not context-aware, so if the lock holder is hung (e.g. a stuck gpg
-	// subprocess in the pass backend), waiters give up after this duration
-	// rather than blocking indefinitely. 2 minutes is generous enough for any
-	// reasonable keyring operation.
-	defaultKeyringLockTimeout = 2 * time.Minute
 )
 
 // NewLockedKeyring wraps the provided keyring with a cross-process lock
 // to serialize keyring operations.
 func NewLockedKeyring(kr keyring.Keyring, lockKey string) keyring.Keyring {
 	return &lockedKeyring{
-		inner:       kr,
-		lock:        NewDefaultLock("aws-vault.keyring", lockKey),
-		lockKey:     lockKey,
-		lockTimeout: defaultKeyringLockTimeout,
-		lockWait:    defaultKeyringLockWaitDelay,
-		lockLog:     defaultKeyringLockLogEvery,
-		warnAfter:   defaultKeyringLockWarnAfter,
-		lockNow:     time.Now,
-		lockSleep:   defaultContextSleep,
-		lockLogf:    log.Printf,
+		inner:     kr,
+		lock:      NewDefaultLock("aws-vault.keyring", lockKey),
+		lockKey:   lockKey,
+		lockWait:  defaultKeyringLockWaitDelay,
+		lockLog:   defaultKeyringLockLogEvery,
+		warnAfter: defaultKeyringLockWarnAfter,
+		lockNow:   time.Now,
+		lockSleep: defaultContextSleep,
+		lockLogf:  log.Printf,
 	}
 }
 
@@ -81,14 +65,7 @@ func (k *lockedKeyring) withLock(fn func() error) error {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 
-	// The keyring.Keyring interface is not context-aware, so we cannot cancel
-	// in-flight keyring operations. This timeout is a safety net for the lock-wait
-	// loop: if the lock holder is hung (e.g. a stuck gpg subprocess in the pass
-	// backend), waiters will eventually give up rather than blocking indefinitely.
-	ctx, cancel := context.WithTimeout(context.Background(), k.lockTimeout)
-	defer cancel()
-
-	_, err := withProcessLock(ctx, k.lock, lockWaiterOpts{
+	_, err := withProcessLock(context.Background(), k.lock, lockWaiterOpts{
 		LockPath:  k.lock.Path(),
 		WarnMsg:   "Waiting for keyring lock at %s\n",
 		LogMsg:    "Waiting for keyring lock at %s",
