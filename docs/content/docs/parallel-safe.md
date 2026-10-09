@@ -19,7 +19,7 @@ This applies to **all backends** (keychain, file, pass, secret-service, etc.).
 
 The keyring lock applies to every command that uses the keyring. `exec`, `export`, `login`, and `rotate` also take the SSO token and session cache locks.
 
-Lock files live in `aws-vault` under the runtime directory: `$XDG_RUNTIME_DIR` if it is set, otherwise `/run/user/$UID` on Linux and the per-user temporary directory on macOS and Windows. The runtime directory must belong to the current user and be writable only by them. If it is missing or isn't private, aws-vault uses `/tmp/aws-vault-$UID` instead, and refuses to use that unless it is a directory owned by the current user with `0700` permissions.
+Lock files live in `aws-vault` under the runtime directory: `$XDG_RUNTIME_DIR` if it is set, otherwise `/run/user/$UID` on Linux and the per-user temporary directory on macOS and Windows. The runtime directory must belong to the current user and be writable only by them. If it is missing or isn't private, aws-vault uses `/tmp/aws-vault-$UID` instead, and refuses to use that unless it is a directory owned by the current user with `0700` permissions. On Windows the directory's ownership and permissions are not checked. On macOS and Windows the temporary directory comes from `TMPDIR` and `TEMP`, so processes run with a different `TMPDIR` or `TEMP` use different locks; run all concurrent invocations with the same value.
 
 ## Trade-offs
 
@@ -37,7 +37,7 @@ contrib/scripts/aws-vault-parallel-safe-stress.sh --parallel 50 \
 
 Finding the profiles needs the AWS CLI v2 and jq; it is done by `aws-vault-collect-sso-profiles.sh`, which signs in with `aws sso login` where `~/.aws/sso/cache` has no valid token, using the device code flow when `AWS_VAULT_DEVICE_CODE` is true. To test a fixed set of profiles instead, pass `--config FILE`, which needs only aws-vault. `--role NAME` limits the run to one role, `same` mode runs many `exec` processes for one profile to race the session cache, and `--no-parallel-safe` runs the same workload without locking for comparison.
 
-The run signs in to each start URL once through your browser. Pass `--store-dir DIR` to keep the temporary store, so a second run reuses its OIDC tokens and sessions.
+aws-vault signs in to each start URL at most once through your browser, separately from any `aws sso login` the profile discovery needs. Pass `--store-dir DIR` to keep the temporary store, so a second run reuses its OIDC tokens and sessions.
 
 IAM Identity Center never issues a token that outlives your portal session, and approving a sign-in in a browser that is already signed in keeps the existing session. Before a long run, sign out of the AWS access portals, or let their sessions expire, so that every token lasts the full session duration.
 
