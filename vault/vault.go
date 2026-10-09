@@ -224,7 +224,7 @@ func SyncOIDCTokenToStandardCache(config *ProfileConfig, k keyring.Keyring) erro
 		return err
 	}
 
-	data, err := (OIDCTokenKeyring{Keyring: k}).Get(config.SSOStartURL)
+	data, err := (OIDCTokenKeyring{Keyring: k}).Peek(config.SSOStartURL)
 	if err != nil {
 		return fmt.Errorf("OIDC token not found in keyring for %s: %w", config.SSOStartURL, err)
 	}
