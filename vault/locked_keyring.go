@@ -2,9 +2,7 @@ package vault
 
 import (
 	"context"
-	"fmt"
 	"log"
-	"os"
 	"sync"
 	"time"
 
@@ -19,7 +17,6 @@ type lockedKeyring struct {
 	// process could race on the try-lock loop.
 	mu sync.Mutex
 
-	lockKey   string
 	lockWait  time.Duration
 	lockLog   time.Duration
 	warnAfter time.Duration
@@ -51,7 +48,6 @@ func NewLockedKeyring(kr keyring.Keyring, lockKey string) keyring.Keyring {
 	return &lockedKeyring{
 		inner:     kr,
 		lock:      NewDefaultLock("aws-vault.keyring", lockKey),
-		lockKey:   lockKey,
 		lockWait:  defaultKeyringLockWaitDelay,
 		lockLog:   defaultKeyringLockLogEvery,
 		warnAfter: defaultKeyringLockWarnAfter,
@@ -75,9 +71,7 @@ func (k *lockedKeyring) withLock(fn func() error) error {
 		Now:       k.lockNow,
 		Sleep:     k.lockSleep,
 		Logf:      k.lockLogf,
-		Warnf: func(format string, args ...any) {
-			fmt.Fprintf(os.Stderr, format, args...)
-		},
+		Warnf:     warnToStderr,
 	}, "keyring", nil, func() (struct{}, error) {
 		return struct{}{}, fn()
 	})

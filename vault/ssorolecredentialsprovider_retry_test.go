@@ -132,8 +132,6 @@ func TestJitteredBackoffDoublesPerAttempt(t *testing.T) {
 	base := 1 * time.Second
 	max := 1 * time.Hour // very high max so we never hit the cap
 
-	// Verify the cap doubles by checking that the median of many samples
-	// roughly doubles. Instead, verify the deterministic cap calculation:
 	// cap(attempt) = base << (attempt-1)
 	for attempt := 1; attempt <= 5; attempt++ {
 		expectedCap := base << uint(attempt-1)
