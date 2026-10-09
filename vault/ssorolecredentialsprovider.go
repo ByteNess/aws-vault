@@ -232,6 +232,7 @@ func (p *SSORoleCredentialsProvider) getRoleCredentials(ctx context.Context) (*s
 				if err != nil {
 					return nil, err
 				}
+				deadline = p.now().Add(ssoRetryTimeout)
 				attempt = 0
 				continue
 			}

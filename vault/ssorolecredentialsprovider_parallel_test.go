@@ -246,3 +246,30 @@ func TestThrottleRetryerLeavesRateLimitsToProvider(t *testing.T) {
 		t.Fatalf("expected the SDK not to retry throttling itself, got %d calls", got)
 	}
 }
+
+func TestGetRoleCredentialsResetsRetryBudgetAfterReauthentication(t *testing.T) {
+	cache := &testTokenCache{token: newTestOIDCTokenData("old")}
+	var clock *testClock
+	var limited atomic.Bool
+	s := &ssoTestServer{responses: map[string]func(http.ResponseWriter){
+		"old": func(w http.ResponseWriter) {
+			clock.now = clock.now.Add(10 * time.Minute)
+			cache.token = newTestOIDCTokenData("new")
+			ssoUnauthorized(w)
+		},
+		"new": func(w http.ResponseWriter) {
+			if limited.CompareAndSwap(false, true) {
+				ssoRateLimited("1")(w)
+				return
+			}
+			ssoOK(w)
+		},
+	}}
+	p, c := newParallelTestSSOProvider(t, s, cache)
+	clock = c
+	p.RetryRateLimit = true
+
+	if _, err := p.getRoleCredentials(context.Background()); err != nil {
+		t.Fatalf("a 429 after re-authenticating should still be retried: %v", err)
+	}
+}
