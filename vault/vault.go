@@ -160,10 +160,15 @@ func NewAssumeRoleWithWebIdentityProvider(k keyring.Keyring, config *ProfileConf
 func NewSSORoleCredentialsProvider(oidcKeyring, sessionKeyring keyring.Keyring, config *ProfileConfig, useSessionCache bool, parallelSafe bool) (aws.CredentialsProvider, error) {
 	cfg := NewAwsConfig(config.SSORegion, config.STSRegionalEndpoints, config.EndpointURL)
 
+	var ssoOptions []func(*sso.Options)
+	if parallelSafe {
+		ssoOptions = append(ssoOptions, leaveThrottlingToProvider)
+	}
+
 	ssoRoleCredentialsProvider := &SSORoleCredentialsProvider{
 		OIDCClient:    ssooidc.NewFromConfig(cfg),
 		StartURL:      config.SSOStartURL,
-		SSOClient:     sso.NewFromConfig(cfg),
+		SSOClient:     sso.NewFromConfig(cfg, ssoOptions...),
 		AccountID:     config.SSOAccountID,
 		RoleName:      config.SSORoleName,
 		UseStdout:     config.SSOUseStdout,
