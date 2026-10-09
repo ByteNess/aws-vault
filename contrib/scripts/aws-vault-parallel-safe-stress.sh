@@ -2,10 +2,18 @@
 
 show_help() {
   cat <<'EOF'
-Usage: aws-vault-parallel-safe-stress.sh [options] --config FILE [MODE]
+Usage: aws-vault-parallel-safe-stress.sh [options] [MODE] START_URL=REGION...
+       aws-vault-parallel-safe-stress.sh [options] [MODE] --config FILE
 
 Run many aws-vault processes at once against an isolated, temporary
 credential store and check that they all succeed.
+
+Given IAM Identity Center start URLs and their regions, e.g.
+https://d-1234567890.awsapps.com/start=us-east-1, it first finds every
+account and role you can reach through them with
+aws-vault-collect-sso-profiles.sh, which needs the AWS CLI v2 and jq, and
+tests all of them. --config tests the profiles in an existing AWS config
+file instead.
 
 Modes:
   export   Export every profile in the config in parallel (default). Checks
@@ -15,8 +23,9 @@ Modes:
            parallel, which races the session cache.
 
 Options:
-  --config FILE        AWS config file with the profiles to use (required),
-                       e.g. from aws-vault-collect-sso-profiles.sh
+  --config FILE        AWS config file with the profiles to test, instead of
+                       finding them through START_URL=REGION arguments
+  --role NAME          With START_URL=REGION, only test roles named NAME
   --profile NAME       Profile for "same" mode (default: the first SSO profile)
   --parallel N         Concurrent aws-vault processes (default: 20)
   --runs N             Processes to run in "same" mode (default: 50)
@@ -46,6 +55,8 @@ die() {
 }
 
 config=''
+role=''
+directories=()
 profile=''
 parallel=20
 runs=50
@@ -65,6 +76,10 @@ do
       ;;
     --config)
       config=${2-}
+      shift 2
+      ;;
+    --role)
+      role=${2-}
       shift 2
       ;;
     --profile)
@@ -103,6 +118,15 @@ do
       mode=$1
       shift
       ;;
+    -*)
+      printf "Unknown option '%s'\n" "$1" >&2
+      usage
+      exit 1
+      ;;
+    *=*)
+      directories+=("$1")
+      shift
+      ;;
     *)
       printf "Unknown argument '%s'\n" "$1" >&2
       usage
@@ -111,12 +135,16 @@ do
   esac
 done
 
-if [[ -z $config ]]
+if [[ -z $config ]] && (( 0 == ${#directories[@]} ))
 then
   usage
   exit 1
 fi
-if [[ ! -r $config ]]
+if [[ -n $config ]] && (( 0 < ${#directories[@]} ))
+then
+  die 'pass either --config or START_URL=REGION arguments, not both'
+fi
+if [[ -n $config && ! -r $config ]]
 then
   die "cannot read config file '$config'"
 fi
@@ -152,7 +180,6 @@ if ! aws_vault=$(command -v -- "$aws_vault")
 then
   die 'aws-vault binary not found; pass --aws-vault PATH'
 fi
-config=$(cd -- "$(dirname -- "$config")" && pwd)/$(basename -- "$config")
 
 tmpdir=''
 keychain=''
@@ -178,6 +205,21 @@ then
   die 'could not create a temporary directory'
 fi
 mkdir -- "$tmpdir/logs" "$tmpdir/status"
+
+if (( 0 < ${#directories[@]} ))
+then
+  collect_args=(--output "$tmpdir/discovered.config")
+  if [[ -n $role ]]
+  then
+    collect_args+=(--role "$role")
+  fi
+  if ! "$(dirname -- "${BASH_SOURCE[0]}")/aws-vault-collect-sso-profiles.sh" "${collect_args[@]}" "${directories[@]}"
+  then
+    die 'finding profiles failed; not testing an incomplete set'
+  fi
+  config=$tmpdir/discovered.config
+fi
+config=$(cd -- "$(dirname -- "$config")" && pwd)/$(basename -- "$config")
 
 passphrase=$(LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 32)
 unset AWS_VAULT AWS_PROFILE AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN

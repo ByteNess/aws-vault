@@ -28,20 +28,16 @@ Lock files live in `aws-vault` under the runtime directory: `$XDG_RUNTIME_DIR` i
 
 ## Stress testing
 
-`contrib/scripts` has two scripts for checking `--parallel-safe` against your own IAM Identity Center portals:
-
-- `aws-vault-collect-sso-profiles.sh START_URL=REGION...` writes an AWS config file with a profile for every account and role you can reach. It needs the AWS CLI v2 and jq, and signs in with `aws sso login` where it has no cached token.
-- `aws-vault-parallel-safe-stress.sh --config FILE` runs `aws-vault export` for every profile in that file in parallel, against a temporary credential store, and fails if any export fails or if more than one SSO sign-in starts per start URL. `same` mode instead runs many `exec` processes for one profile to race the session cache, and `--no-parallel-safe` runs the same workload without locking for comparison.
-
-For example:
+`contrib/scripts/aws-vault-parallel-safe-stress.sh` checks `--parallel-safe` against your own IAM Identity Center portals. Given start URLs and their regions, it finds every account and role you can reach through them, then runs `aws-vault export` for all of them in parallel against a temporary credential store. It fails if any export fails or if more than one SSO sign-in starts per start URL:
 
 ```shell
-contrib/scripts/aws-vault-collect-sso-profiles.sh --role ReadOnly \
-  --output sso.config https://d-1234567890.awsapps.com/start=us-east-1
-contrib/scripts/aws-vault-parallel-safe-stress.sh --config sso.config --parallel 50
+contrib/scripts/aws-vault-parallel-safe-stress.sh --parallel 50 \
+  https://d-1234567890.awsapps.com/start=us-east-1
 ```
 
-The first run signs in through your browser once per start URL. Pass `--store-dir DIR` to keep the temporary store, so a second run reuses its OIDC tokens and sessions.
+Finding the profiles needs the AWS CLI v2 and jq; it is done by `aws-vault-collect-sso-profiles.sh`, which signs in with `aws sso login` where `~/.aws/sso/cache` has no valid token, using the device code flow when `AWS_VAULT_DEVICE_CODE` is true. To test a fixed set of profiles instead, pass `--config FILE`, which needs only aws-vault. `--role NAME` limits the run to one role, `same` mode runs many `exec` processes for one profile to race the session cache, and `--no-parallel-safe` runs the same workload without locking for comparison.
+
+The run signs in to each start URL once through your browser. Pass `--store-dir DIR` to keep the temporary store, so a second run reuses its OIDC tokens and sessions.
 
 ## Limitations
 
