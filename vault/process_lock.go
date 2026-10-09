@@ -14,6 +14,7 @@ import (
 // ProcessLock coordinates work across processes.
 type ProcessLock interface {
 	TryLock() (bool, error)
+	Lock() error
 	Unlock() error
 	Path() string
 }
@@ -29,6 +30,8 @@ type defaultProcessLock struct {
 	once sync.Once
 	lock *flock.Flock
 	err  error
+
+	held sync.Mutex
 }
 
 // NewDefaultLock creates a ProcessLock in the per-user lock directory.
@@ -53,14 +56,48 @@ func (l *defaultProcessLock) TryLock() (bool, error) {
 	if err := l.resolve(); err != nil {
 		return false, err
 	}
-	return l.lock.TryLock()
+	if !l.held.TryLock() {
+		return false, nil
+	}
+	locked, err := l.lock.TryLock()
+	if err != nil || !locked {
+		l.held.Unlock()
+	}
+	return locked, err
+}
+
+func (l *defaultProcessLock) Lock() error {
+	if err := l.resolve(); err != nil {
+		return err
+	}
+	l.held.Lock()
+	if err := l.lock.Lock(); err != nil {
+		l.held.Unlock()
+		return err
+	}
+	return nil
 }
 
 func (l *defaultProcessLock) Unlock() error {
 	if err := l.resolve(); err != nil {
 		return err
 	}
-	return l.lock.Unlock()
+	err := l.lock.Unlock()
+	l.held.Unlock()
+	return err
+}
+
+// WithKeyringLock runs fn while holding the cross-process keyring lock for
+// lockKey, the lock NewLockedKeyring takes for each keyring operation.
+func WithKeyringLock(lockKey string, fn func() error) error {
+	lock := NewDefaultLock(keyringLockPrefix, lockKey)
+	if err := lock.Lock(); err != nil {
+		return err
+	}
+	_, err := runLocked(lock, "keyring", func() (struct{}, error) {
+		return struct{}{}, fn()
+	})
+	return err
 }
 
 func (l *defaultProcessLock) Path() string {

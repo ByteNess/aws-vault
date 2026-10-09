@@ -9,8 +9,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/adrg/xdg"
+	"github.com/byteness/keyring"
 )
 
 func setRuntimeDir(t *testing.T, dir string) {
@@ -153,5 +155,55 @@ func TestDefaultLockExcludesOtherProcesses(t *testing.T) {
 	}
 	if out := tryInChild(); !strings.Contains(out, "locked=true err=<nil>") {
 		t.Fatalf("child could not acquire a released lock:\n%s", out)
+	}
+}
+
+func TestLockedKeyringWaitsForHeldLock(t *testing.T) {
+	setRuntimeDir(t, t.TempDir())
+	held := NewDefaultLock(keyringLockPrefix, "held")
+	if err := held.Lock(); err != nil {
+		t.Fatal(err)
+	}
+
+	kr := NewLockedKeyring(keyring.NewArrayKeyring([]keyring.Item{{Key: "k", Data: []byte("v")}}), "held")
+	done := make(chan error, 1)
+	go func() {
+		_, err := kr.Get("k")
+		done <- err
+	}()
+
+	select {
+	case err := <-done:
+		t.Fatalf("Get returned while the lock was held: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	if err := held.Unlock(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Get failed after the lock was released: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Get did not proceed after the lock was released")
+	}
+}
+
+func TestDefaultLockExcludesGoroutinesSharingIt(t *testing.T) {
+	setRuntimeDir(t, t.TempDir())
+	lock := NewDefaultLock("aws-vault.test", "shared")
+
+	locked, err := lock.TryLock()
+	if err != nil || !locked {
+		t.Fatalf("TryLock() = %t, %v, want true, nil", locked, err)
+	}
+	again, err := lock.TryLock()
+	if err != nil || again {
+		t.Fatalf("second TryLock() on a held lock = %t, %v, want false, nil", again, err)
+	}
+	if err := lock.Unlock(); err != nil {
+		t.Fatal(err)
 	}
 }

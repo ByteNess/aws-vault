@@ -47,11 +47,7 @@ func withProcessLock[T any](
 			return zero, err
 		}
 		if locked {
-			result, workErr := doWork()
-			if unlockErr := lock.Unlock(); unlockErr != nil {
-				return result, errors.Join(workErr, fmt.Errorf("unlock %s lock: %w", lockName, unlockErr))
-			}
-			return result, workErr
+			return runLocked(lock, lockName, doWork)
 		}
 
 		if sleepErr := waiter.sleepAfterMiss(ctx); sleepErr != nil {
@@ -70,4 +66,13 @@ func withProcessLock[T any](
 			}
 		}
 	}
+}
+
+func runLocked[T any](lock ProcessLock, lockName string, doWork func() (T, error)) (result T, err error) {
+	defer func() {
+		if unlockErr := lock.Unlock(); unlockErr != nil {
+			err = errors.Join(err, fmt.Errorf("unlock %s lock: %w", lockName, unlockErr))
+		}
+	}()
+	return doWork()
 }

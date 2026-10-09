@@ -1,7 +1,6 @@
 package vault
 
 import (
-	"context"
 	"log"
 	"sync"
 	"time"
@@ -14,26 +13,15 @@ type lockedKeyring struct {
 	lock  ProcessLock
 	// mu serializes in-process access. The flock only coordinates across
 	// processes; without this mutex, concurrent goroutines in the same
-	// process could race on the try-lock loop.
+	// process could interleave keyring operations.
 	mu sync.Mutex
 
-	lockWait  time.Duration
-	lockLog   time.Duration
 	warnAfter time.Duration
-	lockNow   func() time.Time
-	lockSleep func(context.Context, time.Duration) error
 	lockLogf  lockLogger
 }
 
 const (
-	// defaultKeyringLockWaitDelay is the polling interval between lock attempts.
-	// 100ms keeps latency low for the typical case where the lock holder
-	// finishes a single keyring read/write quickly.
-	defaultKeyringLockWaitDelay = 100 * time.Millisecond
-
-	// defaultKeyringLockLogEvery controls how often we emit a debug log while
-	// waiting for the lock. 15s avoids log spam while still showing progress.
-	defaultKeyringLockLogEvery = 15 * time.Second
+	keyringLockPrefix = "aws-vault.keyring"
 
 	// defaultKeyringLockWarnAfter is the delay before printing a user-visible
 	// "waiting for lock" message to stderr. 5s is long enough to avoid
@@ -47,12 +35,8 @@ const (
 func NewLockedKeyring(kr keyring.Keyring, lockKey string) keyring.Keyring {
 	return &lockedKeyring{
 		inner:     kr,
-		lock:      NewDefaultLock("aws-vault.keyring", lockKey),
-		lockWait:  defaultKeyringLockWaitDelay,
-		lockLog:   defaultKeyringLockLogEvery,
+		lock:      NewDefaultLock(keyringLockPrefix, lockKey),
 		warnAfter: defaultKeyringLockWarnAfter,
-		lockNow:   time.Now,
-		lockSleep: defaultContextSleep,
 		lockLogf:  log.Printf,
 	}
 }
@@ -61,18 +45,26 @@ func (k *lockedKeyring) withLock(fn func() error) error {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 
-	_, err := withProcessLock(context.Background(), k.lock, lockWaiterOpts{
-		LockPath:  k.lock.Path(),
-		WarnMsg:   "Waiting for keyring lock at %s\n",
-		LogMsg:    "Waiting for keyring lock at %s",
-		WaitDelay: k.lockWait,
-		LogEvery:  k.lockLog,
-		WarnAfter: k.warnAfter,
-		Now:       k.lockNow,
-		Sleep:     k.lockSleep,
-		Logf:      k.lockLogf,
-		Warnf:     warnToStderr,
-	}, "keyring", nil, func() (struct{}, error) {
+	locked, err := k.lock.TryLock()
+	if err != nil {
+		return err
+	}
+	if !locked {
+		path := k.lock.Path()
+		if k.lockLogf != nil {
+			k.lockLogf("Waiting for keyring lock at %s", path)
+		}
+		warning := time.AfterFunc(k.warnAfter, func() {
+			warnToStderr("Waiting for keyring lock at %s\n", path)
+		})
+		err = k.lock.Lock()
+		warning.Stop()
+		if err != nil {
+			return err
+		}
+	}
+
+	_, err = runLocked(k.lock, "keyring", func() (struct{}, error) {
 		return struct{}{}, fn()
 	})
 	return err
