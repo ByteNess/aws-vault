@@ -203,17 +203,17 @@ directory_id() {
 }
 
 cached_token() {
-  local start_url=$1 cache_dir=$HOME/.aws/sso/cache
+  local start_url=$1 min_ttl=$2 cache_dir=$HOME/.aws/sso/cache
   local files=("$cache_dir"/*.json)
   if [[ ! -e ${files[0]} ]]
   then
     return 1
   fi
-  jq -r -s --arg url "$start_url" '
+  jq -r -s --arg url "$start_url" --argjson min_ttl "$min_ttl" '
     [ .[]
       | select(.startUrl == $url and .accessToken != null)
       | {accessToken, exp: (try (.expiresAt | sub("\\.[0-9]+"; "") | sub("UTC$"; "Z") | fromdateiso8601) catch null)}
-      | select(.exp != null and .exp > (now + 600))
+      | select(.exp != null and .exp > (now + $min_ttl))
     ]
     | sort_by(.exp) | last | .accessToken // empty
   ' "${files[@]}" 2>/dev/null
@@ -269,7 +269,7 @@ do
   region=${directory##*=}
   dir_id=$(directory_id "$start_url" "$index")
 
-  token=$(cached_token "$start_url")
+  token=$(cached_token "$start_url" 600)
   if [[ -z $token ]]
   then
     printf 'Signing in to %s\n' "$start_url" >&2
@@ -279,7 +279,7 @@ do
       (( failures += 1 ))
       continue
     fi
-    token=$(cached_token "$start_url")
+    token=$(cached_token "$start_url" 0)
   fi
   if [[ -z $token ]]
   then
