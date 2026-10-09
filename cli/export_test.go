@@ -47,3 +47,24 @@ func Example_exportCommandAccountID() {
 	// AWS_SECRET_ACCESS_KEY=XYZ
 	// AWS_ACCOUNT_ID=123456789012
 }
+
+func Example_exportCommandParallelSafe() {
+	configFile, removeConfig := exampleConfigFile("")
+	defer removeConfig()
+	defer setExampleEnv("AWS_CONFIG_FILE", configFile)()
+
+	app := kingpin.New("aws-vault", "")
+	awsVault := ConfigureGlobals(app)
+	awsVault.keyringImpl = keyring.NewArrayKeyring([]keyring.Item{
+		{Key: "llamas", Data: []byte(`{"AccessKeyID":"ABC","SecretAccessKey":"XYZ"}`)},
+	})
+	ConfigureExportCommand(app, awsVault)
+	kingpin.MustParse(app.Parse([]string{
+		"--parallel-safe", "export", "--format=ini", "--no-session", "llamas",
+	}))
+
+	// Output:
+	// [llamas]
+	// aws_access_key_id=ABC
+	// aws_secret_access_key=XYZ
+}
