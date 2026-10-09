@@ -2,18 +2,17 @@
 
 show_help() {
   cat <<'EOF'
-Usage: aws-vault-parallel-safe-stress.sh [options] [MODE] START_URL=REGION...
+Usage: aws-vault-parallel-safe-stress.sh [options] [MODE] --sso-start-url URL...
+       aws-vault-parallel-safe-stress.sh [options] [MODE] --sso-start-urls-from-config
        aws-vault-parallel-safe-stress.sh [options] [MODE] --config FILE
 
 Run many aws-vault processes at once against an isolated, temporary
 credential store and check that they all succeed.
 
-Given IAM Identity Center start URLs and their regions, e.g.
-https://d-1234567890.awsapps.com/start=us-east-1, it first finds every
-account and role you can reach through them with
-aws-vault-collect-sso-profiles.sh, which needs the AWS CLI v2 and jq, and
-tests all of them. --config tests the profiles in an existing AWS config
-file instead.
+Given IAM Identity Center start URLs, it first finds every account and role
+you can reach through them with aws-vault-collect-sso-profiles.sh, which
+needs the AWS CLI v2 and jq, and tests all of them. --config tests the
+profiles in an existing AWS config file instead.
 
 Modes:
   export   Export every profile in the config in parallel (default). Checks
@@ -23,9 +22,15 @@ Modes:
            parallel, which races the session cache.
 
 Options:
+  --sso-start-url URL  A start URL with its region as a query parameter, e.g.
+                       'https://d-1234567890.awsapps.com/start?region=us-east-1'.
+                       Repeat for more start URLs.
+  --sso-start-urls-from-config
+                       Use every start URL in the AWS config file
+                       ($AWS_CONFIG_FILE, or ~/.aws/config)
   --config FILE        AWS config file with the profiles to test, instead of
-                       finding them through START_URL=REGION arguments
-  --role NAME          With START_URL=REGION, only test roles named NAME
+                       finding them through start URLs
+  --role NAME          When finding profiles, only test roles named NAME
   --profile NAME       Profile for "same" mode (default: the first SSO profile)
   --parallel N         Concurrent aws-vault processes (default: 20)
   --runs N             Processes to run in "same" mode (default: 50)
@@ -118,13 +123,16 @@ do
       mode=$1
       shift
       ;;
-    -*)
-      printf "Unknown option '%s'\n" "$1" >&2
-      usage
-      exit 1
+    --sso-start-url)
+      directories+=(--sso-start-url "${2-}")
+      shift 2
       ;;
-    *=*)
-      directories+=("$1")
+    --sso-start-url=*)
+      directories+=(--sso-start-url "${1#--sso-start-url=}")
+      shift
+      ;;
+    --sso-start-urls-from-config)
+      directories+=(--sso-start-urls-from-config)
       shift
       ;;
     *)
@@ -142,7 +150,7 @@ then
 fi
 if [[ -n $config ]] && (( 0 < ${#directories[@]} ))
 then
-  die 'pass either --config or START_URL=REGION arguments, not both'
+  die 'pass either --config or start URLs, not both'
 fi
 if [[ -n $config && ! -r $config ]]
 then

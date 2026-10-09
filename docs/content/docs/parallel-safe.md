@@ -28,11 +28,11 @@ Lock files live in `aws-vault` under the runtime directory: `$XDG_RUNTIME_DIR` i
 
 ## Stress testing
 
-`contrib/scripts/aws-vault-parallel-safe-stress.sh` checks `--parallel-safe` against your own IAM Identity Center portals. Given start URLs and their regions, it finds every account and role you can reach through them, then runs `aws-vault export` for all of them in parallel against a temporary credential store. It fails if any export fails or if more than one SSO sign-in starts per start URL:
+`contrib/scripts/aws-vault-parallel-safe-stress.sh` checks `--parallel-safe` against your own IAM Identity Center portals. Given start URLs, each with the region of its Identity Center instance as a `region` query parameter, or `--sso-start-urls-from-config` to use every start URL in your AWS config, it finds every account and role you can reach through them, then runs `aws-vault export` for all of them in parallel against a temporary credential store. It fails if any export fails or if more than one SSO sign-in starts per start URL:
 
 ```shell
 contrib/scripts/aws-vault-parallel-safe-stress.sh --parallel 50 \
-  https://d-1234567890.awsapps.com/start=us-east-1
+  --sso-start-url 'https://d-1234567890.awsapps.com/start?region=us-east-1'
 ```
 
 Finding the profiles needs the AWS CLI v2 and jq; it is done by `aws-vault-collect-sso-profiles.sh`, which signs in with `aws sso login` where `~/.aws/sso/cache` has no valid token, using the device code flow when `AWS_VAULT_DEVICE_CODE` is true. To test a fixed set of profiles instead, pass `--config FILE`, which needs only aws-vault. `--role NAME` limits the run to one role, `same` mode runs many `exec` processes for one profile to race the session cache, and `--no-parallel-safe` runs the same workload without locking for comparison.
