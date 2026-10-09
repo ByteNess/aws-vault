@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -205,5 +206,22 @@ func TestDefaultLockExcludesGoroutinesSharingIt(t *testing.T) {
 	}
 	if err := lock.Unlock(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestLockDirUsesTempDirOnMacOSWithoutRuntimeDir(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("macOS only")
+	}
+	setRuntimeDir(t, "")
+	tmp := t.TempDir()
+	t.Setenv("TMPDIR", tmp)
+
+	got, err := lockDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(tmp, "aws-vault"); got != want {
+		t.Fatalf("lockDir() = %q, want %q", got, want)
 	}
 }
