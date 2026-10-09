@@ -190,8 +190,8 @@ func TestGetRoleCredentialsTimeoutOnPersistentRateLimit(t *testing.T) {
 
 	// Disable SDK retries so our retry loop handles them
 	ssoClient := sso.New(sso.Options{
-		Region:       "us-east-1",
-		BaseEndpoint: aws.String(srv.URL),
+		Region:           "us-east-1",
+		BaseEndpoint:     aws.String(srv.URL),
 		RetryMaxAttempts: 1,
 	})
 
