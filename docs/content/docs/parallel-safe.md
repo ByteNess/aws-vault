@@ -26,6 +26,23 @@ Lock files live in `aws-vault` under the runtime directory: `$XDG_RUNTIME_DIR` i
 - Keyring operations are serialized, which adds a small amount of latency per operation. In practice this is negligible because the operations themselves are fast.
 - **All concurrent invocations must use `--parallel-safe`**. If some processes enable it and others don't, the unprotected processes ignore the locks entirely. This is undefined behavior and may still cause races. Set `AWS_VAULT_PARALLEL_SAFE=true` in your environment to ensure consistent use.
 
+## Stress testing
+
+`contrib/scripts` has two scripts for checking `--parallel-safe` against your own IAM Identity Center portals:
+
+- `aws-vault-collect-sso-profiles.sh START_URL=REGION...` writes an AWS config file with a profile for every account and role you can reach. It needs the AWS CLI v2 and jq, and signs in with `aws sso login` where it has no cached token.
+- `aws-vault-parallel-safe-stress.sh --config FILE` runs `aws-vault export` for every profile in that file in parallel, against a temporary credential store, and fails if any export fails or if more than one SSO sign-in starts per start URL. `same` mode instead runs many `exec` processes for one profile to race the session cache, and `--no-parallel-safe` runs the same workload without locking for comparison.
+
+For example:
+
+```shell
+contrib/scripts/aws-vault-collect-sso-profiles.sh --role ReadOnly \
+  --output sso.config https://d-1234567890.awsapps.com/start=us-east-1
+contrib/scripts/aws-vault-parallel-safe-stress.sh --config sso.config --parallel 50
+```
+
+The first run signs in through your browser once per start URL. Pass `--store-dir DIR` to keep the temporary store, so a second run reuses its OIDC tokens and sessions.
+
 ## Limitations
 
 - Waiting processes have no time limit: they wait as long as the lock holder is working, which can include a browser sign-in or an MFA or keychain prompt, and print a "Waiting for … lock" message while they do. A lock is released as soon as its holder exits, so a crashed process cannot leave it held. If a lock holder hangs (e.g. a stuck `gpg` subprocess in the `pass` backend), stop it or press Ctrl-C in the waiting process.
