@@ -25,7 +25,6 @@ func newTestLockedKeyring(inner keyring.Keyring, lock ProcessLock, clock *testCl
 	return &lockedKeyring{
 		inner:     inner,
 		lock:      lock,
-		lockKey:   "test",
 		lockWait:  100 * time.Millisecond,
 		lockLog:   15 * time.Second,
 		warnAfter: 5 * time.Second,

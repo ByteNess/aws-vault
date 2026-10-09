@@ -3,9 +3,7 @@ package vault
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log"
-	"os"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -120,9 +118,7 @@ func (p *CachedSessionProvider) lockWaiterOpts(lock ProcessLock) lockWaiterOpts 
 		Now:       p.sessionNow,
 		Sleep:     p.sessionSleep,
 		Logf:      p.sessionLogf,
-		Warnf: func(format string, args ...any) {
-			fmt.Fprintf(os.Stderr, format, args...)
-		},
+		Warnf:     warnToStderr,
 	}
 	if opts.WaitDelay <= 0 {
 		opts.WaitDelay = defaultSessionLockWaitDelay

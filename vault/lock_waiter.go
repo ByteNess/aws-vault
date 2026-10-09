@@ -2,13 +2,15 @@ package vault
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"time"
 )
 
 type lockLogger func(string, ...any)
 
-// lockWaiterOpts configures a lockWaiter. All fields are required except
-// Now, Sleep, and Warnf which have sensible defaults.
+// lockWaiterOpts configures a lockWaiter. Now and Sleep default to time.Now
+// and defaultContextSleep; Logf and Warnf may be nil.
 type lockWaiterOpts struct {
 	LockPath  string
 	WarnMsg   string
@@ -28,6 +30,10 @@ type lockWaiter struct {
 	lastLog   time.Time
 	waitStart time.Time
 	warned    bool
+}
+
+func warnToStderr(format string, args ...any) {
+	fmt.Fprintf(os.Stderr, format, args...)
 }
 
 func newLockWaiter(opts lockWaiterOpts) *lockWaiter {

@@ -169,9 +169,7 @@ func (p *SSORoleCredentialsProvider) lockWaiterOpts(lock ProcessLock) lockWaiter
 		Now:       p.ssoNow,
 		Sleep:     p.ssoSleep,
 		Logf:      p.ssoLogf,
-		Warnf: func(format string, args ...any) {
-			fmt.Fprintf(os.Stderr, format, args...)
-		},
+		Warnf:     warnToStderr,
 	}
 	if opts.WaitDelay <= 0 {
 		opts.WaitDelay = defaultSSOLockWaitDelay
@@ -270,11 +268,11 @@ func (p *SSORoleCredentialsProvider) getRoleCredentials(ctx context.Context) (*s
 
 // RetrieveStsCredentials returns the SSO role credentials in STS form.
 func (p *SSORoleCredentialsProvider) RetrieveStsCredentials(ctx context.Context) (*ststypes.Credentials, error) {
-	return p.getRoleCredentialsAsStsCredentials(ctx)
+	return p.getRoleCredentialsAsStsCredemtials(ctx)
 }
 
-// getRoleCredentialsAsStsCredentials returns getRoleCredentials as sts.Credentials because sessions.Store expects it
-func (p *SSORoleCredentialsProvider) getRoleCredentialsAsStsCredentials(ctx context.Context) (*ststypes.Credentials, error) {
+// getRoleCredentialsAsStsCredemtials returns getRoleCredentials as sts.Credentials because sessions.Store expects it
+func (p *SSORoleCredentialsProvider) getRoleCredentialsAsStsCredemtials(ctx context.Context) (*ststypes.Credentials, error) {
 	creds, err := p.getRoleCredentials(ctx)
 	if err != nil {
 		return nil, err
