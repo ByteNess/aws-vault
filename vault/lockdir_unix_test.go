@@ -1,0 +1,143 @@
+//go:build unix
+
+package vault
+
+import (
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/adrg/xdg"
+)
+
+func setRuntimeDir(t *testing.T, dir string) {
+	t.Helper()
+	t.Setenv("XDG_RUNTIME_DIR", dir)
+	xdg.Reload()
+	t.Cleanup(xdg.Reload)
+}
+
+func TestEnsurePrivateDirCreatesOwnerOnlyDir(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "locks")
+
+	got, err := ensurePrivateDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != dir {
+		t.Fatalf("ensurePrivateDir() = %q, want %q", got, dir)
+	}
+	fi, err := os.Stat(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if perm := fi.Mode().Perm(); perm != 0o700 {
+		t.Fatalf("permissions = %#o, want 0700", perm)
+	}
+}
+
+func TestEnsurePrivateDirRejectsUnsafeDirs(t *testing.T) {
+	base := t.TempDir()
+
+	symlink := filepath.Join(base, "symlink")
+	if err := os.Symlink(t.TempDir(), symlink); err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(base, "file")
+	if err := os.WriteFile(file, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	loose := filepath.Join(base, "loose")
+	if err := os.Mkdir(loose, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(loose, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	for name, dir := range map[string]string{"symlink": symlink, "file": file, "loose permissions": loose} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := ensurePrivateDir(dir); err == nil {
+				t.Fatalf("ensurePrivateDir(%q) succeeded, want an error", dir)
+			}
+		})
+	}
+}
+
+func TestLockDirUsesRuntimeDir(t *testing.T) {
+	runtimeDir := t.TempDir()
+	setRuntimeDir(t, runtimeDir)
+
+	got, err := lockDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(runtimeDir, "aws-vault"); got != want {
+		t.Fatalf("lockDir() = %q, want %q", got, want)
+	}
+}
+
+func TestLockDirFallsBackToPerUserTmpDir(t *testing.T) {
+	worldWritable := t.TempDir()
+	if err := os.Chmod(worldWritable, 0o777); err != nil {
+		t.Fatal(err)
+	}
+	want := fmt.Sprintf("/tmp/aws-vault-%d", os.Getuid())
+
+	for name, runtimeDir := range map[string]string{
+		"missing":        filepath.Join(t.TempDir(), "missing"),
+		"world-writable": worldWritable,
+	} {
+		t.Run(name, func(t *testing.T) {
+			setRuntimeDir(t, runtimeDir)
+
+			got, err := lockDir()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != want {
+				t.Fatalf("lockDir() = %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+func TestDefaultLockExcludesOtherProcesses(t *testing.T) {
+	if os.Getenv("AWS_VAULT_TEST_LOCK_CHILD") == "1" {
+		locked, err := NewDefaultLock("aws-vault.test", "cross-process").TryLock()
+		fmt.Printf("locked=%t err=%v\n", locked, err)
+		return
+	}
+
+	setRuntimeDir(t, t.TempDir())
+	lock := NewDefaultLock("aws-vault.test", "cross-process")
+
+	tryInChild := func() string {
+		t.Helper()
+		cmd := exec.Command(os.Args[0], "-test.run=^TestDefaultLockExcludesOtherProcesses$")
+		cmd.Env = append(os.Environ(), "AWS_VAULT_TEST_LOCK_CHILD=1")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("child process failed: %v\n%s", err, out)
+		}
+		return string(out)
+	}
+
+	locked, err := lock.TryLock()
+	if err != nil || !locked {
+		t.Fatalf("TryLock() = %t, %v, want true, nil", locked, err)
+	}
+	if out := tryInChild(); !strings.Contains(out, "locked=false err=<nil>") {
+		t.Fatalf("child acquired a lock held by the parent:\n%s", out)
+	}
+
+	if err := lock.Unlock(); err != nil {
+		t.Fatal(err)
+	}
+	if out := tryInChild(); !strings.Contains(out, "locked=true err=<nil>") {
+		t.Fatalf("child could not acquire a released lock:\n%s", out)
+	}
+}

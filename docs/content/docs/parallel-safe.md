@@ -17,6 +17,8 @@ The `--parallel-safe` flag (or `AWS_VAULT_PARALLEL_SAFE=true`) enables cross-pro
 
 This applies to **all backends** (keychain, file, pass, secret-service, etc.).
 
+Lock files live in a per-user directory: `$XDG_RUNTIME_DIR/aws-vault` (on Linux, `/run/user/$UID/aws-vault` when `XDG_RUNTIME_DIR` is unset), or the per-user temporary directory on macOS and Windows. On Linux and other Unix systems without a runtime directory, aws-vault uses `/tmp/aws-vault-$UID` and refuses to use it unless it is a directory owned by the current user with `0700` permissions.
+
 ## Trade-offs
 
 - Keyring operations are serialized, which adds a small amount of latency per operation. In practice this is negligible because the operations themselves are fast.
