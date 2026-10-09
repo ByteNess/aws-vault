@@ -214,14 +214,7 @@ func execCommand(input execCommandInput, f *vault.ConfigFile, keyring, sessionKe
 	}
 
 	ckr := &vault.CredentialKeyring{Keyring: keyring}
-	credsProvider, err := vault.NewTempCredentialsProviderWithOptions(
-		config,
-		ckr,
-		sessionKeyring,
-		input.NoSession,
-		false,
-		vault.TempCredentialsOptions{ParallelSafe: input.ParallelSafe},
-	)
+	credsProvider, err := vault.NewTempCredentialsProvider(config, ckr, sessionKeyring, input.NoSession, false, input.ParallelSafe)
 	if err != nil {
 		return 0, fmt.Errorf("getting temporary credentials: %w", err)
 	}

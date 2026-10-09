@@ -108,14 +108,7 @@ func rotateCommand(input rotateCommandInput, f *vault.ConfigFile, keyring, sessi
 		credsProvider = vault.NewMasterCredentialsProvider(ckr, masterCredentialsName)
 	} else {
 		// Can't always disable sessions completely, might need to use session for MFA-Protected API Access
-		credsProvider, err = vault.NewTempCredentialsProviderWithOptions(
-			config,
-			ckr,
-			sessionKeyring,
-			input.NoSession,
-			true,
-			vault.TempCredentialsOptions{ParallelSafe: input.ParallelSafe},
-		)
+		credsProvider, err = vault.NewTempCredentialsProvider(config, ckr, sessionKeyring, input.NoSession, true, input.ParallelSafe)
 		if err != nil {
 			return fmt.Errorf("getting temporary credentials: %w", err)
 		}
