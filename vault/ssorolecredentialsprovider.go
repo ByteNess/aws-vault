@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/aws/retry"
 	awshttp "github.com/aws/aws-sdk-go-v2/aws/transport/http"
 	"github.com/aws/aws-sdk-go-v2/service/sso"
 	ssotypes "github.com/aws/aws-sdk-go-v2/service/sso/types"
@@ -259,7 +260,10 @@ func (p *SSORoleCredentialsProvider) getRoleCredentials(ctx context.Context) (*s
 				}
 				continue
 			}
-			return nil, fmt.Errorf("SSO rate limited for role %s (account: %s) persistently for %s (%d 429s, max retry-after %s); giving up — try again later: %w", p.RoleName, p.AccountID, ssoRetryTimeout, rateLimitCount, maxRetryAfterSeen, err)
+			if 0 < remaining {
+				return nil, fmt.Errorf("SSO rate limited for role %s (account: %s): AWS asked to retry after %s, more than the %s left of the %s retry budget (%d 429s); giving up — try again later: %w", p.RoleName, p.AccountID, retryAfter, remaining.Round(time.Second), ssoRetryTimeout, rateLimitCount, err)
+			}
+			return nil, fmt.Errorf("SSO rate limited for role %s (account: %s) persistently, used the %s retry budget (%d 429s, max retry-after %s); giving up — try again later: %w", p.RoleName, p.AccountID, ssoRetryTimeout, rateLimitCount, maxRetryAfterSeen, err)
 		}
 
 		return nil, err
@@ -991,6 +995,23 @@ func parseRetryAfter(value string) (time.Duration, bool) {
 		return d, true
 	}
 	return 0, false
+}
+
+type ssoThrottleRetryer struct {
+	aws.RetryerV2
+}
+
+func (r ssoThrottleRetryer) IsErrorRetryable(err error) bool {
+	return !isSSORateLimitError(err) && r.RetryerV2.IsErrorRetryable(err)
+}
+
+func leaveThrottlingToProvider(o *sso.Options) {
+	switch retryer := o.Retryer.(type) {
+	case nil:
+		o.Retryer = ssoThrottleRetryer{retry.NewStandard()}
+	case aws.RetryerV2:
+		o.Retryer = ssoThrottleRetryer{retryer}
+	}
 }
 
 func isSSORateLimitError(err error) bool {

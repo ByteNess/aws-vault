@@ -121,8 +121,8 @@ func TestGetRoleCredentialsGivesUpWhenRetryAfterExceedsBudget(t *testing.T) {
 	p.RetryRateLimit = true
 
 	_, err := p.getRoleCredentials(context.Background())
-	if err == nil || !strings.Contains(err.Error(), "persistently") {
-		t.Fatalf("expected a persistent rate limit error, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "more than the") {
+		t.Fatalf("expected an error about Retry-After exceeding the budget, got %v", err)
 	}
 	if clock.sleepCalls != 0 {
 		t.Fatalf("expected no shortened retry, got %d sleeps", clock.sleepCalls)
@@ -224,5 +224,25 @@ func TestSSORoleCredentialsProviderLiteralDoesNotPanic(t *testing.T) {
 
 	if _, err := p.Retrieve(context.Background()); err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestThrottleRetryerLeavesRateLimitsToProvider(t *testing.T) {
+	retryAfter := fmt.Sprint(int((ssoRetryTimeout + time.Minute) / time.Second))
+	s := &ssoTestServer{responses: map[string]func(http.ResponseWriter){"token": ssoRateLimited(retryAfter)}}
+	srv := newSSOTestClient(t, s)
+	client := sso.New(srv.Options(), func(o *sso.Options) {
+		o.RetryMaxAttempts = 3
+	}, leaveThrottlingToProvider)
+
+	p, _ := newParallelTestSSOProvider(t, s, &testTokenCache{token: newTestOIDCTokenData("token")})
+	p.SSOClient = client
+	p.RetryRateLimit = true
+
+	if _, err := p.getRoleCredentials(context.Background()); err == nil {
+		t.Fatal("expected a rate limit error, got nil")
+	}
+	if got := s.calls.Load(); got != 1 {
+		t.Fatalf("expected the SDK not to retry throttling itself, got %d calls", got)
 	}
 }
