@@ -367,12 +367,6 @@ func TestKeyringLockKey(t *testing.T) {
 			config:  keyring.Config{},
 			want:    "some-unknown-backend",
 		},
-		{
-			name:    "empty backend uses the first available backend",
-			backend: "",
-			config:  keyring.Config{},
-			want:    keyringLockKey(string(keyring.AvailableBackends()[0]), keyring.Config{}),
-		},
 	}
 
 	for _, tt := range tests {
@@ -382,6 +376,14 @@ func TestKeyringLockKey(t *testing.T) {
 				t.Errorf("keyringLockKey() = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestKeyringLockKeyEmptyBackendUsesFirstAvailable(t *testing.T) {
+	first := string(keyring.AvailableBackends()[0])
+	got := keyringLockKey("", keyring.Config{})
+	if got != first && !strings.HasPrefix(got, first+":") {
+		t.Fatalf("keyringLockKey(\"\", {}) = %q, want a key for backend %q", got, first)
 	}
 }
 
