@@ -102,9 +102,16 @@ func (p *CachedSessionProvider) getCachedSession() (creds *ststypes.Credentials,
 	return creds, true, nil
 }
 
-func (p *CachedSessionProvider) getSessionWithLock(ctx context.Context) (*ststypes.Credentials, error) {
-	return withProcessLock(ctx, p.sessionLock, lockWaiterOpts{
-		LockPath:  p.sessionLock.Path(),
+func (p *CachedSessionProvider) lock() ProcessLock {
+	if p.sessionLock != nil {
+		return p.sessionLock
+	}
+	return NewDefaultLock("aws-vault.session", p.SessionKey.StringForMatching())
+}
+
+func (p *CachedSessionProvider) lockWaiterOpts(lock ProcessLock) lockWaiterOpts {
+	opts := lockWaiterOpts{
+		LockPath:  lock.Path(),
 		WarnMsg:   "Waiting for session lock at %s\n",
 		LogMsg:    "Waiting for session lock at %s",
 		WaitDelay: p.sessionLockWait,
@@ -116,19 +123,31 @@ func (p *CachedSessionProvider) getSessionWithLock(ctx context.Context) (*ststyp
 		Warnf: func(format string, args ...any) {
 			fmt.Fprintf(os.Stderr, format, args...)
 		},
-	}, "session", func() (processLockResult[*ststypes.Credentials], error) {
-		creds, cached, err := p.getCachedSession()
-		if err != nil && !errors.Is(err, keyring.ErrKeyNotFound) {
-			log.Printf("Reading cached session for %s: %v; will try lock", p.SessionKey.ProfileName, err)
-		}
-		if err == nil && cached {
-			return processLockResult[*ststypes.Credentials]{value: creds, ok: true}, nil
-		}
-		return processLockResult[*ststypes.Credentials]{}, nil
-	}, func() (*ststypes.Credentials, error) {
-		// Recheck cache after acquiring lock — another process may have filled it.
-		creds, cached, cacheErr := p.getCachedSession()
-		if cacheErr == nil && cached {
+	}
+	if opts.WaitDelay <= 0 {
+		opts.WaitDelay = defaultSessionLockWaitDelay
+	}
+	if opts.LogEvery <= 0 {
+		opts.LogEvery = defaultSessionLockLogEvery
+	}
+	return opts
+}
+
+func (p *CachedSessionProvider) cachedSessionForWaiter() (processLockResult[*ststypes.Credentials], error) {
+	creds, cached, err := p.getCachedSession()
+	if err != nil && !errors.Is(err, keyring.ErrKeyNotFound) {
+		log.Printf("Reading cached session for %s: %v; will try lock", p.SessionKey.ProfileName, err)
+	}
+	if err == nil && cached {
+		return processLockResult[*ststypes.Credentials]{value: creds, ok: true}, nil
+	}
+	return processLockResult[*ststypes.Credentials]{}, nil
+}
+
+func (p *CachedSessionProvider) getSessionWithLock(ctx context.Context) (*ststypes.Credentials, error) {
+	lock := p.lock()
+	return withProcessLock(ctx, lock, p.lockWaiterOpts(lock), "session", p.cachedSessionForWaiter, func() (*ststypes.Credentials, error) {
+		if creds, cached, err := p.getCachedSession(); err == nil && cached {
 			return creds, nil
 		}
 

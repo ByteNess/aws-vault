@@ -253,3 +253,21 @@ func TestCachedSession_LockWaitLogs(t *testing.T) {
 		t.Fatalf("unexpected second log time: %s", logTimes[1])
 	}
 }
+
+func TestCachedSessionProviderLiteralDoesNotPanic(t *testing.T) {
+	creds := newTestCreds(time.Now().Add(time.Hour))
+	p := &CachedSessionProvider{
+		SessionKey:      newTestSessionKey(),
+		SessionProvider: &testSessionProvider{creds: creds},
+		Keyring:         &SessionKeyring{Keyring: keyring.NewArrayKeyring(nil)},
+		UseSessionLock:  true,
+	}
+
+	got, err := p.RetrieveStsCredentials(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if aws.ToString(got.AccessKeyId) != aws.ToString(creds.AccessKeyId) {
+		t.Fatal("unexpected credentials returned")
+	}
+}
