@@ -21,28 +21,22 @@ func (l *testUnlockErrLock) Unlock() error {
 	return l.unlockErr
 }
 
-func newTestLockedKeyring(inner keyring.Keyring, lock ProcessLock, clock *testClock) *lockedKeyring {
+func newTestLockedKeyring(inner keyring.Keyring, lock ProcessLock) *lockedKeyring {
 	return &lockedKeyring{
 		inner:     inner,
 		lock:      lock,
-		lockWait:  100 * time.Millisecond,
-		lockLog:   15 * time.Second,
 		warnAfter: 5 * time.Second,
-		lockNow:   clock.Now,
-		lockSleep: clock.Sleep,
 		lockLogf:  func(string, ...any) {},
 	}
 }
 
-func TestLockedKeyring_LockWaitRetries(t *testing.T) {
-	// Lock fails twice, then succeeds on the third attempt.
-	lock := &testLock{tryResults: []bool{false, false, true}}
+func TestLockedKeyring_BlocksWhenLockIsHeld(t *testing.T) {
+	lock := &testLock{tryResults: []bool{false}}
 	kr := keyring.NewArrayKeyring([]keyring.Item{
 		{Key: "foo", Data: []byte("bar")},
 	})
-	clock := &testClock{now: time.Unix(0, 0)}
 
-	lk := newTestLockedKeyring(kr, lock, clock)
+	lk := newTestLockedKeyring(kr, lock)
 
 	item, err := lk.Get("foo")
 	if err != nil {
@@ -51,11 +45,8 @@ func TestLockedKeyring_LockWaitRetries(t *testing.T) {
 	if string(item.Data) != "bar" {
 		t.Fatalf("unexpected data: %s", string(item.Data))
 	}
-	if lock.tryCalls != 3 {
-		t.Fatalf("expected 3 lock attempts, got %d", lock.tryCalls)
-	}
-	if clock.sleepCalls != 2 {
-		t.Fatalf("expected 2 sleep calls, got %d", clock.sleepCalls)
+	if lock.tryCalls != 1 || lock.lockCalls != 1 {
+		t.Fatalf("expected 1 try and 1 blocking lock, got %d and %d", lock.tryCalls, lock.lockCalls)
 	}
 	if lock.unlockCalls != 1 {
 		t.Fatalf("expected 1 unlock, got %d", lock.unlockCalls)
@@ -75,9 +66,8 @@ func TestLockedKeyring_UnlockErrorJoined(t *testing.T) {
 
 	// Use a keyring whose Remove always fails with workErr.
 	inner := &failingKeyring{removeErr: workErr}
-	clock := &testClock{now: time.Unix(0, 0)}
 
-	lk := newTestLockedKeyring(inner, lock, clock)
+	lk := newTestLockedKeyring(inner, lock)
 
 	err := lk.Remove("anything")
 	if err == nil {
@@ -101,24 +91,4 @@ type failingKeyring struct {
 
 func (k *failingKeyring) Remove(string) error {
 	return k.removeErr
-}
-
-func TestLockedKeyring_WaitsWithoutTimeout(t *testing.T) {
-	waits := int((15 * time.Minute) / (100 * time.Millisecond))
-	lock := &testLock{tryResults: append(make([]bool, waits), true)}
-	kr := keyring.NewArrayKeyring([]keyring.Item{{Key: "k", Data: []byte("v")}})
-	clock := &testClock{now: time.Unix(0, 0)}
-
-	lk := newTestLockedKeyring(kr, lock, clock)
-
-	item, err := lk.Get("k")
-	if err != nil {
-		t.Fatalf("unexpected error after a long wait: %v", err)
-	}
-	if string(item.Data) != "v" {
-		t.Fatalf("unexpected item data %q", item.Data)
-	}
-	if clock.sleepCalls != waits {
-		t.Fatalf("expected %d sleeps, got %d", waits, clock.sleepCalls)
-	}
 }

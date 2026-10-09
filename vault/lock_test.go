@@ -9,6 +9,7 @@ type testLock struct {
 	tryResults  []bool
 	tryCalls    int
 	unlockCalls int
+	lockCalls   int
 	locked      bool
 	path        string
 	onTry       func(*testLock)
@@ -27,6 +28,12 @@ func (l *testLock) TryLock() (bool, error) {
 		l.onTry(l)
 	}
 	return locked, nil
+}
+
+func (l *testLock) Lock() error {
+	l.lockCalls++
+	l.locked = true
+	return nil
 }
 
 func (l *testLock) Unlock() error {
