@@ -96,6 +96,35 @@ func TestSessionKeyringDefaultsToPrimaryKeyring(t *testing.T) {
 	}
 }
 
+func TestParallelSafeFlagAndEnvironment(t *testing.T) {
+	tests := []struct {
+		name string
+		env  string
+		args []string
+		want bool
+	}{
+		{name: "default", args: []string{"noop"}, want: false},
+		{name: "flag", args: []string{"--parallel-safe", "noop"}, want: true},
+		{name: "environment", env: "true", args: []string{"noop"}, want: true},
+		{name: "flag overrides environment", env: "true", args: []string{"--no-parallel-safe", "noop"}, want: false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("AWS_VAULT_PARALLEL_SAFE", tc.env)
+			app := kingpin.New("aws-vault", "")
+			a := ConfigureGlobals(app)
+			app.Command("noop", "")
+			if _, err := app.Parse(tc.args); err != nil {
+				t.Fatal(err)
+			}
+			if a.ParallelSafe != tc.want {
+				t.Fatalf("ParallelSafe = %t, want %t", a.ParallelSafe, tc.want)
+			}
+		})
+	}
+}
+
 func TestParallelSafeSessionKeyringSharesPrimaryLock(t *testing.T) {
 	primary := keyring.NewArrayKeyring(nil)
 	a := &AwsVault{keyringImpl: primary, ParallelSafe: true}
