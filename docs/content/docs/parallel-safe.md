@@ -39,6 +39,8 @@ Finding the profiles needs the AWS CLI v2 and jq; it is done by `aws-vault-colle
 
 The run signs in to each start URL once through your browser. Pass `--store-dir DIR` to keep the temporary store, so a second run reuses its OIDC tokens and sessions.
 
+IAM Identity Center never issues a token that outlives your portal session, and approving a sign-in in a browser that is already signed in keeps the existing session. Before a long run, sign out of the AWS access portals, or let their sessions expire, so that every token lasts the full session duration.
+
 ## Limitations
 
 - Waiting processes have no time limit: they wait as long as the lock holder is working, which can include a browser sign-in or an MFA or keychain prompt, and print a "Waiting for … lock" message while they do. A lock is released as soon as its holder exits, so a crashed process cannot leave it held. If a lock holder hangs (e.g. a stuck `gpg` subprocess in the `pass` backend), stop it or press Ctrl-C in the waiting process.
