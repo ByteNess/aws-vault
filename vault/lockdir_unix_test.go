@@ -15,9 +15,16 @@ import (
 
 func setRuntimeDir(t *testing.T, dir string) {
 	t.Helper()
+	t.Cleanup(xdg.Reload)
 	t.Setenv("XDG_RUNTIME_DIR", dir)
 	xdg.Reload()
-	t.Cleanup(xdg.Reload)
+}
+
+func setFallbackLockBase(t *testing.T, base string) {
+	t.Helper()
+	previous := fallbackLockBase
+	fallbackLockBase = base
+	t.Cleanup(func() { fallbackLockBase = previous })
 }
 
 func TestEnsurePrivateDirCreatesOwnerOnlyDir(t *testing.T) {
@@ -85,11 +92,18 @@ func TestLockDirFallsBackToPerUserTmpDir(t *testing.T) {
 	if err := os.Chmod(worldWritable, 0o777); err != nil {
 		t.Fatal(err)
 	}
-	want := fmt.Sprintf("/tmp/aws-vault-%d", os.Getuid())
+	groupWritable := t.TempDir()
+	if err := os.Chmod(groupWritable, 0o770); err != nil {
+		t.Fatal(err)
+	}
+	base := t.TempDir()
+	setFallbackLockBase(t, base)
+	want := filepath.Join(base, fmt.Sprintf("aws-vault-%d", os.Getuid()))
 
 	for name, runtimeDir := range map[string]string{
 		"missing":        filepath.Join(t.TempDir(), "missing"),
 		"world-writable": worldWritable,
+		"group-writable": groupWritable,
 	} {
 		t.Run(name, func(t *testing.T) {
 			setRuntimeDir(t, runtimeDir)
