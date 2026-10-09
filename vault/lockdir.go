@@ -27,7 +27,7 @@ func usableRuntimeDir(dir string) (string, bool) {
 		return "", false
 	}
 	fi, err := os.Stat(dir)
-	if err != nil || !fi.IsDir() || isWorldWritable(fi) {
+	if err != nil || !fi.IsDir() || !isPrivateToUser(fi) {
 		return "", false
 	}
 	return dir, true

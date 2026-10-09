@@ -11,8 +11,8 @@ func fallbackLockDir() (string, error) {
 	return "", errors.New("no runtime directory is available for lock files")
 }
 
-func isWorldWritable(os.FileInfo) bool {
-	return false
+func isPrivateToUser(os.FileInfo) bool {
+	return true
 }
 
 func ensurePrivateDir(dir string) (string, error) {

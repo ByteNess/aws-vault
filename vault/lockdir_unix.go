@@ -9,12 +9,18 @@ import (
 	"syscall"
 )
 
+var fallbackLockBase = "/tmp"
+
 func fallbackLockDir() (string, error) {
-	return filepath.Join("/tmp", fmt.Sprintf("aws-vault-%d", os.Getuid())), nil
+	return filepath.Join(fallbackLockBase, fmt.Sprintf("aws-vault-%d", os.Getuid())), nil
 }
 
-func isWorldWritable(fi os.FileInfo) bool {
-	return fi.Mode().Perm()&0o002 != 0
+func isPrivateToUser(fi os.FileInfo) bool {
+	if fi.Mode().Perm()&0o022 != 0 {
+		return false
+	}
+	st, ok := fi.Sys().(*syscall.Stat_t)
+	return !ok || int(st.Uid) == os.Getuid()
 }
 
 func ensurePrivateDir(dir string) (string, error) {
