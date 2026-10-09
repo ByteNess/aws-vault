@@ -651,25 +651,15 @@ func mfaDetails(mfaChained bool, config *ProfileConfig) string {
 	return ""
 }
 
-// TempCredentialsOptions controls how temporary credential providers are created.
-type TempCredentialsOptions struct {
-	ParallelSafe bool
-}
-
 // NewTempCredentialsProvider creates a credential provider for the given config
 // using a separate keyring for cached sessions.
-func NewTempCredentialsProvider(config *ProfileConfig, credentialsKeyring *CredentialKeyring, sessionKeyring keyring.Keyring, disableSessions bool, disableCache bool) (aws.CredentialsProvider, error) {
-	return NewTempCredentialsProviderWithOptions(config, credentialsKeyring, sessionKeyring, disableSessions, disableCache, TempCredentialsOptions{})
-}
-
-// NewTempCredentialsProviderWithOptions creates a credential provider for the given config with options.
-func NewTempCredentialsProviderWithOptions(config *ProfileConfig, credentialsKeyring *CredentialKeyring, sessionKeyring keyring.Keyring, disableSessions bool, disableCache bool, options TempCredentialsOptions) (aws.CredentialsProvider, error) {
+func NewTempCredentialsProvider(config *ProfileConfig, credentialsKeyring *CredentialKeyring, sessionKeyring keyring.Keyring, disableSessions bool, disableCache bool, parallelSafe bool) (aws.CredentialsProvider, error) {
 	t := TempCredentialsCreator{
 		Keyring:         credentialsKeyring,
 		SessionKeyring:  sessionKeyring,
 		DisableSessions: disableSessions,
 		DisableCache:    disableCache,
-		ParallelSafe:    options.ParallelSafe,
+		ParallelSafe:    parallelSafe,
 	}
 	return t.GetProviderForProfile(config)
 }

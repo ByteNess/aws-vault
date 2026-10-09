@@ -60,7 +60,7 @@ web_identity_token_process = oidccli raw
 	}
 
 	ckr := newSeededKeyring(t, "")
-	p, err := vault.NewTempCredentialsProvider(config, ckr, ckr.Keyring, true, true)
+	p, err := vault.NewTempCredentialsProvider(config, ckr, ckr.Keyring, true, true, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ region=us-east-1
 
 	credentials := newSeededKeyring(t, "source")
 	sessions := keyring.NewArrayKeyring(nil)
-	p, err := vault.NewTempCredentialsProvider(config, credentials, sessions, false, false)
+	p, err := vault.NewTempCredentialsProvider(config, credentials, sessions, false, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -191,7 +191,7 @@ role_arn=arn:aws:iam::12345678901:role/allow-view-only-access-from-other-account
 	}
 
 	ckr := newSeededKeyring(t, "")
-	p, err := vault.NewTempCredentialsProvider(config, ckr, ckr.Keyring, true, true)
+	p, err := vault.NewTempCredentialsProvider(config, ckr, ckr.Keyring, true, true, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -238,7 +238,7 @@ sso_registration_scopes=sso:account:access
 	}
 
 	ckr := newSeededKeyring(t, "")
-	p, err := vault.NewTempCredentialsProvider(config, ckr, ckr.Keyring, true, true)
+	p, err := vault.NewTempCredentialsProvider(config, ckr, ckr.Keyring, true, true, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -275,7 +275,7 @@ mfa_serial=arn:aws:iam::111111111111:mfa/user
 
 	buf := captureLogs(t)
 
-	_, err = vault.NewTempCredentialsProvider(config, ckr, ckr.Keyring, false, true)
+	_, err = vault.NewTempCredentialsProvider(config, ckr, ckr.Keyring, false, true, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -319,7 +319,7 @@ mfa_serial=arn:aws:iam::111111111111:mfa/user
 
 	buf := captureLogs(t)
 
-	_, err = vault.NewTempCredentialsProvider(config, ckr, ckr.Keyring, false, true)
+	_, err = vault.NewTempCredentialsProvider(config, ckr, ckr.Keyring, false, true, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -364,7 +364,7 @@ source_profile=source
 
 	buf := captureLogs(t)
 
-	_, err = vault.NewTempCredentialsProvider(config, ckr, ckr.Keyring, false, true)
+	_, err = vault.NewTempCredentialsProvider(config, ckr, ckr.Keyring, false, true, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -419,7 +419,7 @@ duration_seconds=7200
 
 	buf := captureLogs(t)
 
-	_, err = vault.NewTempCredentialsProvider(config, ckr, ckr.Keyring, false, true)
+	_, err = vault.NewTempCredentialsProvider(config, ckr, ckr.Keyring, false, true, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -475,7 +475,7 @@ mfa_serial=arn:aws:iam::111111111111:mfa/user
 
 	buf := captureLogs(t)
 
-	_, err = vault.NewTempCredentialsProvider(config, ckr, ckr.Keyring, false, true)
+	_, err = vault.NewTempCredentialsProvider(config, ckr, ckr.Keyring, false, true, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -539,7 +539,7 @@ role_arn=arn:aws:iam::111111111111:role/target
 
 	buf := captureLogs(t)
 
-	_, err = vault.NewTempCredentialsProvider(config, ckr, ckr.Keyring, false, true)
+	_, err = vault.NewTempCredentialsProvider(config, ckr, ckr.Keyring, false, true, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -601,7 +601,7 @@ role_arn=arn:aws:iam::111111111111:role/target
 
 	buf := captureLogs(t)
 
-	_, err = vault.NewTempCredentialsProvider(config, ckr, ckr.Keyring, false, true)
+	_, err = vault.NewTempCredentialsProvider(config, ckr, ckr.Keyring, false, true, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -654,7 +654,7 @@ role_arn=arn:aws:iam::111111111111:role/target
 
 	buf := captureLogs(t)
 
-	_, err = vault.NewTempCredentialsProvider(config, ckr, ckr.Keyring, false, true)
+	_, err = vault.NewTempCredentialsProvider(config, ckr, ckr.Keyring, false, true, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -717,7 +717,7 @@ role_session_name=user
 
 	buf := captureLogs(t)
 
-	_, err = vault.NewTempCredentialsProvider(config, ckr, ckr.Keyring, false, true)
+	_, err = vault.NewTempCredentialsProvider(config, ckr, ckr.Keyring, false, true, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -945,13 +945,13 @@ func TestTempCredentialsProviderParallelSafeGetSessionToken(t *testing.T) {
 	ckr := &vault.CredentialKeyring{Keyring: keyring.NewArrayKeyring([]keyring.Item{
 		{Key: "creds", Data: []byte(`{"AccessKeyID":"AKIAIOSFODNN7EXAMPLE","SecretAccessKey":"secret"}`)},
 	})}
-	provider, err := vault.NewTempCredentialsProviderWithOptions(
+	provider, err := vault.NewTempCredentialsProvider(
 		config,
 		ckr,
 		nil,
 		false,
 		false,
-		vault.TempCredentialsOptions{ParallelSafe: true},
+		true,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -987,13 +987,13 @@ func TestTempCredentialsProviderParallelSafeAssumeRole(t *testing.T) {
 	ckr := &vault.CredentialKeyring{Keyring: keyring.NewArrayKeyring([]keyring.Item{
 		{Key: "source", Data: []byte(`{"AccessKeyID":"AKIAIOSFODNN7EXAMPLE","SecretAccessKey":"secret"}`)},
 	})}
-	provider, err := vault.NewTempCredentialsProviderWithOptions(
+	provider, err := vault.NewTempCredentialsProvider(
 		config,
 		ckr,
 		nil,
 		true, // disableSessions: skip GetSessionToken so AssumeRole gets the MFA
 		false,
-		vault.TempCredentialsOptions{ParallelSafe: true},
+		true,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -1022,13 +1022,13 @@ func TestTempCredentialsProviderParallelSafeSSOLocks(t *testing.T) {
 	}
 
 	ckr := &vault.CredentialKeyring{Keyring: keyring.NewArrayKeyring([]keyring.Item{})}
-	provider, err := vault.NewTempCredentialsProviderWithOptions(
+	provider, err := vault.NewTempCredentialsProvider(
 		config,
 		ckr,
 		nil,
 		false,
 		false,
-		vault.TempCredentialsOptions{ParallelSafe: true},
+		true,
 	)
 	if err != nil {
 		t.Fatal(err)
