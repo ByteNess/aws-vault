@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"log"
 	"path/filepath"
 	"sync"
 	"time"
@@ -87,11 +88,28 @@ func (l *defaultProcessLock) Unlock() error {
 	return err
 }
 
+func lockWaiting(lock ProcessLock, name string, warnAfter time.Duration, logf lockLogger) error {
+	locked, err := lock.TryLock()
+	if err != nil || locked {
+		return err
+	}
+
+	path := lock.Path()
+	if logf != nil {
+		logf("Waiting for %s lock at %s", name, path)
+	}
+	warning := time.AfterFunc(warnAfter, func() {
+		warnToStderr("Waiting for %s lock at %s\n", name, path)
+	})
+	defer warning.Stop()
+	return lock.Lock()
+}
+
 // WithKeyringLock runs fn while holding the cross-process keyring lock for
 // lockKey, the lock NewLockedKeyring takes for each keyring operation.
 func WithKeyringLock(lockKey string, fn func() error) error {
 	lock := NewDefaultLock(keyringLockPrefix, lockKey)
-	if err := lock.Lock(); err != nil {
+	if err := lockWaiting(lock, "keyring", defaultKeyringLockWarnAfter, log.Printf); err != nil {
 		return err
 	}
 	_, err := runLocked(lock, "keyring", func() (struct{}, error) {
