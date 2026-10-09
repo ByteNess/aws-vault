@@ -142,34 +142,6 @@ func TestParallelSafeSeparateSessionKeyringIsLocked(t *testing.T) {
 	}
 }
 
-func TestRawKeyringsSkipParallelSafeLock(t *testing.T) {
-	primary := keyring.NewArrayKeyring(nil)
-	separate := keyring.NewArrayKeyring(nil)
-	a := &AwsVault{
-		keyringImpl:           primary,
-		sessionKeyringImpl:    separate,
-		SessionKeyringBackend: "file",
-		ParallelSafe:          true,
-	}
-
-	credentials, sessions, err := a.RawKeyrings()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if credentials != primary || sessions != separate {
-		t.Fatal("expected RawKeyrings to return the unwrapped keyrings")
-	}
-
-	a = &AwsVault{keyringImpl: primary, ParallelSafe: true}
-	credentials, sessions, err = a.RawKeyrings()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if credentials != primary || sessions != primary {
-		t.Fatal("expected RawKeyrings to return the unwrapped primary keyring for sessions by default")
-	}
-}
-
 func TestSessionKeyringOverridesConfigured(t *testing.T) {
 	tests := []struct {
 		name      string

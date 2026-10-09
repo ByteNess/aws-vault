@@ -17,16 +17,14 @@ The `--parallel-safe` flag (or `AWS_VAULT_PARALLEL_SAFE=true`) enables cross-pro
 
 This applies to **all backends** (keychain, file, pass, secret-service, etc.).
 
+It applies to every command that reads or writes credentials: `exec`, `export`, `login`, and `rotate`.
+
 Lock files live in a per-user directory: `$XDG_RUNTIME_DIR/aws-vault` (on Linux, `/run/user/$UID/aws-vault` when `XDG_RUNTIME_DIR` is unset), or the per-user temporary directory on macOS and Windows. On Linux and other Unix systems without a runtime directory, aws-vault uses `/tmp/aws-vault-$UID` and refuses to use it unless it is a directory owned by the current user with `0700` permissions.
 
 ## Trade-offs
 
 - Keyring operations are serialized, which adds a small amount of latency per operation. In practice this is negligible because the operations themselves are fast.
 - **All concurrent invocations must use `--parallel-safe`**. If some processes enable it and others don't, the unprotected processes ignore the locks entirely. This is undefined behavior and may still cause races. Set `AWS_VAULT_PARALLEL_SAFE=true` in your environment to ensure consistent use.
-
-## The `login` command
-
-The `login` command is intentionally excluded from `--parallel-safe`. Console login sessions are inherently single-use — you cannot meaningfully log in to multiple AWS consoles in parallel — so there is no concurrent-access problem for `--parallel-safe` to solve. The `exec`, `export`, and `rotate` commands all support `--parallel-safe`.
 
 ## Limitations
 

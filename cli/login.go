@@ -31,16 +31,13 @@ type loginCommandInput struct {
 	SessionDuration time.Duration
 	NoSession       bool
 	AutoLogout      bool
+	ParallelSafe    bool
 }
 
 // ConfigureLoginCommand registers the login command.
 func ConfigureLoginCommand(app *kingpin.Application, a *AwsVault) {
 	input := loginCommandInput{}
 
-	// NOTE: login intentionally does not use --parallel-safe. The login command
-	// opens a browser for an interactive console session — you cannot meaningfully
-	// log in to multiple AWS consoles in parallel, so there is no concurrent-access
-	// problem for --parallel-safe to solve here.
 	cmd := app.Command("login", "Generate a login link for the AWS Console.")
 
 	cmd.Flag("duration", "Duration of the assume-role or federated session. Defaults to 1h").
@@ -94,10 +91,8 @@ func ConfigureLoginCommand(app *kingpin.Application, a *AwsVault) {
 		// --stdout is for the console URL only, not SSOUseStdout.
 		input.Config.SSOUseDeviceCode = input.UseDeviceCode
 		input.Config.SSOBrowser = input.Browser
-		// Login uses the raw keyrings without the parallel-safe lock wrapper.
-		// Console login is inherently single-use — there's no concurrent-access
-		// problem for --parallel-safe to solve here.
-		keyring, sessionKeyring, err := a.RawKeyrings()
+		input.ParallelSafe = a.ParallelSafe
+		keyring, sessionKeyring, err := a.Keyrings()
 		if err != nil {
 			return err
 		}
@@ -141,6 +136,7 @@ func getCredsProvider(input loginCommandInput, config *vault.ProfileConfig, f *v
 				SessionKeyring:            sessionKeyring,
 				DisableSessions:           input.NoSession,
 				DisableSessionsForProfile: config.ProfileName,
+				ParallelSafe:              input.ParallelSafe,
 			}
 			credsProvider, err = t.GetProviderForProfile(config)
 			if err != nil {
@@ -159,6 +155,7 @@ func getCredsProvider(input loginCommandInput, config *vault.ProfileConfig, f *v
 			SessionKeyring:            sessionKeyring,
 			DisableSessions:           input.NoSession,
 			DisableSessionsForProfile: config.ProfileName,
+			ParallelSafe:              input.ParallelSafe,
 		}
 		credsProvider, err = t.GetProviderForProfile(config)
 		if err != nil {
