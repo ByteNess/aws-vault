@@ -2,17 +2,20 @@
 
 show_help() {
   cat <<'EOF'
-Usage: aws-vault-collect-sso-profiles.sh [options] START_URL=REGION...
+Usage: aws-vault-collect-sso-profiles.sh [options] --sso-start-url URL...
+       aws-vault-collect-sso-profiles.sh [options] --sso-start-urls-from-config
 
 Write an AWS config file with a profile for every account and role reachable
 through the given IAM Identity Center start URLs.
 
-Arguments:
-  START_URL=REGION     A start URL and the region of its Identity Center
-                       instance, e.g.
-                       https://d-1234567890.awsapps.com/start=us-east-1
-
 Options:
+  --sso-start-url URL  A start URL, with the region of its Identity Center
+                       instance as a region query parameter, e.g.
+                       'https://d-1234567890.awsapps.com/start?region=us-east-1'.
+                       Repeat for more start URLs.
+  --sso-start-urls-from-config
+                       Use every sso_start_url and sso_region pair in the AWS
+                       config file ($AWS_CONFIG_FILE, or ~/.aws/config)
   --role NAME          Only include roles named NAME (default: every role)
   --output FILE        Config file to write (default: ./aws-vault-sso-profiles.config)
   --parallel N         Concurrent list-account-roles calls (default: 10)
@@ -41,6 +44,64 @@ role=''
 output='aws-vault-sso-profiles.config'
 parallel=10
 directories=()
+from_config=''
+
+add_start_url() {
+  local url=$1 base query param region='' rest=()
+  base=${url%%\?*}
+  query=''
+  if [[ $url == *\?* ]]
+  then
+    query=${url#*\?}
+  fi
+  local IFS='&'
+  for param in $query
+  do
+    case $param in
+      region=*)
+        region=${param#region=}
+        ;;
+      ?*)
+        rest+=("$param")
+        ;;
+    esac
+  done
+  if [[ -z $region ]]
+  then
+    printf "Missing ?region=REGION in --sso-start-url '%s'\n" "$url" >&2
+    usage
+    exit 1
+  fi
+  if (( 0 < ${#rest[@]} ))
+  then
+    base="$base?${rest[*]}"
+  fi
+  directories+=("$base=$region")
+}
+
+start_urls_from_config() {
+  local config=${AWS_CONFIG_FILE:-$HOME/.aws/config}
+  if [[ ! -r $config ]]
+  then
+    die "cannot read AWS config file '$config'"
+  fi
+  awk '
+    function flush() {
+      if (url != "" && region != "" && !seen[url]++) print url "=" region
+      url = ""; region = ""
+    }
+    /^[[:space:]]*\[/ { flush(); next }
+    {
+      line = $0
+      sub(/^[[:space:]]+/, "", line)
+      key = line; sub(/[[:space:]]*=.*/, "", key)
+      value = line; sub(/^[^=]*=[[:space:]]*/, "", value); sub(/[[:space:]]+$/, "", value)
+      if (key == "sso_start_url") url = value
+      else if (key == "sso_region") region = value
+    }
+    END { flush() }
+  ' "$config"
+}
 
 while (( 0 < $# ))
 do
@@ -61,23 +122,37 @@ do
       parallel=${2-}
       shift 2
       ;;
-    -*)
-      printf "Unknown option '%s'\n" "$1" >&2
-      usage
-      exit 1
+    --sso-start-url)
+      add_start_url "${2-}"
+      shift 2
       ;;
-    *=*)
-      directories+=("$1")
+    --sso-start-url=*)
+      add_start_url "${1#--sso-start-url=}"
+      shift
+      ;;
+    --sso-start-urls-from-config)
+      from_config=1
       shift
       ;;
     *)
-      printf "Expected START_URL=REGION, got '%s'\n" "$1" >&2
+      printf "Unknown argument '%s'\n" "$1" >&2
       usage
       exit 1
       ;;
   esac
 done
 
+if [[ -n $from_config ]]
+then
+  while IFS= read -r directory
+  do
+    directories+=("$directory")
+  done < <(start_urls_from_config)
+  if (( 0 == ${#directories[@]} ))
+  then
+    die "no sso_start_url and sso_region pairs in ${AWS_CONFIG_FILE:-$HOME/.aws/config}"
+  fi
+fi
 if (( 0 == ${#directories[@]} ))
 then
   usage
@@ -171,6 +246,18 @@ list_roles() {
     aws sso list-account-roles --access-token "$token" --account-id "$account_id" --output json
 }
 export -f list_roles
+
+seen=$'\n'
+unique=()
+for directory in "${directories[@]}"
+do
+  if [[ $seen != *$'\n'"$directory"$'\n'* ]]
+  then
+    unique+=("$directory")
+    seen+="$directory"$'\n'
+  fi
+done
+directories=("${unique[@]}")
 
 : > "$tmpdir/roles.tsv"
 failures=0
