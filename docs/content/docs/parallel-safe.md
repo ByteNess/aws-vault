@@ -19,7 +19,7 @@ This applies to **all backends** (keychain, file, pass, secret-service, etc.).
 
 It applies to every command that reads or writes credentials: `exec`, `export`, `login`, and `rotate`.
 
-Lock files live in a per-user directory: `$XDG_RUNTIME_DIR/aws-vault` (on Linux, `/run/user/$UID/aws-vault` when `XDG_RUNTIME_DIR` is unset), or the per-user temporary directory on macOS and Windows. On Linux and other Unix systems without a runtime directory, aws-vault uses `/tmp/aws-vault-$UID` and refuses to use it unless it is a directory owned by the current user with `0700` permissions.
+Lock files live in `aws-vault` under the runtime directory: `$XDG_RUNTIME_DIR` if it is set, otherwise `/run/user/$UID` on Linux and the per-user temporary directory on macOS and Windows. The runtime directory must belong to the current user and be writable only by them. If it is missing or isn't private, aws-vault uses `/tmp/aws-vault-$UID` instead, and refuses to use that unless it is a directory owned by the current user with `0700` permissions.
 
 ## Trade-offs
 
