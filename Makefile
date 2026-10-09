@@ -21,8 +21,12 @@ build: aws-vault
 endif
 
 check-fmt: ## Fail if any Go files need gofmt
-	@files=$$(go list -f '{{$$d := .Dir}}{{range .GoFiles}}{{$$d}}/{{.}} {{end}}{{range .CgoFiles}}{{$$d}}/{{.}} {{end}}{{range .TestGoFiles}}{{$$d}}/{{.}} {{end}}{{range .XTestGoFiles}}{{$$d}}/{{.}} {{end}}{{range .IgnoredGoFiles}}{{$$d}}/{{.}} {{end}}' ./...) || exit 1; \
-	out=$$(gofmt -l $$files) || exit 1; \
+	@files=$$(go list -f '{{$$d := .Dir}}{{range .GoFiles}}{{$$d}}/{{.}}{{"\n"}}{{end}}{{range .CgoFiles}}{{$$d}}/{{.}}{{"\n"}}{{end}}{{range .TestGoFiles}}{{$$d}}/{{.}}{{"\n"}}{{end}}{{range .XTestGoFiles}}{{$$d}}/{{.}}{{"\n"}}{{end}}{{range .IgnoredGoFiles}}{{$$d}}/{{.}}{{"\n"}}{{end}}' ./...) || exit 1; \
+	if [ -z "$$files" ]; then \
+		echo "go list found no Go files to check."; \
+		exit 1; \
+	fi; \
+	out=$$(printf '%s\n' "$$files" | tr '\n' '\0' | xargs -0 gofmt -l) || exit 1; \
 	if [ -n "$$out" ]; then \
 		echo "The following files are not gofmt'd:"; \
 		echo "$$out"; \
