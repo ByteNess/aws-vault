@@ -67,3 +67,23 @@ func TestSyncOIDCTokenToStandardCacheWritesClientRegistration(t *testing.T) {
 		t.Error("expiresAt missing")
 	}
 }
+
+func TestSyncOIDCTokenToStandardCacheKeepsExpiredToken(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	kr := keyring.NewArrayKeyring(nil)
+	startURL := "https://example.awsapps.com/start"
+	err := (vault.OIDCTokenKeyring{Keyring: kr}).Set(startURL, &vault.OIDCTokenData{
+		Token: ssooidc.CreateTokenOutput{AccessToken: aws.String("expired"), ExpiresIn: -60},
+	})
+	if err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+
+	config := &vault.ProfileConfig{SSOStartURL: startURL}
+	if err := vault.SyncOIDCTokenToStandardCache(config, kr); err == nil {
+		t.Fatal("expected an error for an expired token")
+	}
+	if _, err := kr.Get("oidc:" + startURL); err != nil {
+		t.Fatalf("syncing removed the cached token: %v", err)
+	}
+}
