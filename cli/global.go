@@ -163,6 +163,20 @@ func (a *AwsVault) Keyring() (keyring.Keyring, error) {
 	return a.lockedKeyringImpl, nil
 }
 
+func (a *AwsVault) openKeyring(backend string, config keyring.Config) (keyring.Keyring, error) {
+	if !a.ParallelSafe {
+		return keyring.Open(config)
+	}
+
+	var kr keyring.Keyring
+	err := vault.WithKeyringLock(keyringLockKey(backend, config), func() error {
+		var err error
+		kr, err = keyring.Open(config)
+		return err
+	})
+	return kr, err
+}
+
 func (a *AwsVault) rawKeyring() (keyring.Keyring, error) {
 	if a.keyringImpl == nil {
 		if a.KeyringBackend != "" {
@@ -170,7 +184,7 @@ func (a *AwsVault) rawKeyring() (keyring.Keyring, error) {
 		}
 		var err error
 		log.Println("Opening primary keyring")
-		a.keyringImpl, err = keyring.Open(a.KeyringConfig)
+		a.keyringImpl, err = a.openKeyring(a.KeyringBackend, a.KeyringConfig)
 		if err != nil {
 			return nil, err
 		}
@@ -287,7 +301,7 @@ func (a *AwsVault) rawSessionKeyring() (keyring.Keyring, error) {
 
 		var err error
 		log.Println("Opening session keyring")
-		a.sessionKeyringImpl, err = keyring.Open(config)
+		a.sessionKeyringImpl, err = a.openKeyring(a.sessionKeyringBackend(), config)
 		if err != nil {
 			return nil, err
 		}
