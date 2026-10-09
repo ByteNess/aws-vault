@@ -45,26 +45,11 @@ func (k *lockedKeyring) withLock(fn func() error) error {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 
-	locked, err := k.lock.TryLock()
-	if err != nil {
+	if err := lockWaiting(k.lock, "keyring", k.warnAfter, k.lockLogf); err != nil {
 		return err
 	}
-	if !locked {
-		path := k.lock.Path()
-		if k.lockLogf != nil {
-			k.lockLogf("Waiting for keyring lock at %s", path)
-		}
-		warning := time.AfterFunc(k.warnAfter, func() {
-			warnToStderr("Waiting for keyring lock at %s\n", path)
-		})
-		err = k.lock.Lock()
-		warning.Stop()
-		if err != nil {
-			return err
-		}
-	}
 
-	_, err = runLocked(k.lock, "keyring", func() (struct{}, error) {
+	_, err := runLocked(k.lock, "keyring", func() (struct{}, error) {
 		return struct{}{}, fn()
 	})
 	return err
