@@ -174,7 +174,7 @@ func NewSSORoleCredentialsProvider(oidcKeyring, sessionKeyring keyring.Keyring, 
 	}
 	ssoRoleCredentialsProvider.initSSODefaults()
 	if parallelSafe {
-		ssoRoleCredentialsProvider.EnableSSOTokenLock()
+		ssoRoleCredentialsProvider.EnableParallelSafe()
 	}
 
 	if useSessionCache {
