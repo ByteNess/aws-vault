@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/AlecAivazis/survey/v2"
@@ -197,10 +198,18 @@ func (a *AwsVault) rawKeyring() (keyring.Keyring, error) {
 	return a.keyringImpl, nil
 }
 
-// keyringLockKey returns a backend-specific key for the cross-process keyring
-// lock. Different backends (and different configurations of the same backend)
-// produce different keys so they don't contend on the same lock file.
+// keyringLockKey returns a key for the cross-process keyring lock that
+// identifies the underlying store, so that processes using the same store
+// share a lock however they specify it, and different stores don't contend.
 func keyringLockKey(backend string, config keyring.Config) string {
+	if backend == "" {
+		backends := keyring.AvailableBackends()
+		if len(backends) == 0 {
+			return "aws-vault"
+		}
+		backend = string(backends[0])
+	}
+
 	switch keyring.BackendType(backend) {
 	case keyring.KeychainBackend:
 		if config.KeychainName != "" {
@@ -208,17 +217,12 @@ func keyringLockKey(backend string, config keyring.Config) string {
 		}
 	case keyring.FileBackend:
 		if config.FileDir != "" {
-			return backend + ":" + config.FileDir
+			return backend + ":" + canonicalStoreDir(config.FileDir, "", "")
 		}
 	case keyring.PassBackend:
-		key := backend
-		if config.PassDir != "" {
-			key += ":" + config.PassDir
-		}
-		if config.PassPrefix != "" {
-			key += ":" + config.PassPrefix
-		}
-		return key
+		return backend + ":" + canonicalStoreDir(config.PassDir, "PASSWORD_STORE_DIR", ".password-store")
+	case keyring.PassageBackend:
+		return backend + ":" + canonicalStoreDir(config.PassDir, "PASSAGE_DIR", filepath.Join(".passage", "store"))
 	case keyring.SecretServiceBackend:
 		if config.LibSecretCollectionName != "" {
 			return backend + ":" + config.LibSecretCollectionName
@@ -236,14 +240,28 @@ func keyringLockKey(backend string, config keyring.Config) string {
 			return backend + ":" + config.OPVaultID
 		}
 	}
-	// Fall back to backend name alone. When backend is empty (auto-selected),
-	// all configs share the "aws-vault" lock key. This is overly conservative
-	// (more contention) but safe — we can't know which backend the keyring
-	// library will pick, so we can't incorporate backend-specific config.
-	if backend != "" {
-		return backend
+	return backend
+}
+
+// canonicalStoreDir resolves a store directory the way the keyring backends
+// do: an empty dir falls back to envVar, then to homeRel under the home
+// directory, and ~ is expanded. The result is absolute and clean.
+func canonicalStoreDir(dir, envVar, homeRel string) string {
+	if dir == "" && envVar != "" {
+		dir = os.Getenv(envVar)
 	}
-	return "aws-vault"
+	if dir == "" && homeRel != "" {
+		if home, err := os.UserHomeDir(); err == nil {
+			dir = filepath.Join(home, homeRel)
+		}
+	}
+	if expanded, err := keyring.ExpandTilde(dir); err == nil {
+		dir = expanded
+	}
+	if abs, err := filepath.Abs(dir); err == nil {
+		dir = abs
+	}
+	return filepath.Clean(dir)
 }
 
 func (a *AwsVault) hasSeparateSessionKeyring() bool {
