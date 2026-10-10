@@ -495,3 +495,40 @@ func TestRemoveSessionsForProfileSharedKeyring(t *testing.T) {
 		t.Fatalf("removeSessionsForProfile = %d, %v, want 1", n, err)
 	}
 }
+
+// With --parallel-safe a separate session keyring takes the keyring lock too:
+// the session cache is what parallel processes write most. Without the flag
+// nothing is locked. The lock is observed through the file it creates.
+func TestSessionKeyringIsLockedWhenParallelSafe(t *testing.T) {
+	for _, parallelSafe := range []bool{false, true} {
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+		t.Setenv("LocalAppData", filepath.Join(home, "AppData", "Local"))
+		cacheDir, err := os.UserCacheDir()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		a := &AwsVault{
+			ParallelSafe:          parallelSafe,
+			SessionKeyringBackend: string(keyring.FileBackend),
+			KeyringConfig: keyring.Config{
+				FileDir:          filepath.Join(home, "sessions"),
+				FilePasswordFunc: keyring.FixedStringPrompt("test"),
+			},
+		}
+		sessions, err := a.SessionKeyring()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := sessions.Set(keyring.Item{Key: "session", Data: []byte("{}")}); err != nil {
+			t.Fatal(err)
+		}
+
+		locks, _ := filepath.Glob(filepath.Join(cacheDir, "aws-vault", "locks", "aws-vault.keyring.*.lock"))
+		if got := len(locks) > 0; got != parallelSafe {
+			t.Errorf("parallelSafe=%t: session keyring write took a lock = %t", parallelSafe, got)
+		}
+	}
+}

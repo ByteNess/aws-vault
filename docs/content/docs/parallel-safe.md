@@ -13,7 +13,7 @@ The `--parallel-safe` flag (or `AWS_VAULT_PARALLEL_SAFE=true`) enables cross-pro
 
 - **SSO token lock**: Only one process per SSO Start URL opens a browser tab; others wait for the cached token.
 - **Session cache lock**: Only one process writes back to a given session cache entry at a time.
-- **Keyring lock**: All keyring read/write operations are serialized across processes.
+- **Keyring lock**: All keyring read/write operations are serialized across processes. A separate session keyring (`--session-backend` or the session overrides) gets its own lock, so the two stores do not wait on each other.
 
 This applies to **all backends** (keychain, file, pass, secret-service, etc.).
 
