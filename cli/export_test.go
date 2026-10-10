@@ -13,7 +13,7 @@ func Example_exportCommand() {
 
 	app := kingpin.New("aws-vault", "")
 	awsVault := ConfigureGlobals(app)
-	awsVault.keyringImpl = keyring.NewArrayKeyring([]keyring.Item{
+	awsVault.rawKeyringImpl = keyring.NewArrayKeyring([]keyring.Item{
 		{Key: "llamas", Data: []byte(`{"AccessKeyID":"ABC","SecretAccessKey":"XYZ"}`)},
 	})
 	ConfigureExportCommand(app, awsVault)
@@ -34,7 +34,7 @@ func Example_exportCommandAccountID() {
 
 	app := kingpin.New("aws-vault", "")
 	awsVault := ConfigureGlobals(app)
-	awsVault.keyringImpl = keyring.NewArrayKeyring([]keyring.Item{
+	awsVault.rawKeyringImpl = keyring.NewArrayKeyring([]keyring.Item{
 		{Key: "llamas", Data: []byte(`{"AccessKeyID":"ABC","SecretAccessKey":"XYZ"}`)},
 	})
 	ConfigureExportCommand(app, awsVault)
