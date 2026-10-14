@@ -168,9 +168,9 @@ func (p *SSORoleCredentialsProvider) getOIDCToken(ctx context.Context) (token *s
 	}
 
 	if p.OIDCTokenCache != nil {
-		err = p.OIDCTokenCache.Set(p.StartURL, data)
-		if err != nil {
-			return nil, false, err
+		// The sign-in succeeded; without the cache the next run signs in again.
+		if err := p.OIDCTokenCache.Set(p.StartURL, data); err != nil {
+			log.Printf("Caching the OIDC token for %s failed: %s", p.StartURL, err)
 		}
 	}
 	return &data.Token, false, nil
@@ -200,7 +200,7 @@ func (p *SSORoleCredentialsProvider) cachedOIDCToken(ctx context.Context, data *
 	refreshed, refreshErr := p.refreshOIDCToken(ctx, data)
 	if refreshErr == nil {
 		if err := p.OIDCTokenCache.Set(p.StartURL, refreshed); err != nil {
-			return nil, false, err
+			log.Printf("Caching the refreshed OIDC token for %s failed: %s", p.StartURL, err)
 		}
 		return &refreshed.Token, false, nil
 	}

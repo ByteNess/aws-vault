@@ -1,6 +1,8 @@
 package vault_test
 
 import (
+	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -141,5 +143,92 @@ func TestOIDCTokenKeyringFindsTokenWithCollapsedSchemeSeparator(t *testing.T) {
 	}
 	if len(keys) != 1 || keys[0] != startURL {
 		t.Errorf("Keys = %v, want [%s]", keys, startURL)
+	}
+}
+
+// winCredKeyring rejects entries over 2560 bytes like the Windows Credential
+// Manager, or every entry when failAll is set.
+type winCredKeyring struct {
+	keyring.Keyring
+	failAll bool
+	sets    int
+}
+
+func (w *winCredKeyring) Set(i keyring.Item) error {
+	w.sets++
+	if w.failAll || len(i.Data) > 5*512 {
+		return errors.New("the stub received bad data")
+	}
+	return w.Keyring.Set(i)
+}
+
+// measuredTokenData has the sizes IAM Identity Center issues.
+func measuredTokenData() *vault.OIDCTokenData {
+	return &vault.OIDCTokenData{
+		Token: ssooidc.CreateTokenOutput{
+			AccessToken:  aws.String(strings.Repeat("a", 232)),
+			RefreshToken: aws.String(strings.Repeat("r", 232)),
+			TokenType:    aws.String("Bearer"),
+			ExpiresIn:    3600,
+		},
+		ClientID:              strings.Repeat("c", 35),
+		ClientSecret:          strings.Repeat("s", 2877),
+		ClientSecretExpiresAt: time.Now().Add(90 * 24 * time.Hour),
+	}
+}
+
+func TestOIDCTokenKeyringSetStoresTokenWithoutRefreshWhenTooLarge(t *testing.T) {
+	kr := &winCredKeyring{Keyring: keyring.NewArrayKeyring(nil)}
+	tk := &vault.OIDCTokenKeyring{Keyring: kr}
+	startURL := "https://example.awsapps.com/start"
+	want := measuredTokenData()
+
+	if err := tk.Set(startURL, want); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	if kr.sets != 2 {
+		t.Errorf("Set calls = %d, want 2 (the full entry, then the token alone)", kr.sets)
+	}
+
+	got, err := tk.Get(startURL)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.Expired() || aws.ToString(got.Token.AccessToken) != aws.ToString(want.Token.AccessToken) {
+		t.Errorf("token not usable after fallback: %+v", got)
+	}
+	if got.Refreshable() || got.Token.RefreshToken != nil || got.ClientID != "" || got.ClientSecret != "" {
+		t.Errorf("fallback entry must not carry refresh material: %+v", got)
+	}
+}
+
+func TestOIDCTokenKeyringSetKeepsRefreshMaterialWhenItFits(t *testing.T) {
+	kr := keyring.NewArrayKeyring(nil)
+	tk := &vault.OIDCTokenKeyring{Keyring: kr}
+	startURL := "https://example.awsapps.com/start"
+
+	if err := tk.Set(startURL, measuredTokenData()); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	got, err := tk.Get(startURL)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if !got.Refreshable() {
+		t.Error("token should stay refreshable")
+	}
+}
+
+func TestOIDCTokenKeyringSetDoesNotRetrySmallEntries(t *testing.T) {
+	kr := &winCredKeyring{Keyring: keyring.NewArrayKeyring(nil), failAll: true}
+	tk := &vault.OIDCTokenKeyring{Keyring: kr}
+	data := measuredTokenData()
+	data.ClientSecret = "secret"
+
+	if err := tk.Set("https://example.awsapps.com/start", data); err == nil {
+		t.Fatal("Set: want the keyring error")
+	}
+	if kr.sets != 1 {
+		t.Errorf("Set calls = %d, want 1", kr.sets)
 	}
 }
