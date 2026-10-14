@@ -106,20 +106,41 @@ func (o OIDCTokenKeyring) Get(startURL string) (*OIDCTokenData, error) {
 	return &val, nil
 }
 
+// winCredMaxBlobSize is the Windows Credential Manager entry limit (CRED_MAX_CREDENTIAL_BLOB_SIZE).
+const winCredMaxBlobSize = 5 * 512
+
 // Set stores the token for startURL, computing its expiration from
-// Token.ExpiresIn relative to now.
+// Token.ExpiresIn relative to now. The client secret alone exceeds the Windows
+// Credential Manager limit, so an entry that large is stored again without
+// refresh material if it fails, and used until it expires.
 func (o OIDCTokenKeyring) Set(startURL string, data *OIDCTokenData) error {
 	val := *data
 	val.Expiration = time.Now().Add(time.Duration(val.Token.ExpiresIn) * time.Second)
 
+	size, err := o.set(startURL, val)
+	// Retry only oversized entries: a smaller one failed for another reason,
+	// such as a denied keychain prompt.
+	if err == nil || size <= winCredMaxBlobSize || (val.ClientSecret == "" && val.Token.RefreshToken == nil) {
+		return err
+	}
+	log.Printf("Storing OIDC token for '%s' (%d bytes) failed, storing it without its refresh token: %s", startURL, size, err)
+	val.Token.RefreshToken = nil
+	val.ClientID = ""
+	val.ClientSecret = ""
+	val.ClientSecretExpiresAt = time.Time{}
+	_, err = o.set(startURL, val)
+	return err
+}
+
+func (o OIDCTokenKeyring) set(startURL string, val OIDCTokenData) (size int, err error) {
 	valJSON, err := json.Marshal(val)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	// Like sessions, the OIDC token is a cache and trusts aws-vault to read it
 	// back without a keychain authorization prompt. See SessionKeyring.Set.
-	return o.Keyring.Set(keyring.Item{
+	return len(valJSON), o.Keyring.Set(keyring.Item{
 		Key:         o.fmtKey(startURL),
 		Data:        valJSON,
 		Label:       fmt.Sprintf("aws-vault oidc token for %s (expires %s)", startURL, val.Expiration.Format(time.RFC3339)),

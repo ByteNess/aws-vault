@@ -3,6 +3,7 @@ package vault
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -444,5 +445,37 @@ func TestGetOIDCTokenKeepsRefreshTokenWhenThrottled(t *testing.T) {
 				t.Errorf("device authorization started %d time(s); throttling must not open a browser", n)
 			}
 		})
+	}
+}
+
+type failingOIDCCache struct{ memOIDCCache }
+
+func (f *failingOIDCCache) Set(string, *OIDCTokenData) error {
+	return errors.New("the stub received bad data")
+}
+
+func TestGetOIDCTokenSucceedsWhenCachingFails(t *testing.T) {
+	f := &fakeOIDC{}
+	p := newTestSSOProvider(t, f, &failingOIDCCache{memOIDCCache{data: map[string]*OIDCTokenData{}}})
+
+	token, _, err := p.getOIDCToken(context.Background())
+	if err != nil {
+		t.Fatalf("getOIDCToken: %v", err)
+	}
+	if aws.ToString(token.AccessToken) != "access-1" {
+		t.Errorf("AccessToken = %q, want access-1", aws.ToString(token.AccessToken))
+	}
+}
+
+func TestRefreshSucceedsWhenCachingFails(t *testing.T) {
+	f := &fakeOIDC{}
+	p := newTestSSOProvider(t, f, &failingOIDCCache{memOIDCCache{data: map[string]*OIDCTokenData{}}})
+
+	token, _, err := p.cachedOIDCToken(context.Background(), expiredRefreshableToken())
+	if err != nil {
+		t.Fatalf("cachedOIDCToken: %v", err)
+	}
+	if aws.ToString(token.AccessToken) != "access-2" {
+		t.Errorf("AccessToken = %q, want access-2", aws.ToString(token.AccessToken))
 	}
 }
