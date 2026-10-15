@@ -227,6 +227,90 @@ func TestGetOIDCToken_LockHeldThroughCacheSet(t *testing.T) {
 	}
 }
 
+// failingSetTokenCache is a token cache whose writes always fail, such as a
+// keychain whose access prompt was denied.
+type failingSetTokenCache struct {
+	testTokenCache
+}
+
+func (c *failingSetTokenCache) Set(string, *OIDCTokenData) error {
+	c.setCalls++
+	return errors.New("the stub received bad data")
+}
+
+// The sign-in succeeded, so a cache write that fails afterwards is logged
+// rather than failing the command, as it is without the lock.
+func TestGetOIDCToken_LockedSignInSucceedsWhenCachingFails(t *testing.T) {
+	freshToken := testToken("fresh")
+	lock := &testLock{tryResults: []bool{true}}
+	cache := &failingSetTokenCache{}
+
+	p := newTestSSORoleProvider()
+	p.OIDCTokenCache = cache
+	p.ssoTokenLock = lock
+	p.UseSSOTokenLock = true
+	p.newOIDCTokenFn = func(context.Context) (*OIDCTokenData, error) {
+		return freshToken, nil
+	}
+
+	token, cached, err := p.getOIDCToken(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cached || token != &freshToken.Token {
+		t.Fatalf("expected the signed-in token")
+	}
+	if cache.setCalls != 1 {
+		t.Fatalf("expected cache set once, got %d", cache.setCalls)
+	}
+	if lock.unlockCalls != 1 {
+		t.Fatalf("expected 1 unlock, got %d", lock.unlockCalls)
+	}
+}
+
+// flakyReadTokenCache fails the first failReads reads, as a keyring does
+// when its own lock wait times out.
+type flakyReadTokenCache struct {
+	testTokenCache
+	failReads int
+}
+
+func (c *flakyReadTokenCache) Get(k string) (*OIDCTokenData, error) {
+	if 0 < c.failReads {
+		c.failReads--
+		return nil, errors.New("keyring busy")
+	}
+	return c.testTokenCache.Get(k)
+}
+
+// A cache read that fails outside the lock is not fatal: the read under the
+// lock decides.
+func TestGetOIDCToken_ReadErrorOutsideLockTriesLock(t *testing.T) {
+	cachedToken := testToken("cached")
+	lock := &testLock{tryResults: []bool{true}}
+	cache := &flakyReadTokenCache{testTokenCache: testTokenCache{token: cachedToken}, failReads: 2}
+
+	p := newTestSSORoleProvider()
+	p.OIDCTokenCache = cache
+	p.ssoTokenLock = lock
+	p.UseSSOTokenLock = true
+	p.newOIDCTokenFn = func(context.Context) (*OIDCTokenData, error) {
+		t.Fatal("newOIDCToken should not be called when the cache holds a token")
+		return nil, errUnexpectedSignIn
+	}
+
+	token, cached, err := p.getOIDCToken(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !cached || token != &cachedToken.Token {
+		t.Fatalf("expected the cached token")
+	}
+	if lock.unlockCalls != 1 {
+		t.Fatalf("expected 1 unlock, got %d", lock.unlockCalls)
+	}
+}
+
 // --stdout selects the device code flow, which starts a device authorization
 // and prints a URL per process. That is the same storm the lock exists to
 // prevent, so stdout is serialised like the browser flows rather than skipped.

@@ -272,10 +272,13 @@ func (p *SSORoleCredentialsProvider) getOIDCToken(ctx context.Context) (token *s
 
 	// With the lock, only a token that needs nothing doing is used without
 	// it. A refresh spends a single-use refresh token, so it happens under the
-	// lock just like a sign-in.
+	// lock just like a sign-in. A read that fails here is read again there.
 	token, ok, err := p.usableCachedOIDCToken()
-	if err != nil || ok {
-		return token, ok, err
+	if err != nil {
+		log.Printf("Reading cached OIDC token for %s: %v; will try lock", p.StartURL, err)
+	}
+	if ok {
+		return token, true, nil
 	}
 	return p.getOIDCTokenWithLock(ctx, "")
 }
@@ -430,7 +433,7 @@ func (p *SSORoleCredentialsProvider) getOIDCTokenWithLock(ctx context.Context, r
 	}, "SSO token", func() (processLockResult[oidcTokenResult], error) {
 		token, ok, err := p.usableCachedOIDCToken()
 		if err != nil {
-			return processLockResult[oidcTokenResult]{}, err
+			log.Printf("Reading cached OIDC token for %s: %v; will try lock", p.StartURL, err)
 		}
 		if ok && aws.ToString(token.AccessToken) != rejected {
 			return processLockResult[oidcTokenResult]{value: oidcTokenResult{token, true}, ok: true}, nil
@@ -459,8 +462,9 @@ func (p *SSORoleCredentialsProvider) getOIDCTokenWithLock(ctx context.Context, r
 		}
 
 		if p.OIDCTokenCache != nil {
-			if err = p.OIDCTokenCache.Set(p.StartURL, data); err != nil {
-				return oidcTokenResult{}, err
+			// The sign-in succeeded; without the cache the next run signs in again.
+			if err := p.OIDCTokenCache.Set(p.StartURL, data); err != nil {
+				log.Printf("Caching the OIDC token for %s failed: %s", p.StartURL, err)
 			}
 		}
 
