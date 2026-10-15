@@ -20,11 +20,13 @@ var errUnexpectedSignIn = errors.New("sign-in should not have been attempted")
 
 type testTokenCache struct {
 	token    *OIDCTokenData
+	getCalls int
 	setCalls int
 	setLock  *testLock
 }
 
 func (c *testTokenCache) Get(string) (*OIDCTokenData, error) {
+	c.getCalls++
 	if c.token == nil {
 		return nil, keyring.ErrKeyNotFound
 	}
@@ -122,10 +124,13 @@ func TestGetOIDCToken_LockDisabled_SkipsLock(t *testing.T) {
 	}
 }
 
-func TestGetOIDCToken_LockMiss_ThenCacheHit_NoLock(t *testing.T) {
+// A waiter does not read the cache while it waits: every read takes the
+// keyring lock, which the holder needs to store the token. It reads the
+// cache once it has the lock, and finds the token the holder stored.
+func TestGetOIDCToken_WaiterReadsCacheOnlyUnderLock(t *testing.T) {
 	cachedToken := testToken("cached")
 	cache := &testTokenCache{}
-	lock := &testLock{tryResults: []bool{false}}
+	lock := &testLock{tryResults: []bool{false, false, false, true}}
 	clock := &testClock{now: time.Unix(0, 0)}
 
 	p := newTestSSORoleProvider()
@@ -135,12 +140,14 @@ func TestGetOIDCToken_LockMiss_ThenCacheHit_NoLock(t *testing.T) {
 	p.ssoLockWait = 5 * time.Second
 	p.ssoNow = clock.Now
 	p.newOIDCTokenFn = func(context.Context) (*OIDCTokenData, error) {
-		t.Fatal("newOIDCToken should not be called when cache fills while waiting")
+		t.Fatal("newOIDCToken should not be called when the holder stored a token")
 		return nil, errUnexpectedSignIn
 	}
 	p.ssoSleep = func(_ context.Context, d time.Duration) error {
 		clock.now = clock.now.Add(d)
-		cache.token = cachedToken
+		if lock.tryCalls == 3 {
+			cache.token = cachedToken // the holder stores the token
+		}
 		return nil
 	}
 
@@ -154,11 +161,11 @@ func TestGetOIDCToken_LockMiss_ThenCacheHit_NoLock(t *testing.T) {
 	if token != &cachedToken.Token {
 		t.Fatalf("unexpected token returned")
 	}
-	if lock.tryCalls != 1 {
-		t.Fatalf("expected 1 lock attempt, got %d", lock.tryCalls)
+	if cache.getCalls != 2 {
+		t.Fatalf("expected 2 cache reads (before the lock and under it), got %d", cache.getCalls)
 	}
-	if lock.unlockCalls != 0 {
-		t.Fatalf("expected no unlocks, got %d", lock.unlockCalls)
+	if lock.tryCalls != 4 || lock.unlockCalls != 1 {
+		t.Fatalf("expected 4 lock attempts and 1 unlock, got %d and %d", lock.tryCalls, lock.unlockCalls)
 	}
 }
 
@@ -288,7 +295,7 @@ func (c *flakyReadTokenCache) Get(k string) (*OIDCTokenData, error) {
 func TestGetOIDCToken_ReadErrorOutsideLockTriesLock(t *testing.T) {
 	cachedToken := testToken("cached")
 	lock := &testLock{tryResults: []bool{true}}
-	cache := &flakyReadTokenCache{testTokenCache: testTokenCache{token: cachedToken}, failReads: 2}
+	cache := &flakyReadTokenCache{testTokenCache: testTokenCache{token: cachedToken}, failReads: 1}
 
 	p := newTestSSORoleProvider()
 	p.OIDCTokenCache = cache

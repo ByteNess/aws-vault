@@ -128,16 +128,7 @@ func (p *CachedSessionProvider) getSessionWithLock(ctx context.Context) (*ststyp
 		Warnf: func(format string, args ...any) {
 			fmt.Fprintf(os.Stderr, format, args...)
 		},
-	}, "session", func() (processLockResult[*ststypes.Credentials], error) {
-		creds, cached, err := p.getCachedSession()
-		if err != nil && !errors.Is(err, keyring.ErrKeyNotFound) {
-			log.Printf("Reading cached session for %s: %v; will try lock", p.SessionKey.ProfileName, err)
-		}
-		if err == nil && cached {
-			return processLockResult[*ststypes.Credentials]{value: creds, ok: true}, nil
-		}
-		return processLockResult[*ststypes.Credentials]{}, nil
-	}, func() (*ststypes.Credentials, error) {
+	}, "session", func() (*ststypes.Credentials, error) {
 		// Recheck cache after acquiring lock — another process may have filled it.
 		creds, cached, cacheErr := p.getCachedSession()
 		if cacheErr == nil && cached {

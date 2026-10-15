@@ -6,21 +6,14 @@ import (
 	"fmt"
 )
 
-// processLockResult is the result of a cache check or locked work function.
-// ok indicates whether a cached result was found.
-type processLockResult[T any] struct {
-	value T
-	ok    bool
-}
-
-// withProcessLock implements the try/sleep/recheck lock protocol.
+// withProcessLock tries the lock until it gets it, sleeping between tries,
+// and calls doWork under it, unlocking on return.
 //
-// On each iteration it calls checkCache; if that returns ok=true, the cached
-// value is returned without acquiring the lock. Otherwise it tries the lock:
-// if acquired, it calls doWork under the lock (unlocking on return). If the
-// lock is not acquired, it sleeps and retries.
-//
-// checkCache may be nil, in which case the cache check is skipped.
+// Waiting touches nothing but the lock file. Callers check their cache before
+// calling and again in doWork, under the lock, which is where they find what
+// the previous holder stored. Waiters do not poll the cache themselves: every
+// cache read takes the keyring lock, and with many waiters polling, the
+// holder's own write to the cache would queue behind their reads.
 //
 // doWork does not receive a context because ctx is typically a lock-wait
 // timeout that should NOT bound the actual work. Callers that need a context
@@ -30,22 +23,11 @@ func withProcessLock[T any](
 	lock ProcessLock,
 	waiterOpts lockWaiterOpts,
 	lockName string,
-	checkCache func() (processLockResult[T], error),
 	doWork func() (T, error),
 ) (T, error) {
 	waiter := newLockWaiter(waiterOpts)
 
 	for {
-		if checkCache != nil {
-			result, err := checkCache()
-			if err != nil {
-				var zero T
-				return zero, err
-			}
-			if result.ok {
-				return result.value, nil
-			}
-		}
 		if ctx.Err() != nil {
 			var zero T
 			return zero, ctx.Err()

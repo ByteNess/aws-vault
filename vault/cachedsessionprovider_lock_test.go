@@ -122,22 +122,39 @@ func TestCachedSession_LockDisabled_SkipsLock(t *testing.T) {
 	}
 }
 
-func TestCachedSession_LockMiss_ThenCacheHit_NoRefresh(t *testing.T) {
+// countingKeyring counts reads of the keyring underneath a SessionKeyring.
+type countingKeyring struct {
+	keyring.Keyring
+	getCalls int
+}
+
+func (k *countingKeyring) Get(key string) (keyring.Item, error) {
+	k.getCalls++
+	return k.Keyring.Get(key)
+}
+
+// A waiter does not read the session cache while it waits: every read takes
+// the keyring lock, which the holder needs to store the session. It reads
+// the cache once it has the lock, and finds the session the holder stored.
+func TestCachedSession_WaiterReadsCacheOnlyUnderLock(t *testing.T) {
 	key := newTestSessionKey()
 	creds := newTestCreds(time.Now().Add(time.Hour))
-	kr := keyring.NewArrayKeyring(nil)
+	kr := &countingKeyring{Keyring: keyring.NewArrayKeyring(nil)}
 	sk := &SessionKeyring{Keyring: kr}
-	lock := &testLock{tryResults: []bool{false}}
+	lock := &testLock{tryResults: []bool{false, false, false, true}}
 
 	provider := &testSessionProvider{
-		onRetrieve: func() { t.Fatal("RetrieveStsCredentials should not be called when cache fills while waiting") },
+		onRetrieve: func() { t.Fatal("RetrieveStsCredentials should not be called when the holder stored a session") },
 	}
 
 	p := NewCachedSessionProvider(key, provider, sk, 0, true)
 	p.sessionLock = lock
 	p.sessionLockWait = 5 * time.Second
 	p.sessionSleep = func(_ context.Context, _ time.Duration) error {
-		return sk.Set(key, creds)
+		if lock.tryCalls == 3 {
+			return sk.Set(key, creds) // the holder stores the session
+		}
+		return nil
 	}
 
 	got, err := p.RetrieveStsCredentials(context.Background())
@@ -147,8 +164,11 @@ func TestCachedSession_LockMiss_ThenCacheHit_NoRefresh(t *testing.T) {
 	if aws.ToString(got.AccessKeyId) != aws.ToString(creds.AccessKeyId) {
 		t.Fatalf("unexpected credentials returned")
 	}
-	if lock.tryCalls != 1 {
-		t.Fatalf("expected 1 lock attempt, got %d", lock.tryCalls)
+	if kr.getCalls != 2 {
+		t.Fatalf("expected 2 cache reads (before the lock and under it), got %d", kr.getCalls)
+	}
+	if lock.tryCalls != 4 || lock.unlockCalls != 1 {
+		t.Fatalf("expected 4 lock attempts and 1 unlock, got %d and %d", lock.tryCalls, lock.unlockCalls)
 	}
 	if provider.calls != 0 {
 		t.Fatalf("expected no provider calls, got %d", provider.calls)

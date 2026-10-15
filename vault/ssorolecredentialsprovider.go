@@ -295,6 +295,8 @@ func (p *SSORoleCredentialsProvider) replaceRejectedOIDCToken(ctx context.Contex
 	// Every process holding the same token is rejected at about the same
 	// time. The first may already have removed it and signed in again, so
 	// the rest remove it under the lock, and only if it is still there.
+	// The fast path in getOIDCToken would hand the rejected token back, so
+	// this goes to the lock directly.
 	return p.getOIDCTokenWithLock(ctx, aws.ToString(rejected.AccessToken))
 }
 
@@ -347,8 +349,7 @@ func (p *SSORoleCredentialsProvider) cachedOrRefreshedOIDCToken(ctx context.Cont
 // usableCachedOIDCToken returns the cached token if it can be used as it is:
 // still valid, and either outside the refresh window or not refreshable at
 // all, which is the same test cachedOIDCToken starts with. It never touches
-// the network, so it serves both as the fast path that skips the lock and as
-// the check waiters poll while the holder refreshes or signs in.
+// the network, so it serves as the fast path that skips the lock.
 func (p *SSORoleCredentialsProvider) usableCachedOIDCToken() (token *ssooidc.CreateTokenOutput, ok bool, err error) {
 	if p.OIDCTokenCache == nil {
 		return nil, false, nil
@@ -411,8 +412,8 @@ type oidcTokenResult struct {
 
 // getOIDCTokenWithLock serialises the sign-in across processes: one process
 // holds the lock and signs in (or redeems the refresh token) while the others
-// wait, re-reading the cache until the token lands. A cached token whose
-// access token is rejected is not used, and is removed under the lock.
+// wait for it, then find the token in the cache when their turn comes. A
+// cached token whose access token is rejected is removed under the lock.
 func (p *SSORoleCredentialsProvider) getOIDCTokenWithLock(ctx context.Context, rejected string) (token *ssooidc.CreateTokenOutput, cached bool, err error) {
 	waitCtx, cancel := context.WithTimeout(ctx, p.ssoLockTimeout)
 	defer cancel()
@@ -430,16 +431,7 @@ func (p *SSORoleCredentialsProvider) getOIDCTokenWithLock(ctx context.Context, r
 		Warnf: func(format string, args ...any) {
 			fmt.Fprintf(os.Stderr, format, args...)
 		},
-	}, "SSO token", func() (processLockResult[oidcTokenResult], error) {
-		token, ok, err := p.usableCachedOIDCToken()
-		if err != nil {
-			log.Printf("Reading cached OIDC token for %s: %v; will try lock", p.StartURL, err)
-		}
-		if ok && aws.ToString(token.AccessToken) != rejected {
-			return processLockResult[oidcTokenResult]{value: oidcTokenResult{token, true}, ok: true}, nil
-		}
-		return processLockResult[oidcTokenResult]{}, nil
-	}, func() (oidcTokenResult, error) {
+	}, "SSO token", func() (oidcTokenResult, error) {
 		if rejected != "" {
 			if err := p.removeRejectedOIDCToken(rejected); err != nil {
 				return oidcTokenResult{}, err

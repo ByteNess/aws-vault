@@ -101,7 +101,7 @@ func (k *lockedKeyring) withLock(fn func() error) error {
 		Warnf: func(format string, args ...any) {
 			fmt.Fprintf(os.Stderr, format, args...)
 		},
-	}, "keyring", nil, func() (struct{}, error) {
+	}, "keyring", func() (struct{}, error) {
 		return struct{}{}, fn()
 	})
 	return err
