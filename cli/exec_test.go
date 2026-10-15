@@ -93,6 +93,62 @@ func TestExecCommand(t *testing.T) {
 	}
 }
 
+// TestExecCommandJSONRejectsServerFlags checks --json rejects server flags instead of ignoring them.
+func TestExecCommandJSONRejectsServerFlags(t *testing.T) {
+	cases := []struct {
+		name    string
+		flag    string
+		wantErr string
+	}{
+		{name: "ecs-server", flag: "--ecs-server", wantErr: "can't use --ecs-server with --json"},
+		{name: "server alias", flag: "--server", wantErr: "can't use --ecs-server with --json"},
+		{name: "ec2-server", flag: "--ec2-server", wantErr: "can't use --ec2-server with --json"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("AWS_CONFIG_FILE", writeExecTestConfig(t))
+			t.Setenv("AWS_VAULT", "")
+
+			var stderr bytes.Buffer
+			app := kingpin.New("aws-vault", "")
+			app.ErrorWriter(&stderr)
+			app.Terminate(func(code int) { panic(terminated(code)) })
+
+			awsVault := ConfigureGlobals(app)
+			awsVault.keyringImpl = keyring.NewArrayKeyring(nil)
+			ConfigureExecCommand(app, awsVault)
+
+			code, exited := parseUntilTerminate(app, []string{"exec", "--json", tc.flag, "llamas"})
+			if !exited || code != 1 {
+				t.Fatalf("exited = %v, code = %d, want exit code 1\nstderr:\n%s", exited, code, stderr.String())
+			}
+			if !strings.Contains(stderr.String(), tc.wantErr) {
+				t.Fatalf("stderr = %q, want it to contain %q", stderr.String(), tc.wantErr)
+			}
+		})
+	}
+}
+
+// terminated is panicked from kingpin's terminate func so tests unwind instead of exiting.
+type terminated int
+
+func parseUntilTerminate(app *kingpin.Application, args []string) (code int, exited bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			c, ok := r.(terminated)
+			if !ok {
+				panic(r)
+			}
+			code, exited = int(c), true
+		}
+	}()
+
+	_, _ = app.Parse(args)
+
+	return 0, false
+}
+
 func TestCreateEnvAccountID(t *testing.T) {
 	t.Setenv("AWS_ACCOUNT_ID", "stale")
 
