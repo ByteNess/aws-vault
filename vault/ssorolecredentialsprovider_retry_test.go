@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/aws/retry"
 	awshttp "github.com/aws/aws-sdk-go-v2/aws/transport/http"
 	"github.com/aws/aws-sdk-go-v2/service/sso"
 	ssotypes "github.com/aws/aws-sdk-go-v2/service/sso/types"
@@ -202,6 +203,7 @@ func TestGetRoleCredentialsTimeoutOnPersistentRateLimit(t *testing.T) {
 	p.SSOClient = ssoClient
 	p.AccountID = "123456789012"
 	p.RoleName = "TestRole"
+	p.RetryRateLimit = true
 	p.ssoNow = clock.Now
 	p.ssoSleep = clock.Sleep
 	p.ssoLogf = func(string, ...any) {} // suppress log output
@@ -228,5 +230,127 @@ func TestGetRoleCredentialsTimeoutOnPersistentRateLimit(t *testing.T) {
 	elapsed := clock.now.Sub(time.Unix(1000000, 0))
 	if elapsed < ssoRetryTimeout {
 		t.Fatalf("expected clock to advance at least %s, advanced %s", ssoRetryTimeout, elapsed)
+	}
+}
+
+// rateLimitServer answers GetRoleCredentials from the replies queue, one per
+// call, and then with credentials. It records the bearer token of each call.
+type rateLimitServer struct {
+	replies []int
+	tokens  []string
+}
+
+func (s *rateLimitServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	s.tokens = append(s.tokens, r.Header.Get("X-Amz-Sso_bearer_token"))
+	w.Header().Set("Content-Type", "application/json")
+	if len(s.replies) == 0 {
+		_, _ = fmt.Fprint(w, `{"roleCredentials":{"accessKeyId":"AKIAEXAMPLE","secretAccessKey":"secret","sessionToken":"token","expiration":4102444800000}}`)
+		return
+	}
+	status := s.replies[0]
+	s.replies = s.replies[1:]
+	switch status {
+	case http.StatusTooManyRequests:
+		w.Header().Set("X-Amzn-Errortype", "TooManyRequestsException")
+		w.WriteHeader(status)
+		_, _ = fmt.Fprint(w, `{"__type":"TooManyRequestsException","message":"Rate exceeded"}`)
+	case http.StatusUnauthorized:
+		w.Header().Set("X-Amzn-Errortype", "UnauthorizedException")
+		w.WriteHeader(status)
+		_, _ = fmt.Fprint(w, `{"__type":"UnauthorizedException","message":"Session token not found or invalid"}`)
+	default:
+		w.WriteHeader(status)
+	}
+}
+
+func newRateLimitTestProvider(t *testing.T, s *rateLimitServer, optFns ...func(*sso.Options)) (*SSORoleCredentialsProvider, *testClock) {
+	t.Helper()
+	srv := httptest.NewServer(s)
+	t.Cleanup(srv.Close)
+	clock := &testClock{now: time.Unix(1000000, 0)}
+	p := newTestSSORoleProvider()
+	p.SSOClient = sso.New(sso.Options{
+		Region:           "us-east-1",
+		BaseEndpoint:     aws.String(srv.URL),
+		RetryMaxAttempts: 1,
+	}, optFns...)
+	p.AccountID = "123456789012"
+	p.RoleName = "TestRole"
+	p.OIDCTokenCache = &testTokenCache{token: testToken("cached")}
+	p.ssoNow = clock.Now
+	p.ssoSleep = clock.Sleep
+	return p, clock
+}
+
+// The 429 retry belongs to --parallel-safe. Without it a rate limit fails at
+// once, as it does on main.
+func TestGetRoleCredentialsFailsOnRateLimitWithoutParallelSafe(t *testing.T) {
+	s := &rateLimitServer{replies: []int{http.StatusTooManyRequests}}
+	p, clock := newRateLimitTestProvider(t, s)
+
+	_, err := p.getRoleCredentials(context.Background())
+	if !isSSORateLimitError(err) {
+		t.Fatalf("expected the rate limit error, got %v", err)
+	}
+	if len(s.tokens) != 1 || clock.sleepCalls != 0 {
+		t.Fatalf("expected one call and no backoff, got %d calls and %d sleeps", len(s.tokens), clock.sleepCalls)
+	}
+}
+
+// A 401 leads to a new sign-in, which can take longer than the whole retry
+// budget. The 429s after it still get their full budget.
+func TestGetRoleCredentialsRestartsRetryBudgetAfterReauthenticating(t *testing.T) {
+	s := &rateLimitServer{replies: []int{http.StatusUnauthorized, http.StatusTooManyRequests}}
+	p, clock := newRateLimitTestProvider(t, s)
+	p.RetryRateLimit = true
+	p.newOIDCTokenFn = func(context.Context) (*OIDCTokenData, error) {
+		clock.now = clock.now.Add(defaultPKCESignInTimeout)
+		return testToken("signed-in"), nil
+	}
+
+	if _, err := p.getRoleCredentials(context.Background()); err != nil {
+		t.Fatalf("expected the 429 after the sign-in to be retried, got %v", err)
+	}
+	if want := []string{"cached", "signed-in", "signed-in"}; strings.Join(s.tokens, ",") != strings.Join(want, ",") {
+		t.Fatalf("calls made with tokens %v, want %v", s.tokens, want)
+	}
+}
+
+// With --parallel-safe the SDK leaves 429s to getRoleCredentials, which
+// honours Retry-After, and still retries everything else itself.
+func TestLeaveRateLimitsToProvider(t *testing.T) {
+	noBackoff := retry.NewStandard(func(o *retry.StandardOptions) {
+		o.Backoff = retry.BackoffDelayerFunc(func(int, error) (time.Duration, error) { return 0, nil })
+	})
+	for _, tc := range []struct {
+		name   string
+		status int
+		want   int
+	}{
+		{"rate limit", http.StatusTooManyRequests, 1},
+		{"server error", http.StatusInternalServerError, 3},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := &rateLimitServer{replies: []int{tc.status, tc.status, tc.status}}
+			srv := httptest.NewServer(s)
+			defer srv.Close()
+			client := sso.New(sso.Options{
+				Region:       "us-east-1",
+				BaseEndpoint: aws.String(srv.URL),
+				Retryer:      noBackoff,
+			}, leaveRateLimitsToProvider)
+
+			_, err := client.GetRoleCredentials(context.Background(), &sso.GetRoleCredentialsInput{
+				AccessToken: aws.String("token"),
+				AccountId:   aws.String("123456789012"),
+				RoleName:    aws.String("TestRole"),
+			})
+			if err == nil {
+				t.Fatal("expected an error")
+			}
+			if len(s.tokens) != tc.want {
+				t.Fatalf("expected %d calls on the wire, got %d", tc.want, len(s.tokens))
+			}
+		})
 	}
 }

@@ -55,6 +55,7 @@ type SSORoleCredentialsProvider struct {
 	// the Identity Center session itself ends.
 	RegistrationScopes []string
 	UseSSOTokenLock    bool
+	RetryRateLimit     bool
 	ssoTokenLock       ProcessLock
 	ssoLockWait        time.Duration
 	ssoLockLog         time.Duration
@@ -197,12 +198,16 @@ func (p *SSORoleCredentialsProvider) getRoleCredentials(ctx context.Context) (*s
 				if err != nil {
 					return nil, err
 				}
+				// The sign-in can take minutes; the budget is for the 429s after it.
+				deadline = p.ssoNow().Add(ssoRetryTimeout)
 				attempt = 0
 				continue
 			}
 		}
 
-		if isSSORateLimitError(err) {
+		// Only --parallel-safe retries a rate limit; without it a 429 fails
+		// at once, as it always has.
+		if p.RetryRateLimit && isSSORateLimitError(err) {
 			rateLimitCount++
 			remaining := deadline.Sub(p.ssoNow())
 			if 0 < remaining {
@@ -1018,6 +1023,27 @@ func isSSORateLimitError(err error) bool {
 		return true
 	}
 	return false
+}
+
+// rateLimitRetryer retries what the SDK's retryer retries except rate limits,
+// which getRoleCredentials retries itself, honouring Retry-After. Left to the
+// SDK as well, each of its attempts would be up to three calls on the wire,
+// spaced by the SDK's own backoff rather than Retry-After.
+type rateLimitRetryer struct {
+	aws.RetryerV2
+}
+
+func (r rateLimitRetryer) IsErrorRetryable(err error) bool {
+	return !isSSORateLimitError(err) && r.RetryerV2.IsErrorRetryable(err)
+}
+
+// leaveRateLimitsToProvider is an sso.Options function for a client whose
+// provider has RetryRateLimit set. The SDK has resolved the retryer by the
+// time it runs, and every retryer it builds is a RetryerV2.
+func leaveRateLimitsToProvider(o *sso.Options) {
+	if r, ok := o.Retryer.(aws.RetryerV2); ok {
+		o.Retryer = rateLimitRetryer{r}
+	}
 }
 
 func jitterRetryAfter(base time.Duration) time.Duration {
