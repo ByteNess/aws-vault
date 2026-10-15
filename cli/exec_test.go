@@ -93,9 +93,7 @@ func TestExecCommand(t *testing.T) {
 	}
 }
 
-// TestExecCommandJSONRejectsServerFlags checks that the deprecated --json path
-// rejects flag combinations it can't honour instead of silently printing
-// credentials and ignoring them.
+// TestExecCommandJSONRejectsServerFlags checks --json rejects server flags instead of ignoring them.
 func TestExecCommandJSONRejectsServerFlags(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -132,8 +130,7 @@ func TestExecCommandJSONRejectsServerFlags(t *testing.T) {
 	}
 }
 
-// terminated carries the exit code passed to kingpin's terminate func, so a
-// test can unwind out of a CLI action that would otherwise exit the process.
+// terminated is panicked from kingpin's terminate func so tests unwind instead of exiting.
 type terminated int
 
 func parseUntilTerminate(app *kingpin.Application, args []string) (code int, exited bool) {

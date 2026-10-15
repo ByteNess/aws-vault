@@ -148,10 +148,7 @@ func ConfigureExecCommand(app *kingpin.Application, a *AwsVault) {
 		input.Config.SSOBrowser = input.Browser
 		input.ShowHelpMessages = !a.Debug && input.Command == "" && isATerminal() && os.Getenv("AWS_VAULT_DISABLE_HELP_MESSAGE") != "1"
 
-		// Validate here rather than in execCommand so the --json path, which
-		// hands off to exportCommand, rejects incompatible flags too. Doing it
-		// before opening the keyring also avoids an unlock prompt for a command
-		// that is going to fail anyway.
+		// Validate before branching so --json is covered, and before any keyring prompt.
 		app.FatalIfError(input.validate(), "exec")
 
 		f, err := a.AwsConfigFile()
