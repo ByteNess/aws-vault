@@ -10,7 +10,7 @@ The supported vaulting backends are:
 
 | Internal name | Backend | How it works | Platforms |
 | --- | --- | --- | --- |
-| `keychain` | [macOS Keychain](https://support.apple.com/en-au/guide/keychain-access/welcome/mac) | Stores credentials as generic password items in the configured Keychain. Optional biometrics support can use Touch ID to unlock the aws-vault keychain. | macOS |
+| `keychain` | [macOS Keychain](https://support.apple.com/en-au/guide/keychain-access/welcome/mac) | Stores credentials as generic password items in the configured Keychain. Optional biometrics support can use Touch ID to unlock the aws-vault keychain when it is locked, see [Touch ID](#touch-id). | macOS |
 | `wincred` | [Windows Credential Manager](https://support.microsoft.com/en-au/help/4026814/windows-accessing-credential-manager) | Stores credentials as generic credentials under an aws-vault target-name prefix in Windows Credential Manager. | Windows |
 | `winhello` | [Windows Hello](https://support.microsoft.com/en-us/windows/configure-windows-hello-dae28983-8242-bb2a-d3d1-87c9d265a5f0) | Stores encrypted envelopes in Windows Credential Manager. The encryption key is wrapped by Windows Hello / Passport, so reads require PIN/biometrics. | Windows |
 | `secret-service` | Secret Service ([GNOME Keyring](https://wiki.gnome.org/Projects/GnomeKeyring), [KWallet](https://apps.kde.org/kwalletmanager5/), ...) | Stores credentials in a Secret Service collection over the desktop session D-Bus. The collection may be unlocked by the desktop keyring service. | Linux |
@@ -46,6 +46,25 @@ particular profile, you can do so through Keychain:
 5. Hit save.
 
 ![keychain-image](keychain-settings.png)
+
+### Touch ID
+
+With `--biometrics` (or `AWS_VAULT_BIOMETRICS=true`), aws-vault uses Touch ID to unlock the aws-vault keychain. Touch ID
+is only requested when the keychain is locked: while it stays unlocked, commands run without prompting, including each
+`credential_process` call. How often you see Touch ID therefore follows the lock settings above, which you can also set
+from the command line:
+
+```shell
+# Lock after 15 minutes of inactivity and when the Mac sleeps
+security set-keychain-settings -lut 900 aws-vault.keychain
+security show-keychain-info aws-vault.keychain
+```
+
+The first time Touch ID is needed, aws-vault asks for the keychain password once in the terminal and stores it in your
+login keychain. `credential_process` can't show that prompt, so do the first unlock from a terminal: lock the keychain
+with `security lock-keychain aws-vault.keychain`, then run any command, such as `aws-vault list --biometrics`.
+
+If you use a separate session keychain (`--session-keychain`), each keychain is checked and unlocked separately.
 
 ## Proton Pass
 

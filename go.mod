@@ -13,7 +13,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.43.4
 	github.com/aws/aws-sdk-go-v2/service/sts v1.51.4
 	github.com/aws/smithy-go v1.28.5
-	github.com/byteness/keyring v1.13.3
+	github.com/byteness/keyring v1.14.0
 	github.com/google/go-cmp v0.7.0
 	github.com/mattn/go-isatty v0.0.24
 	github.com/mattn/go-tty v0.0.8
@@ -33,7 +33,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.21 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.14.6 // indirect
 	github.com/aws/aws-sdk-go-v2/service/signin v1.10.4 // indirect
-	github.com/byteness/go-keychain v0.0.0-20191008050251-8e49817e8af4 // indirect
+	github.com/byteness/go-keychain v0.1.0 // indirect
 	github.com/byteness/go-libsecret v0.0.0-20260108215642-107379d3dee0 // indirect
 	github.com/byteness/percent v0.2.2 // indirect
 	github.com/creack/pty v1.1.24 // indirect
