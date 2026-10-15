@@ -16,6 +16,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sso"
 	ssotypes "github.com/aws/aws-sdk-go-v2/service/sso/types"
 	smithyhttp "github.com/aws/smithy-go/transport/http"
+	"github.com/byteness/keyring"
 )
 
 func TestRetryAfterFromErrorSeconds(t *testing.T) {
@@ -234,14 +235,19 @@ func TestGetRoleCredentialsTimeoutOnPersistentRateLimit(t *testing.T) {
 }
 
 // rateLimitServer answers GetRoleCredentials from the replies queue, one per
-// call, and then with credentials. It records the bearer token of each call.
+// call, and then with credentials. It records the bearer token of each call,
+// and runs onCall, if set, before replying.
 type rateLimitServer struct {
 	replies []int
 	tokens  []string
+	onCall  func(call int)
 }
 
 func (s *rateLimitServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.tokens = append(s.tokens, r.Header.Get("X-Amz-Sso_bearer_token"))
+	if s.onCall != nil {
+		s.onCall(len(s.tokens))
+	}
 	w.Header().Set("Content-Type", "application/json")
 	if len(s.replies) == 0 {
 		_, _ = fmt.Fprint(w, `{"roleCredentials":{"accessKeyId":"AKIAEXAMPLE","secretAccessKey":"secret","sessionToken":"token","expiration":4102444800000}}`)
@@ -352,5 +358,104 @@ func TestLeaveRateLimitsToProvider(t *testing.T) {
 				t.Fatalf("expected %d calls on the wire, got %d", tc.want, len(s.tokens))
 			}
 		})
+	}
+}
+
+// keychainTokenCache reports a missing entry on Remove, as the keychain
+// backend does.
+type keychainTokenCache struct {
+	testTokenCache
+}
+
+func (c *keychainTokenCache) Remove(string) error {
+	if c.token == nil {
+		return keyring.ErrKeyNotFound
+	}
+	c.token = nil
+	return nil
+}
+
+func newLockedRejectionTestProvider(t *testing.T, s *rateLimitServer, cache OIDCTokenCacher) (*SSORoleCredentialsProvider, *int) {
+	t.Helper()
+	p, _ := newRateLimitTestProvider(t, s)
+	p.UseSSOTokenLock = true
+	p.ssoTokenLock = &recordingLock{}
+	p.OIDCTokenCache = cache
+	signIns := 0
+	p.newOIDCTokenFn = func(context.Context) (*OIDCTokenData, error) {
+		signIns++
+		return testToken("signed-in"), nil
+	}
+	return p, &signIns
+}
+
+// Every process holding the same cached token gets a 401 for it at about the
+// same time. The first one to remove it must not make the others fail.
+func TestGetRoleCredentialsWithLock_RejectedTokenAlreadyRemoved(t *testing.T) {
+	cache := &keychainTokenCache{testTokenCache{token: testToken("cached")}}
+	s := &rateLimitServer{replies: []int{http.StatusUnauthorized}}
+	s.onCall = func(call int) {
+		if call == 1 {
+			cache.token = nil // another process removed it first
+		}
+	}
+	p, signIns := newLockedRejectionTestProvider(t, s, cache)
+
+	if _, err := p.getRoleCredentials(context.Background()); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if *signIns != 1 {
+		t.Fatalf("expected 1 sign-in, got %d", *signIns)
+	}
+	if want := "cached,signed-in"; strings.Join(s.tokens, ",") != want {
+		t.Fatalf("calls made with tokens %v, want %s", s.tokens, want)
+	}
+}
+
+// A process whose 401 arrives after another process has already signed in
+// again must use that token, not remove it and open another sign-in.
+func TestGetRoleCredentialsWithLock_KeepsTokenAnotherProcessStored(t *testing.T) {
+	cache := &keychainTokenCache{testTokenCache{token: testToken("cached")}}
+	s := &rateLimitServer{replies: []int{http.StatusUnauthorized}}
+	s.onCall = func(call int) {
+		if call == 1 {
+			cache.token = testToken("other") // another process signed in again
+		}
+	}
+	p, signIns := newLockedRejectionTestProvider(t, s, cache)
+
+	if _, err := p.getRoleCredentials(context.Background()); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if *signIns != 0 {
+		t.Fatalf("expected no sign-in, got %d", *signIns)
+	}
+	if want := "cached,other"; strings.Join(s.tokens, ",") != want {
+		t.Fatalf("calls made with tokens %v, want %s", s.tokens, want)
+	}
+	if cache.token == nil || aws.ToString(cache.token.Token.AccessToken) != "other" {
+		t.Fatalf("the other process's token was removed from the cache")
+	}
+}
+
+// A provider re-authenticates once. If the token it gets back is rejected as
+// well, it fails instead of taking turns with other processes replacing it.
+func TestGetRoleCredentialsReauthenticatesOnce(t *testing.T) {
+	cache := &keychainTokenCache{testTokenCache{token: testToken("cached")}}
+	s := &rateLimitServer{replies: []int{http.StatusUnauthorized, http.StatusUnauthorized}}
+	s.onCall = func(call int) {
+		if call == 1 {
+			cache.token = testToken("other")
+		}
+	}
+	p, signIns := newLockedRejectionTestProvider(t, s, cache)
+
+	_, err := p.getRoleCredentials(context.Background())
+	var rspError *awshttp.ResponseError
+	if !errors.As(err, &rspError) || rspError.HTTPStatusCode() != http.StatusUnauthorized {
+		t.Fatalf("expected the second 401, got %v", err)
+	}
+	if *signIns != 0 || len(s.tokens) != 2 {
+		t.Fatalf("expected 2 calls and no sign-in, got %d calls and %d sign-ins", len(s.tokens), *signIns)
 	}
 }

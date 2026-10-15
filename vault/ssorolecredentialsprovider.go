@@ -173,6 +173,7 @@ func (p *SSORoleCredentialsProvider) getRoleCredentials(ctx context.Context) (*s
 	deadline := p.ssoNow().Add(ssoRetryTimeout)
 	attempt := 0
 	rateLimitCount := 0
+	reauthenticated := false
 	var maxRetryAfterSeen time.Duration
 	for {
 		attempt++
@@ -186,15 +187,13 @@ func (p *SSORoleCredentialsProvider) getRoleCredentials(ctx context.Context) (*s
 			return resp.RoleCredentials, nil
 		}
 
-		if cached && p.OIDCTokenCache != nil {
+		if cached && !reauthenticated && p.OIDCTokenCache != nil {
 			var rspError *awshttp.ResponseError
 			if errors.As(err, &rspError) && rspError.HTTPStatusCode() == http.StatusUnauthorized {
-				// Cached token rejected: drop it and retry with a fresh access token.
-				// This should only happen once because the cache is cleared before retrying.
-				if err = p.OIDCTokenCache.Remove(p.StartURL); err != nil {
-					return nil, err
-				}
-				token, cached, err = p.getOIDCToken(ctx)
+				// Cached token rejected: drop it and retry with a fresh access token,
+				// once.
+				reauthenticated = true
+				token, cached, err = p.replaceRejectedOIDCToken(ctx, token)
 				if err != nil {
 					return nil, err
 				}
@@ -278,7 +277,42 @@ func (p *SSORoleCredentialsProvider) getOIDCToken(ctx context.Context) (token *s
 	if err != nil || ok {
 		return token, ok, err
 	}
-	return p.getOIDCTokenWithLock(ctx)
+	return p.getOIDCTokenWithLock(ctx, "")
+}
+
+// replaceRejectedOIDCToken drops the cached token that GetRoleCredentials
+// rejected and gets another one.
+func (p *SSORoleCredentialsProvider) replaceRejectedOIDCToken(ctx context.Context, rejected *ssooidc.CreateTokenOutput) (token *ssooidc.CreateTokenOutput, cached bool, err error) {
+	if !p.UseSSOTokenLock {
+		if err := p.OIDCTokenCache.Remove(p.StartURL); err != nil {
+			return nil, false, err
+		}
+		return p.getOIDCToken(ctx)
+	}
+	// Every process holding the same token is rejected at about the same
+	// time. The first may already have removed it and signed in again, so
+	// the rest remove it under the lock, and only if it is still there.
+	return p.getOIDCTokenWithLock(ctx, aws.ToString(rejected.AccessToken))
+}
+
+// removeRejectedOIDCToken removes the cached token if it is still the one
+// GetRoleCredentials rejected. One that another process removed or replaced
+// is left alone. It runs under the SSO lock.
+func (p *SSORoleCredentialsProvider) removeRejectedOIDCToken(rejected string) error {
+	data, err := p.OIDCTokenCache.Get(p.StartURL)
+	if errors.Is(err, keyring.ErrKeyNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if data == nil || aws.ToString(data.Token.AccessToken) != rejected {
+		return nil
+	}
+	if err := p.OIDCTokenCache.Remove(p.StartURL); err != nil && !errors.Is(err, keyring.ErrKeyNotFound) && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
 }
 
 // cachedOrRefreshedOIDCToken returns a usable token from the cache, refreshing
@@ -374,8 +408,9 @@ type oidcTokenResult struct {
 
 // getOIDCTokenWithLock serialises the sign-in across processes: one process
 // holds the lock and signs in (or redeems the refresh token) while the others
-// wait, re-reading the cache until the token lands.
-func (p *SSORoleCredentialsProvider) getOIDCTokenWithLock(ctx context.Context) (token *ssooidc.CreateTokenOutput, cached bool, err error) {
+// wait, re-reading the cache until the token lands. A cached token whose
+// access token is rejected is not used, and is removed under the lock.
+func (p *SSORoleCredentialsProvider) getOIDCTokenWithLock(ctx context.Context, rejected string) (token *ssooidc.CreateTokenOutput, cached bool, err error) {
 	waitCtx, cancel := context.WithTimeout(ctx, p.ssoLockTimeout)
 	defer cancel()
 
@@ -397,11 +432,16 @@ func (p *SSORoleCredentialsProvider) getOIDCTokenWithLock(ctx context.Context) (
 		if err != nil {
 			return processLockResult[oidcTokenResult]{}, err
 		}
-		if ok {
+		if ok && aws.ToString(token.AccessToken) != rejected {
 			return processLockResult[oidcTokenResult]{value: oidcTokenResult{token, true}, ok: true}, nil
 		}
 		return processLockResult[oidcTokenResult]{}, nil
 	}, func() (oidcTokenResult, error) {
+		if rejected != "" {
+			if err := p.removeRejectedOIDCToken(rejected); err != nil {
+				return oidcTokenResult{}, err
+			}
+		}
 		// Recheck under the lock — another process may have filled the cache.
 		// Otherwise refresh or sign in here, so only one process spends the
 		// refresh token or opens the browser.
