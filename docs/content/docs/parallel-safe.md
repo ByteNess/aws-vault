@@ -11,14 +11,14 @@ When running many `aws-vault` processes in parallel (e.g. Terraform with hundred
 
 The `--parallel-safe` flag (or `AWS_VAULT_PARALLEL_SAFE=true`) enables cross-process locking to prevent these issues:
 
-- **SSO token lock**: Only one process per SSO Start URL opens a browser tab; others wait for the cached token.
+- **SSO token lock**: Only one process per SSO Start URL refreshes the OIDC token or signs in (PKCE, device code or `--stdout`); the others wait for the cached token.
 - **Session cache lock**: Only one process writes back to a given session cache entry at a time.
-- **Keyring lock**: All keyring read/write operations are serialized across processes. A separate session keyring (`--session-backend` or the session overrides) gets its own lock, so the two stores do not wait on each other.
+- **Keyring lock**: Opening a keyring and all its read/write operations are serialized across processes. A separate session keyring (`--session-backend` or the session overrides) gets its own lock, so the two stores do not wait on each other.
 - **Rate limit retries**: When `GetRoleCredentials` is rate limited (HTTP 429), it is retried with jittered backoff, honouring `Retry-After`. Without the flag a 429 fails at once.
 
 This applies to **all backends** (keychain, file, pass, secret-service, etc.).
 
-The lock files live in a per-user directory, `aws-vault/locks` under the user cache directory: `~/Library/Caches` on macOS, `$XDG_CACHE_HOME` or `~/.cache` on Linux, and `%LocalAppData%` on Windows. Locks therefore never cross user accounts on a shared host, and other local users cannot create or hold them.
+The lock files live in a per-user directory, `aws-vault/locks` under the user cache directory: `~/Library/Caches` on macOS, `$XDG_CACHE_HOME` or `~/.cache` on Linux, and `%LocalAppData%` on Windows. Locks therefore never cross user accounts on a shared host, and other local users cannot create or hold them. If there is no user cache directory (for example, `HOME` is unset), commands fail with an error rather than run without locks.
 
 ## Trade-offs
 
@@ -27,7 +27,7 @@ The lock files live in a per-user directory, `aws-vault/locks` under the user ca
 
 ## Commands
 
-`exec`, `export`, `login` and `rotate` all honour `--parallel-safe`. A console session from `login` is single-use, but getting one still reads and writes the same session cache and SSO token as `exec` and `export`, and can start the same SSO sign-in, so it takes the same locks.
+Every command that uses the configured keyrings takes the keyring lock. `exec`, `export`, `login` and `rotate` also take the SSO token lock, and all of them except `rotate`, which doesn't cache sessions, take the session cache lock. A console session from `login` is single-use, but getting one still reads and writes the same session cache and SSO token as `exec` and `export`, and can start the same SSO sign-in, so it takes the same locks. `migrate-backend` opens the backends it migrates between itself and takes no locks.
 
 ## Limitations
 
