@@ -37,6 +37,10 @@ type OIDCTokenCacher interface {
 	Remove(string) error
 }
 
+type oidcTokenPeeker interface {
+	Peek(string) (*OIDCTokenData, error)
+}
+
 // SSORoleCredentialsProvider creates temporary credentials for an SSO Role.
 type SSORoleCredentialsProvider struct {
 	OIDCClient     *ssooidc.Client
@@ -349,13 +353,18 @@ func (p *SSORoleCredentialsProvider) cachedOrRefreshedOIDCToken(ctx context.Cont
 // usableCachedOIDCToken returns the cached token if it can be used as it is:
 // still valid, and either outside the refresh window or not refreshable at
 // all, which is the same test cachedOIDCToken starts with. It never touches
-// the network, so it serves as the fast path that skips the lock.
+// the network and never changes the cache, so it serves as the fast path that
+// skips the lock.
 func (p *SSORoleCredentialsProvider) usableCachedOIDCToken() (token *ssooidc.CreateTokenOutput, ok bool, err error) {
 	if p.OIDCTokenCache == nil {
 		return nil, false, nil
 	}
 
-	data, err := p.OIDCTokenCache.Get(p.StartURL)
+	read := p.OIDCTokenCache.Get
+	if peeker, isPeeker := p.OIDCTokenCache.(oidcTokenPeeker); isPeeker {
+		read = peeker.Peek
+	}
+	data, err := read(p.StartURL)
 	if err != nil && err != keyring.ErrKeyNotFound {
 		return nil, false, err
 	}

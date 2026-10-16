@@ -520,3 +520,50 @@ func TestLockTimeoutsOutlastTheHolder(t *testing.T) {
 		t.Errorf("provider SSO lock wait = %s, want %s", p.ssoLockTimeout, defaultSSOLockTimeout)
 	}
 }
+
+// sharedStoreKeyring runs afterFirstGet right after the first read, standing
+// in for another process writing to the same keyring.
+type sharedStoreKeyring struct {
+	keyring.Keyring
+	gets          int
+	afterFirstGet func()
+}
+
+func (k *sharedStoreKeyring) Get(key string) (keyring.Item, error) {
+	item, err := k.Keyring.Get(key)
+	k.gets++
+	if k.gets == 1 && k.afterFirstGet != nil {
+		k.afterFirstGet()
+	}
+	return item, err
+}
+
+func TestGetOIDCToken_FastPathLeavesExpiredTokenToLockHolder(t *testing.T) {
+	kr := &sharedStoreKeyring{Keyring: keyring.NewArrayKeyring(nil)}
+	cache := OIDCTokenKeyring{Keyring: kr}
+
+	p := newTestSSORoleProvider()
+	p.OIDCTokenCache = cache
+	p.UseSSOTokenLock = true
+
+	// ExpiresIn of -1 stores a token whose expiration is already in the past.
+	if err := cache.Set(p.StartURL, &OIDCTokenData{Token: ssooidc.CreateTokenOutput{AccessToken: aws.String("expired"), ExpiresIn: -1}}); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	kr.afterFirstGet = func() {
+		if err := cache.Set(p.StartURL, &OIDCTokenData{Token: ssooidc.CreateTokenOutput{AccessToken: aws.String("fresh"), ExpiresIn: 3600}}); err != nil {
+			t.Fatalf("Set: %v", err)
+		}
+	}
+
+	if _, ok, err := p.usableCachedOIDCToken(); ok || err != nil {
+		t.Fatalf("expected the expired token to be unusable, got ok=%v err=%v", ok, err)
+	}
+	got, err := cache.Get(p.StartURL)
+	if err != nil {
+		t.Fatalf("the token another process stored was removed: %v", err)
+	}
+	if aws.ToString(got.Token.AccessToken) != "fresh" {
+		t.Fatalf("cached token = %q, want the fresh one", aws.ToString(got.Token.AccessToken))
+	}
+}

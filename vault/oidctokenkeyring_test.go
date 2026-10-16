@@ -64,6 +64,23 @@ func TestOIDCTokenKeyringGetRemovesExpiredTokenWithoutRefreshToken(t *testing.T)
 	}
 }
 
+func TestOIDCTokenKeyringPeekLeavesExpiredTokenWithoutRefreshToken(t *testing.T) {
+	kr := keyring.NewArrayKeyring(nil)
+	tk := &vault.OIDCTokenKeyring{Keyring: kr}
+	startURL := "https://example.awsapps.com/start"
+
+	if err := tk.Set(startURL, &vault.OIDCTokenData{Token: ssooidc.CreateTokenOutput{AccessToken: aws.String("token"), ExpiresIn: -1}}); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+
+	if _, err := tk.Peek(startURL); err != keyring.ErrKeyNotFound {
+		t.Fatalf("Peek: err = %v, want ErrKeyNotFound", err)
+	}
+	if has, _ := tk.Has(startURL); !has {
+		t.Error("Peek must leave the expired token in the keyring")
+	}
+}
+
 func TestOIDCTokenKeyringGetKeepsExpiredRefreshableToken(t *testing.T) {
 	kr := keyring.NewArrayKeyring(nil)
 	tk := &vault.OIDCTokenKeyring{Keyring: kr}
