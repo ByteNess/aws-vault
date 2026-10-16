@@ -235,42 +235,10 @@ func TestKeyringLockKey(t *testing.T) {
 
 		// File backend
 		{
-			name:    "file with file dir",
-			backend: "file",
-			config:  keyring.Config{FileDir: "/tmp/keys"},
-			want:    "file:/tmp/keys",
-		},
-		{
 			name:    "file with empty file dir",
 			backend: "file",
 			config:  keyring.Config{},
 			want:    "file",
-		},
-
-		// Pass backend: dir and prefix combinations
-		{
-			name:    "pass with dir and prefix",
-			backend: "pass",
-			config:  keyring.Config{PassDir: "/store", PassPrefix: "aws"},
-			want:    "pass:/store:aws",
-		},
-		{
-			name:    "pass with dir only",
-			backend: "pass",
-			config:  keyring.Config{PassDir: "/store"},
-			want:    "pass:/store",
-		},
-		{
-			name:    "pass with prefix only",
-			backend: "pass",
-			config:  keyring.Config{PassPrefix: "aws"},
-			want:    "pass:aws",
-		},
-		{
-			name:    "pass with neither dir nor prefix",
-			backend: "pass",
-			config:  keyring.Config{},
-			want:    "pass",
 		},
 
 		// Secret-service backend
@@ -578,5 +546,69 @@ func TestKeyringOpensUnderKeyringLockWhenParallelSafe(t *testing.T) {
 				t.Fatal(err)
 			}
 		})
+	}
+}
+
+func TestKeyringLockKeyIdentifiesStore(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	for _, env := range []string{"PASSWORD_STORE_DIR", "PASSAGE_DIR"} {
+		t.Setenv(env, "")
+		if err := os.Unsetenv(env); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Chdir(home)
+
+	for _, group := range []struct {
+		backend string
+		configs []keyring.Config
+	}{
+		{"file", []keyring.Config{
+			{FileDir: "~/keys"},
+			{FileDir: filepath.Join(home, "keys")},
+			{FileDir: filepath.Join(home, "keys") + string(filepath.Separator)},
+			{FileDir: "keys"},
+		}},
+		{"pass", []keyring.Config{
+			{},
+			{PassDir: "~/.password-store"},
+			{PassDir: filepath.Join(home, ".password-store")},
+			{PassPrefix: "aws"},
+			{PassDir: filepath.Join(home, ".password-store"), PassPrefix: "other"},
+		}},
+		{"passage", []keyring.Config{
+			{},
+			{PassDir: "~/.passage/store"},
+			{PassDir: filepath.Join(home, ".passage", "store")},
+		}},
+	} {
+		want := keyringLockKey(group.backend, group.configs[0])
+		for i, config := range group.configs[1:] {
+			if got := keyringLockKey(group.backend, config); got != want {
+				t.Errorf("%s case %d: key %q, want %q: the same store", group.backend, i+2, got, want)
+			}
+		}
+	}
+
+	for _, pair := range []struct {
+		backend string
+		a, b    keyring.Config
+	}{
+		{"file", keyring.Config{FileDir: "~/keys"}, keyring.Config{FileDir: "~/other"}},
+		{"pass", keyring.Config{PassDir: "~/a"}, keyring.Config{PassDir: "~/b"}},
+		{"passage", keyring.Config{PassDir: "~/a"}, keyring.Config{PassDir: "~/b"}},
+		{"proton-pass", keyring.Config{ProtonPassShareID: "a"}, keyring.Config{ProtonPassShareID: "b"}},
+		{"keyctl", keyring.Config{KeyCtlScope: "user"}, keyring.Config{KeyCtlScope: "session"}},
+	} {
+		if key := keyringLockKey(pair.backend, pair.a); key == keyringLockKey(pair.backend, pair.b) {
+			t.Errorf("%s: different stores share key %q", pair.backend, key)
+		}
+	}
+
+	t.Setenv("PASSWORD_STORE_DIR", filepath.Join(home, "custom"))
+	if got, want := keyringLockKey("pass", keyring.Config{}), keyringLockKey("pass", keyring.Config{PassDir: "~/custom"}); got != want {
+		t.Errorf("unset pass dir with $PASSWORD_STORE_DIR set: key %q, want %q", got, want)
 	}
 }

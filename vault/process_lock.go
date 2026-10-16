@@ -3,7 +3,9 @@ package vault
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"time"
@@ -30,7 +32,11 @@ func NewFileLock(path string) ProcessLock {
 func (l *fileProcessLock) TryLock() (bool, error) {
 	// The directory is created on first use, so building a provider has no
 	// effect on disk.
-	if err := os.MkdirAll(filepath.Dir(l.lock.Path()), 0o700); err != nil {
+	dir := filepath.Dir(l.lock.Path())
+	if err := checkRootOwnsLockDir(dir); err != nil {
+		return false, err
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return false, err
 	}
 	return l.lock.TryLock()
@@ -70,6 +76,31 @@ func NewDefaultLock(prefix, key string) ProcessLock {
 		return unavailableLock{name: name, err: err}
 	}
 	return NewFileLock(filepath.Join(dir, name))
+}
+
+var currentUID = os.Getuid
+
+// checkRootOwnsLockDir stops root, e.g. via sudo keeping HOME, creating lock
+// files or directories in another user's home that would lock that user out.
+// The OS already stops other users. It checks the closest existing directory
+// at or above dir.
+func checkRootOwnsLockDir(dir string) error {
+	if currentUID() != 0 {
+		return nil
+	}
+	for d := dir; ; d = filepath.Dir(d) {
+		info, err := os.Stat(d)
+		if errors.Is(err, fs.ErrNotExist) && filepath.Dir(d) != d {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if owner, ok := fileOwner(info); ok && owner != 0 {
+			return fmt.Errorf("--parallel-safe: running as root, but %s belongs to uid %d (another user's HOME, e.g. kept by sudo?)", d, owner)
+		}
+		return nil
+	}
 }
 
 // unavailableLock stands in for a lock that has nowhere safe to live.
