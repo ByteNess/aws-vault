@@ -532,3 +532,51 @@ func TestSessionKeyringIsLockedWhenParallelSafe(t *testing.T) {
 		}
 	}
 }
+
+func TestKeyringOpensUnderKeyringLockWhenParallelSafe(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	t.Setenv("LocalAppData", filepath.Join(home, "AppData", "Local"))
+	config := keyring.Config{
+		FileDir:          filepath.Join(home, "keys"),
+		FilePasswordFunc: keyring.FixedStringPrompt("test"),
+	}
+
+	for name, open := range map[string]func(*AwsVault) (keyring.Keyring, error){
+		"primary": (*AwsVault).Keyring,
+		"session": (*AwsVault).SessionKeyring,
+	} {
+		t.Run(name, func(t *testing.T) {
+			a := &AwsVault{
+				ParallelSafe:          true,
+				KeyringBackend:        string(keyring.FileBackend),
+				SessionKeyringBackend: string(keyring.FileBackend),
+				KeyringConfig:         config,
+			}
+			other := vault.NewDefaultLock("aws-vault.keyring", keyringLockKey(string(keyring.FileBackend), config))
+			if locked, err := other.TryLock(); !locked || err != nil {
+				t.Fatalf("taking the keyring lock: locked=%t err=%v", locked, err)
+			}
+			t.Cleanup(func() { _ = other.Unlock() })
+
+			opened := make(chan error, 1)
+			go func() {
+				_, err := open(a)
+				opened <- err
+			}()
+			select {
+			case err := <-opened:
+				t.Fatalf("opened while another process held the keyring lock (err: %v)", err)
+			case <-time.After(300 * time.Millisecond):
+			}
+
+			if err := other.Unlock(); err != nil {
+				t.Fatal(err)
+			}
+			if err := <-opened; err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}

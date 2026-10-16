@@ -168,12 +168,27 @@ func (a *AwsVault) rawKeyring() (keyring.Keyring, error) {
 		}
 		var err error
 		log.Println("Opening primary keyring")
-		a.rawKeyringImpl, err = keyring.Open(a.KeyringConfig)
+		a.rawKeyringImpl, err = a.openKeyring(a.KeyringBackend, a.KeyringConfig)
 		if err != nil {
 			return nil, err
 		}
 	}
 	return a.rawKeyringImpl, nil
+}
+
+// openKeyring opens a keyring, under its keyring lock with --parallel-safe:
+// some backends do work when they open, such as KWallet unlocking the wallet.
+func (a *AwsVault) openKeyring(backend string, config keyring.Config) (keyring.Keyring, error) {
+	if !a.ParallelSafe {
+		return keyring.Open(config)
+	}
+	var kr keyring.Keyring
+	err := vault.WithKeyringLock(keyringLockKey(backend, config), func() error {
+		var err error
+		kr, err = keyring.Open(config)
+		return err
+	})
+	return kr, err
 }
 
 // keyringLockKey returns a backend-specific key for the cross-process keyring
@@ -257,7 +272,7 @@ func (a *AwsVault) SessionKeyring() (keyring.Keyring, error) {
 		}
 
 		log.Println("Opening session keyring")
-		sessions, err := keyring.Open(config)
+		sessions, err := a.openKeyring(backend, config)
 		if err != nil {
 			return nil, err
 		}

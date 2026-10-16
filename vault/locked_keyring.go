@@ -63,6 +63,16 @@ const (
 // NewLockedKeyring wraps the provided keyring with a cross-process lock
 // to serialize keyring operations.
 func NewLockedKeyring(kr keyring.Keyring, lockKey string) keyring.Keyring {
+	return newLockedKeyring(kr, lockKey)
+}
+
+// WithKeyringLock runs fn under the lock NewLockedKeyring takes for lockKey,
+// for work done before the locked keyring exists, such as opening it.
+func WithKeyringLock(lockKey string, fn func() error) error {
+	return newLockedKeyring(nil, lockKey).withLock(fn)
+}
+
+func newLockedKeyring(kr keyring.Keyring, lockKey string) *lockedKeyring {
 	return &lockedKeyring{
 		inner:       kr,
 		lock:        NewDefaultLock("aws-vault.keyring", lockKey),
