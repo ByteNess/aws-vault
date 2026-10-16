@@ -18,7 +18,7 @@ The `--parallel-safe` flag (or `AWS_VAULT_PARALLEL_SAFE=true`) enables cross-pro
 
 This applies to **all backends** (keychain, file, pass, secret-service, etc.).
 
-The lock files live in a per-user directory, `aws-vault/locks` under the user cache directory: `~/Library/Caches` on macOS, `$XDG_CACHE_HOME` or `~/.cache` on Linux, and `%LocalAppData%` on Windows. Locks therefore never cross user accounts on a shared host, and other local users cannot create or hold them. If there is no user cache directory (for example, `HOME` is unset), commands fail with an error rather than run without locks.
+The lock files live in a per-user directory, `aws-vault/locks` under the user cache directory: `~/Library/Caches` on macOS, `$XDG_CACHE_HOME` or `~/.cache` on Linux, and `%LocalAppData%` on Windows. Locks therefore never cross user accounts on a shared host, and other local users cannot create or hold them. If there is no user cache directory (for example, `HOME` is unset), commands fail with an error rather than run without locks. Except on Windows, root also won't create lock files or directories in another user's home (for example, when `sudo` keeps `HOME`), as that would lock the user out.
 
 ## Trade-offs
 
