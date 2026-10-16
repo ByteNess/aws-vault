@@ -1,7 +1,7 @@
 ---
 title: Using a Yubikey
 linkTitle: Yubikey
-weight: 11
+weight: 12
 ---
 
 Yubikeys can be used with AWS Vault via Yubikey's OATH-TOTP support. TOTP is necessary because FIDO-U2F is unsupported

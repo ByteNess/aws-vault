@@ -153,7 +153,7 @@ func TestClearCommandWithNonComparableKeyring(t *testing.T) {
 				KeyringBackend:          "op-connect",
 				SessionKeyringBackend:   tc.sessionBackend,
 				sessionKeyringOverrides: tc.overrides,
-				keyringImpl:             primary,
+				rawKeyringImpl:          primary,
 				sessionKeyringImpl:      sessions,
 				awsConfigFile:           writeTempConfig(t, listTestConfig),
 			}

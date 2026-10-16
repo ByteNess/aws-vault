@@ -31,6 +31,7 @@ type loginCommandInput struct {
 	SessionDuration time.Duration
 	NoSession       bool
 	AutoLogout      bool
+	ParallelSafe    bool
 }
 
 // ConfigureLoginCommand registers the login command.
@@ -90,6 +91,7 @@ func ConfigureLoginCommand(app *kingpin.Application, a *AwsVault) {
 		// --stdout is for the console URL only, not SSOUseStdout.
 		input.Config.SSOUseDeviceCode = input.UseDeviceCode
 		input.Config.SSOBrowser = input.Browser
+		input.ParallelSafe = a.ParallelSafe
 		keyring, sessionKeyring, err := a.Keyrings()
 		if err != nil {
 			return err
@@ -134,6 +136,7 @@ func getCredsProvider(input loginCommandInput, config *vault.ProfileConfig, f *v
 				SessionKeyring:            sessionKeyring,
 				DisableSessions:           input.NoSession,
 				DisableSessionsForProfile: config.ProfileName,
+				ParallelSafe:              input.ParallelSafe,
 			}
 			credsProvider, err = t.GetProviderForProfile(config)
 			if err != nil {
@@ -152,6 +155,7 @@ func getCredsProvider(input loginCommandInput, config *vault.ProfileConfig, f *v
 			SessionKeyring:            sessionKeyring,
 			DisableSessions:           input.NoSession,
 			DisableSessionsForProfile: config.ProfileName,
+			ParallelSafe:              input.ParallelSafe,
 		}
 		credsProvider, err = t.GetProviderForProfile(config)
 		if err != nil {

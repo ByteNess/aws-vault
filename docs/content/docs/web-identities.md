@@ -1,7 +1,7 @@
 ---
 title: Assuming roles with web identities
 linkTitle: Web identities
-weight: 9
+weight: 10
 ---
 
 AWS supports assuming roles using
