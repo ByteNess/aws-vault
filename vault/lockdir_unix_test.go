@@ -7,20 +7,24 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/adrg/xdg"
 	"github.com/byteness/keyring"
 )
 
 func setRuntimeDir(t *testing.T, dir string) {
 	t.Helper()
-	t.Cleanup(xdg.Reload)
 	t.Setenv("XDG_RUNTIME_DIR", dir)
-	xdg.Reload()
+}
+
+func setUserRuntimeBase(t *testing.T, base string) {
+	t.Helper()
+	previous := userRuntimeBase
+	userRuntimeBase = base
+	t.Cleanup(func() { userRuntimeBase = previous })
 }
 
 func setFallbackLockBase(t *testing.T, base string) {
@@ -209,11 +213,27 @@ func TestDefaultLockExcludesGoroutinesSharingIt(t *testing.T) {
 	}
 }
 
-func TestLockDirUsesTempDirOnMacOSWithoutRuntimeDir(t *testing.T) {
-	if runtime.GOOS != "darwin" {
-		t.Skip("macOS only")
-	}
+func TestLockDirUsesUserRuntimeDirWithoutXDGRuntimeDir(t *testing.T) {
 	setRuntimeDir(t, "")
+	base := t.TempDir()
+	setUserRuntimeBase(t, base)
+	userDir := filepath.Join(base, strconv.Itoa(os.Getuid()))
+	if err := os.Mkdir(userDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := lockDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(userDir, "aws-vault"); got != want {
+		t.Fatalf("lockDir() = %q, want %q", got, want)
+	}
+}
+
+func TestLockDirUsesTempDirWithoutRuntimeDir(t *testing.T) {
+	setRuntimeDir(t, "")
+	setUserRuntimeBase(t, filepath.Join(t.TempDir(), "missing"))
 	tmp := t.TempDir()
 	t.Setenv("TMPDIR", tmp)
 

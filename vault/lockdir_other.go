@@ -7,6 +7,10 @@ import (
 	"os"
 )
 
+func userRuntimeDir() string {
+	return ""
+}
+
 func fallbackLockDir() (string, error) {
 	return "", errors.New("no runtime directory is available for lock files")
 }

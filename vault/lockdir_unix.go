@@ -6,10 +6,22 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"syscall"
 )
 
-var fallbackLockBase = "/tmp"
+var (
+	userRuntimeBase  = "/run/user"
+	fallbackLockBase = "/tmp"
+)
+
+func userRuntimeDir() string {
+	dir := filepath.Join(userRuntimeBase, strconv.Itoa(os.Getuid()))
+	if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
+		return ""
+	}
+	return dir
+}
 
 func fallbackLockDir() (string, error) {
 	return filepath.Join(fallbackLockBase, fmt.Sprintf("aws-vault-%d", os.Getuid())), nil

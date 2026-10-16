@@ -19,7 +19,7 @@ This applies to **all backends** (keychain, file, pass, secret-service, etc.).
 
 The keyring lock applies to every command that uses the keyring. `exec`, `export`, `login`, and `rotate` also take the SSO token and session cache locks.
 
-Lock files live in `aws-vault` under the runtime directory: `$XDG_RUNTIME_DIR` if it is set, otherwise `/run/user/$UID` on Linux and the per-user temporary directory on macOS and Windows. The runtime directory must belong to the current user and be writable only by them. If it is missing or isn't private, aws-vault uses `/tmp/aws-vault-$UID` instead, and refuses to use that unless it is a directory owned by the current user with `0700` permissions. On Windows the directory's ownership and permissions are not checked. On macOS and Windows the temporary directory comes from `TMPDIR` and `TEMP`, so processes run with a different `TMPDIR` or `TEMP` use different locks; run all concurrent invocations with the same value.
+Lock files live in `aws-vault` under the runtime directory: `$XDG_RUNTIME_DIR` if it is set, otherwise `/run/user/$UID` if it exists, otherwise the temporary directory (`TMPDIR` on Linux and macOS, `TEMP` on Windows). The runtime directory must belong to the current user and be writable only by them. If it is missing or isn't private, aws-vault uses `/tmp/aws-vault-$UID` instead, and refuses to use that unless it is a directory owned by the current user with `0700` permissions. On Windows the directory's ownership and permissions are not checked. Processes that end up in the temporary directory but run with a different `TMPDIR` or `TEMP` use different locks; run all concurrent invocations with the same value.
 
 ## Trade-offs
 
