@@ -23,14 +23,14 @@ type ssoTestServer struct {
 
 func ssoOK(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json")
-	fmt.Fprintf(w, `{"roleCredentials":{"accessKeyId":"AKIAIOSFODNN7EXAMPLE","secretAccessKey":"secret","sessionToken":"session","expiration":%d}}`, time.Now().Add(time.Hour).UnixMilli())
+	_, _ = fmt.Fprintf(w, `{"roleCredentials":{"accessKeyId":"AKIAIOSFODNN7EXAMPLE","secretAccessKey":"secret","sessionToken":"session","expiration":%d}}`, time.Now().Add(time.Hour).UnixMilli())
 }
 
 func ssoUnauthorized(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("X-Amzn-Errortype", "UnauthorizedException")
 	w.WriteHeader(http.StatusUnauthorized)
-	fmt.Fprint(w, `{"__type":"UnauthorizedException","message":"Session token not found or invalid"}`)
+	_, _ = fmt.Fprint(w, `{"__type":"UnauthorizedException","message":"Session token not found or invalid"}`)
 }
 
 func ssoRateLimited(retryAfter string) func(http.ResponseWriter) {
@@ -41,7 +41,7 @@ func ssoRateLimited(retryAfter string) func(http.ResponseWriter) {
 			w.Header().Set("Retry-After", retryAfter)
 		}
 		w.WriteHeader(http.StatusTooManyRequests)
-		fmt.Fprint(w, `{"__type":"TooManyRequestsException","message":"Rate exceeded"}`)
+		_, _ = fmt.Fprint(w, `{"__type":"TooManyRequestsException","message":"Rate exceeded"}`)
 	}
 }
 
@@ -145,7 +145,7 @@ func TestGetRoleCredentialsKeepsTokenReplacedByAnotherProcess(t *testing.T) {
 	p.UseSSOTokenLock = true
 	p.newOIDCTokenFn = func(context.Context) (*OIDCTokenData, error) {
 		t.Fatal("a token another process cached must not trigger a new sign-in")
-		return nil, nil
+		return nil, errUnexpectedSignIn
 	}
 
 	if _, err := p.getRoleCredentials(context.Background()); err != nil {

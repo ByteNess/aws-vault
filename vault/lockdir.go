@@ -1,7 +1,6 @@
 package vault
 
 import (
-	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -45,8 +44,4 @@ func usableRuntimeDir(dir string) (string, bool) {
 		return "", false
 	}
 	return dir, true
-}
-
-func lockDirError(dir, reason string) error {
-	return fmt.Errorf("refusing to use lock directory %s: %s", dir, reason)
 }

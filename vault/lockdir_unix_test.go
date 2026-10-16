@@ -134,7 +134,7 @@ func TestDefaultLockExcludesOtherProcesses(t *testing.T) {
 
 	tryInChild := func() string {
 		t.Helper()
-		cmd := exec.Command(os.Args[0], "-test.run=^TestDefaultLockExcludesOtherProcesses$")
+		cmd := exec.CommandContext(t.Context(), os.Args[0], "-test.run=^TestDefaultLockExcludesOtherProcesses$")
 		cmd.Env = append(os.Environ(), "AWS_VAULT_TEST_LOCK_CHILD=1")
 		out, err := cmd.CombinedOutput()
 		if err != nil {

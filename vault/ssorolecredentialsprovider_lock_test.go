@@ -12,6 +12,8 @@ import (
 	"github.com/byteness/keyring"
 )
 
+var errUnexpectedSignIn = errors.New("unexpected sign-in")
+
 type testTokenCache struct {
 	token    *OIDCTokenData
 	setCalls int
@@ -65,7 +67,7 @@ func TestGetOIDCToken_CacheHit_NoLock(t *testing.T) {
 	p.UseSSOTokenLock = true
 	p.newOIDCTokenFn = func(context.Context) (*OIDCTokenData, error) {
 		t.Fatal("newOIDCToken should not be called on cache hit")
-		return nil, nil
+		return nil, errUnexpectedSignIn
 	}
 
 	token, cached, err := p.getOIDCToken(context.Background())
@@ -128,9 +130,9 @@ func TestGetOIDCToken_LockMiss_ThenCacheHit_NoLock(t *testing.T) {
 	p.ssoNow = clock.Now
 	p.newOIDCTokenFn = func(context.Context) (*OIDCTokenData, error) {
 		t.Fatal("newOIDCToken should not be called when cache fills while waiting")
-		return nil, nil
+		return nil, errUnexpectedSignIn
 	}
-	p.ssoSleep = func(ctx context.Context, d time.Duration) error {
+	p.ssoSleep = func(_ context.Context, d time.Duration) error {
 		clock.now = clock.now.Add(d)
 		cache.token = cachedToken
 		return nil
@@ -170,7 +172,7 @@ func TestGetOIDCToken_LockAcquired_RecheckCache(t *testing.T) {
 	p.UseSSOTokenLock = true
 	p.newOIDCTokenFn = func(context.Context) (*OIDCTokenData, error) {
 		t.Fatal("newOIDCToken should not be called when cache is filled after lock")
-		return nil, nil
+		return nil, errUnexpectedSignIn
 	}
 
 	token, cached, err := p.getOIDCToken(context.Background())
@@ -268,7 +270,7 @@ func TestGetOIDCToken_LockWaitLogs(t *testing.T) {
 	}
 	p.newOIDCTokenFn = func(context.Context) (*OIDCTokenData, error) {
 		t.Fatal("newOIDCToken should not be called when lock never acquired")
-		return nil, nil
+		return nil, errUnexpectedSignIn
 	}
 
 	_, _, err := p.getOIDCToken(ctx)

@@ -1039,18 +1039,18 @@ func jitterRetryAfter(base time.Duration) time.Duration {
 	return d
 }
 
-func jitteredBackoff(base, max time.Duration, attempt int) time.Duration {
+func jitteredBackoff(base, maxDelay time.Duration, attempt int) time.Duration {
 	if attempt < 1 {
 		attempt = 1
 	}
 	capDelay := base << uint(attempt-1)
-	if max < capDelay {
-		capDelay = max
+	if maxDelay < capDelay {
+		capDelay = maxDelay
 	}
 	if capDelay < base {
-		// Overflow: large shift wrapped negative; clamp to max, not base,
+		// Overflow: large shift wrapped negative; clamp to maxDelay, not base,
 		// so late retries stay backed off instead of becoming aggressive.
-		capDelay = max
+		capDelay = maxDelay
 	}
 	return jitterDelay(capDelay)
 }
@@ -1059,11 +1059,11 @@ func jitterDelay(base time.Duration) time.Duration {
 	if base <= 0 {
 		return 0
 	}
-	min := ssoRetryAfterJitterMin
-	max := ssoRetryAfterJitterMax
-	if max < min {
-		max = min
+	lo := ssoRetryAfterJitterMin
+	hi := ssoRetryAfterJitterMax
+	if hi < lo {
+		hi = lo
 	}
-	factor := min + rand.Float64()*(max-min)
+	factor := lo + rand.Float64()*(hi-lo)
 	return time.Duration(float64(base) * factor)
 }

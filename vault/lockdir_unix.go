@@ -47,3 +47,7 @@ func ensurePrivateDir(dir string) (string, error) {
 
 	return dir, nil
 }
+
+func lockDirError(dir, reason string) error {
+	return fmt.Errorf("refusing to use lock directory %s: %s", dir, reason)
+}
