@@ -37,6 +37,10 @@ type OIDCTokenCacher interface {
 	Remove(string) error
 }
 
+type oidcTokenPeeker interface {
+	Peek(string) (*OIDCTokenData, error)
+}
+
 // SSORoleCredentialsProvider creates temporary credentials for an SSO Role.
 type SSORoleCredentialsProvider struct {
 	OIDCClient     *ssooidc.Client
@@ -349,13 +353,18 @@ func (p *SSORoleCredentialsProvider) cachedOrRefreshedOIDCToken(ctx context.Cont
 // usableCachedOIDCToken returns the cached token if it can be used as it is:
 // still valid, and either outside the refresh window or not refreshable at
 // all, which is the same test cachedOIDCToken starts with. It never touches
-// the network, so it serves as the fast path that skips the lock.
+// the network and never changes the cache, so it serves as the fast path that
+// skips the lock.
 func (p *SSORoleCredentialsProvider) usableCachedOIDCToken() (token *ssooidc.CreateTokenOutput, ok bool, err error) {
 	if p.OIDCTokenCache == nil {
 		return nil, false, nil
 	}
 
-	data, err := p.OIDCTokenCache.Get(p.StartURL)
+	read := p.OIDCTokenCache.Get
+	if peeker, isPeeker := p.OIDCTokenCache.(oidcTokenPeeker); isPeeker {
+		read = peeker.Peek
+	}
+	data, err := read(p.StartURL)
 	if err != nil && err != keyring.ErrKeyNotFound {
 		return nil, false, err
 	}
@@ -1028,25 +1037,23 @@ func retryAfterFromError(err error) (time.Duration, bool) {
 	return 0, false
 }
 
+// parseRetryAfter returns the Retry-After delay, capped to the retry budget. A
+// delay of zero or less is reported as absent, so the caller backs off instead.
 func parseRetryAfter(value string) (time.Duration, bool) {
 	trimmed := strings.TrimSpace(value)
-	if trimmed == "" {
+	var d time.Duration
+	if secs, err := strconv.Atoi(trimmed); err == nil {
+		// Cap before converting: large counts overflow time.Duration.
+		d = time.Duration(min(secs, int(ssoRetryTimeout/time.Second))) * time.Second
+	} else if t, err := http.ParseTime(trimmed); err == nil {
+		d = min(time.Until(t), ssoRetryTimeout)
+	} else {
 		return 0, false
 	}
-	if secs, err := strconv.Atoi(trimmed); err == nil {
-		if secs < 0 {
-			return 0, false
-		}
-		return time.Duration(secs) * time.Second, true
+	if d <= 0 {
+		return 0, false
 	}
-	if t, err := http.ParseTime(trimmed); err == nil {
-		d := time.Until(t)
-		if d < 0 {
-			d = 0
-		}
-		return d, true
-	}
-	return 0, false
+	return d, true
 }
 
 func isSSORateLimitError(err error) bool {
