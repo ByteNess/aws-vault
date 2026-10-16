@@ -1037,25 +1037,23 @@ func retryAfterFromError(err error) (time.Duration, bool) {
 	return 0, false
 }
 
+// parseRetryAfter returns the Retry-After delay, capped to the retry budget. A
+// delay of zero or less is reported as absent, so the caller backs off instead.
 func parseRetryAfter(value string) (time.Duration, bool) {
 	trimmed := strings.TrimSpace(value)
-	if trimmed == "" {
+	var d time.Duration
+	if secs, err := strconv.Atoi(trimmed); err == nil {
+		// Cap before converting: large counts overflow time.Duration.
+		d = time.Duration(min(secs, int(ssoRetryTimeout/time.Second))) * time.Second
+	} else if t, err := http.ParseTime(trimmed); err == nil {
+		d = min(time.Until(t), ssoRetryTimeout)
+	} else {
 		return 0, false
 	}
-	if secs, err := strconv.Atoi(trimmed); err == nil {
-		if secs < 0 {
-			return 0, false
-		}
-		return time.Duration(secs) * time.Second, true
+	if d <= 0 {
+		return 0, false
 	}
-	if t, err := http.ParseTime(trimmed); err == nil {
-		d := time.Until(t)
-		if d < 0 {
-			d = 0
-		}
-		return d, true
-	}
-	return 0, false
+	return d, true
 }
 
 func isSSORateLimitError(err error) bool {

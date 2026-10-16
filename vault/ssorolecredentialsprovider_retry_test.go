@@ -52,6 +52,30 @@ func TestRetryAfterFromErrorMissingHeader(t *testing.T) {
 	}
 }
 
+func TestParseRetryAfter(t *testing.T) {
+	for _, tc := range []struct {
+		value  string
+		want   time.Duration
+		wantOK bool
+	}{
+		{value: "120", want: 120 * time.Second, wantOK: true},
+		{value: " 7 ", want: 7 * time.Second, wantOK: true},
+		{value: "0"},
+		{value: "-5"},
+		{value: "Wed, 21 Oct 2015 07:28:00 GMT"},
+		{value: "3600", want: ssoRetryTimeout, wantOK: true},
+		{value: "9999999999", want: ssoRetryTimeout, wantOK: true},
+		{value: "Fri, 01 Jan 2100 00:00:00 GMT", want: ssoRetryTimeout, wantOK: true},
+		{value: ""},
+		{value: "soon"},
+	} {
+		got, ok := parseRetryAfter(tc.value)
+		if got != tc.want || ok != tc.wantOK {
+			t.Errorf("parseRetryAfter(%q) = %s, %t; want %s, %t", tc.value, got, ok, tc.want, tc.wantOK)
+		}
+	}
+}
+
 func TestIsSSORateLimitError(t *testing.T) {
 	if !isSSORateLimitError(&ssotypes.TooManyRequestsException{}) {
 		t.Fatal("expected TooManyRequestsException to be rate limit error")
@@ -238,9 +262,10 @@ func TestGetRoleCredentialsTimeoutOnPersistentRateLimit(t *testing.T) {
 // call, and then with credentials. It records the bearer token of each call,
 // and runs onCall, if set, before replying.
 type rateLimitServer struct {
-	replies []int
-	tokens  []string
-	onCall  func(call int)
+	replies    []int
+	tokens     []string
+	onCall     func(call int)
+	retryAfter string
 }
 
 func (s *rateLimitServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -258,6 +283,9 @@ func (s *rateLimitServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch status {
 	case http.StatusTooManyRequests:
 		w.Header().Set("X-Amzn-Errortype", "TooManyRequestsException")
+		if s.retryAfter != "" {
+			w.Header().Set("Retry-After", s.retryAfter)
+		}
 		w.WriteHeader(status)
 		_, _ = fmt.Fprint(w, `{"__type":"TooManyRequestsException","message":"Rate exceeded"}`)
 	case http.StatusUnauthorized:
@@ -269,7 +297,7 @@ func (s *rateLimitServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func newRateLimitTestProvider(t *testing.T, s *rateLimitServer, optFns ...func(*sso.Options)) (*SSORoleCredentialsProvider, *testClock) {
+func newRateLimitTestProvider(t *testing.T, s *rateLimitServer) (*SSORoleCredentialsProvider, *testClock) {
 	t.Helper()
 	srv := httptest.NewServer(s)
 	t.Cleanup(srv.Close)
@@ -279,7 +307,7 @@ func newRateLimitTestProvider(t *testing.T, s *rateLimitServer, optFns ...func(*
 		Region:           "us-east-1",
 		BaseEndpoint:     aws.String(srv.URL),
 		RetryMaxAttempts: 1,
-	}, optFns...)
+	})
 	p.AccountID = "123456789012"
 	p.RoleName = "TestRole"
 	p.OIDCTokenCache = &testTokenCache{token: testToken("cached")}
@@ -319,6 +347,29 @@ func TestGetRoleCredentialsRestartsRetryBudgetAfterReauthenticating(t *testing.T
 	}
 	if want := []string{"cached", "signed-in", "signed-in"}; strings.Join(s.tokens, ",") != strings.Join(want, ",") {
 		t.Fatalf("calls made with tokens %v, want %v", s.tokens, want)
+	}
+}
+
+func TestGetRoleCredentialsBacksOffOnUnusableRetryAfter(t *testing.T) {
+	for _, retryAfter := range []string{"0", "Wed, 21 Oct 2015 07:28:00 GMT", "9999999999"} {
+		t.Run(retryAfter, func(t *testing.T) {
+			replies := make([]int, 1000)
+			for i := range replies {
+				replies[i] = http.StatusTooManyRequests
+			}
+			s := &rateLimitServer{replies: replies, retryAfter: retryAfter}
+			p, clock := newRateLimitTestProvider(t, s)
+			p.RetryRateLimit = true
+			start := clock.now
+
+			_, err := p.getRoleCredentials(context.Background())
+			if err == nil || !strings.Contains(err.Error(), "persistently") {
+				t.Fatalf("expected to give up once the retry budget is spent, got %v", err)
+			}
+			if elapsed := clock.now.Sub(start); elapsed < ssoRetryTimeout {
+				t.Fatalf("%d calls in %s: the retries didn't back off", len(s.tokens), elapsed)
+			}
+		})
 	}
 }
 
