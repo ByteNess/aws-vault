@@ -359,6 +359,30 @@ func TestKeyringLockKey(t *testing.T) {
 			config:  keyring.Config{},
 			want:    "op-desktop",
 		},
+		{
+			name:    "proton-pass with share ID",
+			backend: "proton-pass",
+			config:  keyring.Config{ProtonPassShareID: "share-123"},
+			want:    "proton-pass:share-123",
+		},
+		{
+			name:    "proton-pass with empty share ID",
+			backend: "proton-pass",
+			config:  keyring.Config{},
+			want:    "proton-pass",
+		},
+		{
+			name:    "keyctl with scope",
+			backend: "keyctl",
+			config:  keyring.Config{KeyCtlScope: "user"},
+			want:    "keyctl:user",
+		},
+		{
+			name:    "keyctl with empty scope",
+			backend: "keyctl",
+			config:  keyring.Config{},
+			want:    "keyctl",
+		},
 
 		// Fallback cases
 		{

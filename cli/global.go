@@ -234,6 +234,15 @@ func keyringLockKey(backend string, config keyring.Config) string {
 		if config.OPVaultID != "" {
 			return backend + ":" + config.OPVaultID
 		}
+	case keyring.ProtonPassBackend:
+		if config.ProtonPassShareID != "" {
+			return backend + ":" + config.ProtonPassShareID
+		}
+	case keyring.KeyCtlBackend:
+		if config.KeyCtlScope != "" {
+			return backend + ":" + config.KeyCtlScope
+		}
+	case keyring.WinHelloBackend, keyring.InvalidBackend:
 	}
 	return backend
 }
