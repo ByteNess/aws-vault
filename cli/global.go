@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/AlecAivazis/survey/v2"
@@ -191,15 +192,14 @@ func (a *AwsVault) openKeyring(backend string, config keyring.Config) (keyring.K
 	return kr, err
 }
 
-// keyringLockKey returns a backend-specific key for the cross-process keyring
-// lock. Different backends (and different configurations of the same backend)
-// produce different keys so they don't contend on the same lock file.
+// keyringLockKey returns the cross-process lock key for the primary keyring.
 func (a *AwsVault) keyringLockKey() string {
 	return keyringLockKey(a.KeyringBackend, a.KeyringConfig)
 }
 
-// keyringLockKey returns the lock key for a keyring opened with backend and
-// config; see AwsVault.keyringLockKey.
+// keyringLockKey identifies the store a keyring opened with backend and config
+// uses, so that every spelling of one store shares a lock. A pass prefix is
+// only a folder in the store, so it isn't part of the key.
 func keyringLockKey(backend string, config keyring.Config) string {
 	switch keyring.BackendType(backend) {
 	case keyring.KeychainBackend:
@@ -208,17 +208,20 @@ func keyringLockKey(backend string, config keyring.Config) string {
 		}
 	case keyring.FileBackend:
 		if config.FileDir != "" {
-			return backend + ":" + config.FileDir
+			return backend + ":" + absStoreDir(config.FileDir)
 		}
 	case keyring.PassBackend:
-		key := backend
-		if config.PassDir != "" {
-			key += ":" + config.PassDir
+		return backend + ":" + resolveStoreDir(config.PassDir, "PASSWORD_STORE_DIR", ".password-store")
+	case keyring.PassageBackend:
+		return backend + ":" + resolveStoreDir(config.PassDir, "PASSAGE_DIR", ".passage/store")
+	case keyring.ProtonPassBackend:
+		if config.ProtonPassShareID != "" {
+			return backend + ":" + config.ProtonPassShareID
 		}
-		if config.PassPrefix != "" {
-			key += ":" + config.PassPrefix
+	case keyring.KeyCtlBackend:
+		if config.KeyCtlScope != "" {
+			return backend + ":" + config.KeyCtlScope
 		}
-		return key
 	case keyring.SecretServiceBackend:
 		if config.LibSecretCollectionName != "" {
 			return backend + ":" + config.LibSecretCollectionName
@@ -235,8 +238,7 @@ func keyringLockKey(backend string, config keyring.Config) string {
 		if config.OPVaultID != "" {
 			return backend + ":" + config.OPVaultID
 		}
-	case keyring.InvalidBackend, keyring.KeyCtlBackend, keyring.WinHelloBackend,
-		keyring.PassageBackend, keyring.ProtonPassBackend:
+	case keyring.InvalidBackend, keyring.WinHelloBackend:
 		// No backend-specific config to split the lock key on; these fall
 		// through to the backend name below.
 	}
@@ -248,6 +250,30 @@ func keyringLockKey(backend string, config keyring.Config) string {
 		return backend
 	}
 	return "aws-vault"
+}
+
+// resolveStoreDir finds a pass or passage store directory the way the backend
+// does: dir, else $envVar, else homeRel under the home directory.
+func resolveStoreDir(dir, envVar, homeRel string) string {
+	if dir == "" {
+		if env, found := os.LookupEnv(envVar); found {
+			dir = env
+		} else if home, err := os.UserHomeDir(); err == nil {
+			dir = filepath.Join(home, homeRel)
+		}
+	}
+	return absStoreDir(dir)
+}
+
+// absStoreDir expands ~ as the backends do and makes dir absolute and clean.
+func absStoreDir(dir string) string {
+	if expanded, err := keyring.ExpandTilde(dir); err == nil {
+		dir = expanded
+	}
+	if abs, err := filepath.Abs(dir); err == nil {
+		dir = abs
+	}
+	return dir
 }
 
 func (a *AwsVault) hasSeparateSessionKeyring() bool {

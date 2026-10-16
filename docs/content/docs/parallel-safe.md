@@ -13,7 +13,7 @@ The `--parallel-safe` flag (or `AWS_VAULT_PARALLEL_SAFE=true`) enables cross-pro
 
 - **SSO token lock**: Only one process per SSO Start URL refreshes the OIDC token or signs in (PKCE, device code or `--stdout`); the others wait for the cached token.
 - **Session cache lock**: Only one process writes back to a given session cache entry at a time.
-- **Keyring lock**: Opening a keyring and all its read/write operations are serialized across processes. A separate session keyring (`--session-backend` or the session overrides) gets its own lock, so the two stores do not wait on each other.
+- **Keyring lock**: Opening a keyring and all its read/write operations are serialized across processes, with one lock per store. Processes share a store's lock however they refer to it, for example as `~/store`, its full path or a relative path, or as one `pass` store with different prefixes. A separate session keyring (`--session-backend` or the session overrides) gets its own lock, so the two stores do not wait on each other.
 - **Rate limit retries**: When `GetRoleCredentials` is rate limited (HTTP 429), it is retried with jittered backoff, honouring `Retry-After`. Without the flag a 429 fails at once.
 
 This applies to **all backends** (keychain, file, pass, secret-service, etc.).
