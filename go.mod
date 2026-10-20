@@ -22,8 +22,6 @@ require (
 	gopkg.in/ini.v1 v1.67.3
 )
 
-require github.com/rogpeppe/go-internal v1.16.0 // indirect
-
 require (
 	github.com/1Password/connect-sdk-go v1.5.4-0.20250417152128-c154b387248b // indirect
 	github.com/1password/onepassword-sdk-go v0.4.1 // indirect
@@ -45,7 +43,7 @@ require (
 	github.com/extism/go-sdk v1.7.1 // indirect
 	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/godbus/dbus/v5 v5.2.3 // indirect
-	github.com/gofrs/flock v0.13.0
+	github.com/gofrs/flock v0.13.1
 	github.com/ianlancetaylor/demangle v0.0.0-20251118225945-96ee0021ea0f // indirect
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
