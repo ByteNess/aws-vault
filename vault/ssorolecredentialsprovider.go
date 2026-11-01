@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"io"
 	"log"
 	"math/rand"
 	"net"
@@ -68,6 +69,7 @@ type SSORoleCredentialsProvider struct {
 	ssoSleep           func(context.Context, time.Duration) error
 	ssoLogf            lockLogger
 	newOIDCTokenFn     func(context.Context) (*OIDCTokenData, error)
+	stderr             io.Writer
 }
 
 // pollSleep is a variable so tests can replace it.
@@ -636,6 +638,10 @@ func (p *SSORoleCredentialsProvider) newOIDCTokenDeviceCode(ctx context.Context)
 	log.Printf("Created OIDC device code for %s (expires in: %ds)", p.StartURL, deviceCreds.ExpiresIn)
 
 	p.openOrPrintURL(aws.ToString(deviceCreds.VerificationUriComplete))
+	// The URL does not always carry the code, e.g. a request_uri URL.
+	if code := aws.ToString(deviceCreds.UserCode); code != "" {
+		_, _ = fmt.Fprintf(p.errOut(), "Confirm the SSO authorization page shows this code: %s\n", code)
+	}
 
 	// These are the default values defined in the following RFC:
 	// https://tools.ietf.org/html/draft-ietf-oauth-device-flow-15#section-3.5
@@ -833,16 +839,24 @@ func OpenBrowser(url, browser string) error {
 	return open.StartWith(url, browser)
 }
 
+// errOut is where sign-in prompts go: stderr, so stdout stays free for credentials.
+func (p *SSORoleCredentialsProvider) errOut() io.Writer {
+	if p.stderr != nil {
+		return p.stderr
+	}
+	return os.Stderr
+}
+
 // openOrPrintURL opens url in the browser, or only prints it if UseStdout is set.
 func (p *SSORoleCredentialsProvider) openOrPrintURL(url string) {
 	if p.UseStdout {
-		fmt.Fprintf(os.Stderr, "Open the SSO authorization page in a browser (use Ctrl-C to abort)\n%s\n", url)
+		_, _ = fmt.Fprintf(p.errOut(), "Open the SSO authorization page in a browser (use Ctrl-C to abort)\n%s\n", url)
 	} else {
 		browser := p.Browser
 		if browser == "" {
 			browser = "your default browser"
 		}
-		fmt.Fprintf(os.Stderr, "Opening the SSO authorization page in %s (use Ctrl-C to abort)\n%s\n", browser, url)
+		_, _ = fmt.Fprintf(p.errOut(), "Opening the SSO authorization page in %s (use Ctrl-C to abort)\n%s\n", browser, url)
 		log.Println("Opening SSO authorization page in browser")
 		if err := openBrowser(url, p.Browser); err != nil {
 			log.Printf("Failed to open browser: %s", err)
