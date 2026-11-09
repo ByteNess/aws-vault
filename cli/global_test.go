@@ -213,6 +213,7 @@ func TestSessionKeyringEnvironmentConfiguration(t *testing.T) {
 }
 
 func TestKeyringLockKey(t *testing.T) {
+	oo7Path := filepath.Join(t.TempDir(), "custom.keyring")
 	tests := []struct {
 		name    string
 		backend string
@@ -319,6 +320,13 @@ func TestKeyringLockKey(t *testing.T) {
 			backend: "op-desktop",
 			config:  keyring.Config{},
 			want:    "op-desktop",
+		},
+
+		{
+			name:    "oo7 with custom keyring path",
+			backend: "oo7",
+			config:  keyring.Config{OO7KeyringPath: oo7Path},
+			want:    "oo7:" + oo7Path,
 		},
 
 		// Fallback cases
@@ -610,5 +618,28 @@ func TestKeyringLockKeyIdentifiesStore(t *testing.T) {
 	t.Setenv("PASSWORD_STORE_DIR", filepath.Join(home, "custom"))
 	if got, want := keyringLockKey("pass", keyring.Config{}), keyringLockKey("pass", keyring.Config{PassDir: "~/custom"}); got != want {
 		t.Errorf("unset pass dir with $PASSWORD_STORE_DIR set: key %q, want %q", got, want)
+	}
+}
+
+func TestKeyringLockKeyOO7DefaultPath(t *testing.T) {
+	dataDir := filepath.Join(t.TempDir(), "xdg") // absolute on every platform
+	t.Setenv("XDG_DATA_HOME", dataDir)
+	a := &AwsVault{
+		KeyringBackend: "oo7",
+		KeyringConfig:  keyring.Config{ServiceName: "aws-vault"},
+	}
+	want := "oo7:" + filepath.Join(dataDir, "aws-vault", "keyrings", "default.keyring")
+	if got := a.keyringLockKey(); got != want {
+		t.Errorf("keyringLockKey() = %q, want %q", got, want)
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skip(err)
+	}
+	a.KeyringConfig.OO7KeyringPath = "~/custom.keyring"
+	want = "oo7:" + filepath.Join(home, "custom.keyring")
+	if got := a.keyringLockKey(); got != want {
+		t.Errorf("keyringLockKey() = %q, want %q", got, want)
 	}
 }

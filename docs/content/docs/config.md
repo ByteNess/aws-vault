@@ -164,6 +164,10 @@ To configure the default flag values of `aws-vault` and its subcommands:
 | `AWS_VAULT_PROMPT` | Prompt driver to use | `--prompt` |
 | `AWS_VAULT_SECRET_SERVICE_COLLECTION_NAME` | Name of secret-service collection to use | `--secret-service-collection` |
 | `AWS_VAULT_SESSION_SECRET_SERVICE_COLLECTION_NAME` | Name of secret-service collection to use for sessions | `--session-secret-service-collection` |
+| `AWS_VAULT_OO7_KEYRING_PATH` | Path of the oo7 keyring file | `--oo7-keyring-path` |
+| `AWS_VAULT_SESSION_OO7_KEYRING_PATH` | Path of the oo7 keyring file to use for sessions | `--session-oo7-keyring-path` |
+| `AWS_VAULT_OO7_KEY_SOURCE` | Where the oo7 keyring's encryption secret comes from (`auto`, `portal`, `passphrase`) | `--oo7-key-source` |
+| `AWS_VAULT_OO7_PASSPHRASE` | Passphrase for the oo7 keyring, instead of prompting | — |
 | `AWS_VAULT_PASS_PASSWORD_STORE_DIR` | Pass password store directory | `--pass-dir` |
 | `AWS_VAULT_SESSION_PASS_PASSWORD_STORE_DIR` | Pass password store directory to use for sessions | `--session-pass-dir` |
 | `AWS_VAULT_PASS_CMD` | Name of the pass executable | `--pass-cmd` |

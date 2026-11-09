@@ -41,7 +41,8 @@ Run `aws-vault --help` to see the backends available in your build and environme
 By default, `aws-vault` selects the first available backend for the platform:
 `wincred` on Windows, `keychain` on macOS, and `secret-service` on Linux when Secret Service is available.
 On Linux, automatic selection then falls back through `kwallet`, `keyctl`, `pass`, `passage`, and `file`.
-The 1Password and Proton Pass backends are opt-in and are listed after `file`, so choose them explicitly with `--backend` or `AWS_VAULT_BACKEND`.
+The 1Password, Proton Pass and [oo7](https://byteness.github.io/aws-vault/docs/backends/#oo7) backends are opt-in and are listed after `file`, so choose them explicitly with `--backend` or `AWS_VAULT_BACKEND`.
+Over SSH or in headless sessions, where Secret Service cannot prompt to unlock a collection, `oo7` stores credentials in an [oo7](https://github.com/linux-credentials/oo7) keyring file with no daemon or prompt involved.
 
 ## Quick start
 
