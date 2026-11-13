@@ -31,6 +31,8 @@ var keyringConfigDefaults = keyring.Config{
 	OPDesktopAccountID:       "AWS_VAULT_OP_DESKTOP_ACCOUNT_ID",
 	OPTokenFunc:              keyringPassphrasePrompt,
 	ProtonPassTokenFunc:      keyringPassphrasePrompt,
+	OO7KeySource:             keyring.OO7KeySourceAuto,
+	OO7PasswordFunc:          oo7KeyringPassphrasePrompt,
 }
 
 type keyringConfigOverrides struct {
@@ -46,6 +48,7 @@ type keyringConfigOverrides struct {
 	OPItemTag                 string
 	ProtonPassShareID         string
 	ProtonPassItemTitlePrefix string
+	OO7KeyringPath            string
 }
 
 func (o keyringConfigOverrides) configured() bool {
@@ -60,7 +63,8 @@ func (o keyringConfigOverrides) configured() bool {
 		o.OPItemTitlePrefix != "" ||
 		o.OPItemTag != "" ||
 		o.ProtonPassShareID != "" ||
-		o.ProtonPassItemTitlePrefix != ""
+		o.ProtonPassItemTitlePrefix != "" ||
+		o.OO7KeyringPath != ""
 }
 
 func (o keyringConfigOverrides) apply(config keyring.Config) keyring.Config {
@@ -99,6 +103,9 @@ func (o keyringConfigOverrides) apply(config keyring.Config) keyring.Config {
 	}
 	if o.ProtonPassItemTitlePrefix != "" {
 		config.ProtonPassItemTitlePrefix = o.ProtonPassItemTitlePrefix
+	}
+	if o.OO7KeyringPath != "" {
+		config.OO7KeyringPath = o.OO7KeyringPath
 	}
 	return config
 }
@@ -238,6 +245,10 @@ func keyringLockKey(backend string, config keyring.Config) string {
 		if config.OPVaultID != "" {
 			return backend + ":" + config.OPVaultID
 		}
+	case keyring.OO7Backend:
+		if path := oo7KeyringPath(config); path != "" {
+			return backend + ":" + path
+		}
 	case keyring.InvalidBackend, keyring.WinHelloBackend:
 		// No backend-specific config to split the lock key on; these fall
 		// through to the backend name below.
@@ -263,6 +274,19 @@ func resolveStoreDir(dir, envVar, homeRel string) string {
 		}
 	}
 	return absStoreDir(dir)
+}
+
+// oo7KeyringPath resolves the oo7 keyring file the way the backend does: the
+// configured path, or the default under the user's data directory.
+func oo7KeyringPath(config keyring.Config) string {
+	if config.OO7KeyringPath != "" {
+		return absStoreDir(config.OO7KeyringPath)
+	}
+	path, err := keyring.OO7DefaultKeyringPath(config.ServiceName)
+	if err != nil {
+		return ""
+	}
+	return absStoreDir(path)
 }
 
 // absStoreDir expands ~ as the backends do and makes dir absolute and clean.
@@ -479,6 +503,19 @@ func ConfigureGlobals(app *kingpin.Application) *AwsVault {
 		Envar("AWS_VAULT_SESSION_FILE_DIR").
 		StringVar(&a.sessionKeyringOverrides.FileDir)
 
+	app.Flag("oo7-keyring-path", "Path of the oo7 keyring file (default ~/.local/share/aws-vault/keyrings/default.keyring)").
+		Envar("AWS_VAULT_OO7_KEYRING_PATH").
+		StringVar(&a.KeyringConfig.OO7KeyringPath)
+
+	app.Flag("session-oo7-keyring-path", "Path of the oo7 keyring file to use for sessions").
+		Envar("AWS_VAULT_SESSION_OO7_KEYRING_PATH").
+		StringVar(&a.sessionKeyringOverrides.OO7KeyringPath)
+
+	app.Flag("oo7-key-source", "Where the oo7 keyring's encryption secret comes from: auto (Secret portal when sandboxed, else passphrase), portal or passphrase").
+		Default(keyring.OO7KeySourceAuto).
+		Envar("AWS_VAULT_OO7_KEY_SOURCE").
+		EnumVar(&a.KeyringConfig.OO7KeySource, keyring.OO7KeySourceAuto, keyring.OO7KeySourcePortal, keyring.OO7KeySourcePassphrase)
+
 	app.Flag("op-timeout", "Timeout for 1Password API operations (1Password Service Accounts only)").
 		Default("15s").
 		Envar("AWS_VAULT_OP_TIMEOUT").
@@ -575,6 +612,14 @@ func configureTouchID(k *keyring.Config) {
 
 func fileKeyringPassphrasePrompt(prompt string) (string, error) {
 	if password, ok := os.LookupEnv("AWS_VAULT_FILE_PASSPHRASE"); ok {
+		return password, nil
+	}
+
+	return keyringPassphrasePrompt(prompt)
+}
+
+func oo7KeyringPassphrasePrompt(prompt string) (string, error) {
+	if password, ok := os.LookupEnv("AWS_VAULT_OO7_PASSPHRASE"); ok {
 		return password, nil
 	}
 

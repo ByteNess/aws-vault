@@ -46,8 +46,8 @@ github.com/byteness/go-keychain v0.1.0 h1:3FRgLkl9Tm6apbRrBNnEmsrRpumd7XY9oQnG7h
 github.com/byteness/go-keychain v0.1.0/go.mod h1:1N5+ePkzZA9gHnWD3vePbsGLBXNg0YFKy4nNLmKqp2E=
 github.com/byteness/go-libsecret v0.0.0-20260108215642-107379d3dee0 h1:j59wGsxaBk6aFBuuYofk2oznMGZYyzFovjDqavlJHM8=
 github.com/byteness/go-libsecret v0.0.0-20260108215642-107379d3dee0/go.mod h1:3FrDGTXj08zj6qtqlIvt0vS8eWNrrYpnXOEbcQgFmvM=
-github.com/byteness/keyring v1.15.1 h1:rhsQs/3W/vHRCs07d0uUNV4nQezudMk6oTcoHlpiWnI=
-github.com/byteness/keyring v1.15.1/go.mod h1:apbN9cmZajFkZ5qrM5IdF64fF86Ka816rPDzPQThMZU=
+github.com/byteness/keyring v1.16.0 h1:WLYcLrTN73Y2FBax9YEThnsb+EmwUUl76+XsR03evmc=
+github.com/byteness/keyring v1.16.0/go.mod h1:rYxCXBGKX4u9ac7eW4+8J6nK1NySCVLHPOjFMhvtVB8=
 github.com/byteness/percent v0.2.2 h1:vnIFh8WBR1xoC+U2etz0EMB1cgp+vsK6vynqTCeDziU=
 github.com/byteness/percent v0.2.2/go.mod h1:nwavge92FhIyfnldz4YWZD8uxPVvdh8NlzLRd1VYRDs=
 github.com/creack/pty v1.1.17/go.mod h1:MOBLtS5ELjhRRrroQr9kyvTxUAFNvYEK993ew/Vr4O4=
@@ -150,8 +150,8 @@ golang.org/x/sys v0.0.0-20201119102817-f84b799fce68/go.mod h1:h1NjWce9XRLGQEsW7w
 golang.org/x/sys v0.0.0-20210615035016-665e8c7367d1/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
 golang.org/x/sys v0.0.0-20220520151302-bc2c85ada10a/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
 golang.org/x/sys v0.0.0-20220722155257-8c9f86f7a55f/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
-golang.org/x/sys v0.49.0 h1:XbzkgYJHdqh/8m2Uu0W/dQv8nktxx4BFHp1M0gROTXA=
-golang.org/x/sys v0.49.0/go.mod h1:hNLxWAXmnKAxqDtdwIYC4bM9oQPEecfsnNMuSxOs3og=
+golang.org/x/sys v0.50.0 h1:dkKZEFTEKaLr1sjhs0WiKqoi8Jj5nHbS3Njmx1UoMJs=
+golang.org/x/sys v0.50.0/go.mod h1:hNLxWAXmnKAxqDtdwIYC4bM9oQPEecfsnNMuSxOs3og=
 golang.org/x/term v0.0.0-20201126162022-7de9c90e9dd1/go.mod h1:bj7SfCRtBDWHUb9snDiAeCFNEtKQo2Wmx5Cou7ajbmo=
 golang.org/x/term v0.0.0-20210927222741-03fcf44c2211/go.mod h1:jbD1KX2456YbFQfuXm/mYQcufACuNUgVhRMnK/tPxf8=
 golang.org/x/term v0.47.0 h1:cpyOwQkr2Nzxe2p6KnrTG7Ei2wtzjsuSjhpXXepZ/BM=

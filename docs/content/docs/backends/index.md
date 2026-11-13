@@ -13,7 +13,8 @@ The supported vaulting backends are:
 | `keychain` | [macOS Keychain](https://support.apple.com/en-au/guide/keychain-access/welcome/mac) | Stores credentials as generic password items in the configured Keychain. Optional biometrics support can use Touch ID to unlock the aws-vault keychain when it is locked, see [Touch ID](#touch-id). | macOS |
 | `wincred` | [Windows Credential Manager](https://support.microsoft.com/en-au/help/4026814/windows-accessing-credential-manager) | Stores credentials as generic credentials under an aws-vault target-name prefix in Windows Credential Manager. | Windows |
 | `winhello` | [Windows Hello](https://support.microsoft.com/en-us/windows/configure-windows-hello-dae28983-8242-bb2a-d3d1-87c9d265a5f0) | Stores encrypted envelopes in Windows Credential Manager. The encryption key is wrapped by Windows Hello / Passport, so reads require PIN/biometrics. | Windows |
-| `secret-service` | Secret Service ([GNOME Keyring](https://wiki.gnome.org/Projects/GnomeKeyring), [KWallet](https://apps.kde.org/kwalletmanager5/), ...) | Stores credentials in a Secret Service collection over the desktop session D-Bus. The collection may be unlocked by the desktop keyring service. | Linux |
+| `secret-service` | Secret Service ([oo7-daemon](https://github.com/linux-credentials/oo7), [GNOME Keyring](https://wiki.gnome.org/Projects/GnomeKeyring), [KWallet](https://apps.kde.org/kwalletmanager5/), ...) | Stores credentials in a Secret Service collection over the desktop session D-Bus. The collection may be unlocked by the desktop keyring service. | Linux |
+| `oo7` | [oo7](https://github.com/linux-credentials/oo7) keyring file | Stores credentials in an oo7 keyring file (the format behind `oo7-daemon`, GNOME's new Secret Service) under `~/.local/share/aws-vault/`, without going through D-Bus. Encrypted with a passphrase, or with the Secret portal's per-application secret when sandboxed. See [below](#oo7). | Linux |
 | `kwallet` | [KWallet](https://apps.kde.org/kwalletmanager5/) | Stores credentials as entries in the configured KWallet folder over the KDE Wallet D-Bus service directly (rather than through the Secret Service API). | Linux |
 | `keyctl` | [Linux kernel keyring](https://man7.org/linux/man-pages/man7/keyrings.7.html) | Stores credentials in the Linux kernel key retention service, optionally inside a named keyring for the configured service. | Linux |
 | `pass` | [Pass](https://www.passwordstore.org/) | Stores JSON-encoded credential items in a `pass` password store, encrypted by GPG and managed through the `pass` command. | macOS, Linux, FreeBSD |
@@ -29,8 +30,8 @@ the backends available in your build and environment.
 
 By default, `aws-vault` selects the first available backend for the platform: `wincred` on Windows, `keychain` on macOS,
 and `secret-service` on Linux when Secret Service is available. On Linux, automatic selection then falls back through
-`kwallet`, `keyctl`, `pass`, `passage`, and `file`. The 1Password and Proton Pass backends are opt-in and are listed
-after `file`, so choose them explicitly with `--backend` or `AWS_VAULT_BACKEND`.
+`kwallet`, `keyctl`, `pass`, `passage`, and `file`. The 1Password, Proton Pass and oo7 backends are opt-in and are
+listed after `file`, so choose them explicitly with `--backend` or `AWS_VAULT_BACKEND`.
 
 ## Keychain
 
@@ -65,6 +66,58 @@ login keychain. `credential_process` can't show that prompt, so do the first unl
 with `security lock-keychain aws-vault.keychain`, then run any command, such as `aws-vault list --biometrics`.
 
 If you use a separate session keychain (`--session-keychain`), each keychain is checked and unlocked separately.
+
+## oo7
+
+[oo7](https://github.com/linux-credentials/oo7) is the Secret Service implementation GNOME is moving to. Its daemon
+speaks the standard D-Bus API, so the `secret-service` backend keeps working with it. The `oo7` backend instead reads
+and writes oo7's keyring file format directly, in a file of its own:
+
+- no D-Bus session or keyring daemon is involved, so nothing has to pop up a prompt and it works over SSH and in
+  headless sessions (`AWS_VAULT_OO7_PASSPHRASE` supplies the passphrase for scripts);
+- the file lives at `~/.local/share/aws-vault/keyrings/default.keyring` (`$XDG_DATA_HOME` is honoured, which also puts
+  it in the right place inside a Flatpak), or wherever `--oo7-keyring-path` / `AWS_VAULT_OO7_KEYRING_PATH` points. It
+  is kept out of `~/.local/share/keyrings/v1/` on purpose: `oo7-daemon` loads every keyring it finds there as a
+  collection, and writes made through the daemon would bypass aws-vault's lock;
+- several aws-vault processes can share the file: writers take a lock on it and replace it atomically.
+
+```shell
+export AWS_VAULT_BACKEND=oo7
+aws-vault add my-profile
+```
+
+### Key source
+
+The file is encrypted with a key derived from a secret selected by `--oo7-key-source` / `AWS_VAULT_OO7_KEY_SOURCE`:
+
+| Value | Secret |
+| --- | --- |
+| `auto` (default) | `portal` inside a Flatpak or Snap sandbox, `passphrase` otherwise. This is how oo7's own client behaves. |
+| `passphrase` | A passphrase prompted on the terminal, or taken from `AWS_VAULT_OO7_PASSPHRASE` when set. |
+| `portal` | The per-application secret handed out by the [Secret portal](https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.portal.Secret.html), no prompt. The portal only serves applications it can identify, so this works for sandboxed apps but not for a plain command line process. |
+
+A keyring created with one key source cannot be opened with the other; in `auto` mode the error says which source
+was tried and suggests setting `OO7KeySource` explicitly. That is the keyring library's name for this setting: in
+aws-vault, set it with `--oo7-key-source` or `AWS_VAULT_OO7_KEY_SOURCE`.
+
+### Working with oo7-cli
+
+`oo7-cli` can open the same file, which is handy for inspection or recovery. Leave out `-s` and it asks for the
+passphrase on the terminal:
+
+```shell
+oo7-cli -k ~/.local/share/aws-vault/keyrings/default.keyring list
+```
+
+> [!WARNING]
+> `oo7-cli` also accepts the passphrase as `-s <secret>`, but anything passed on the command line is visible to other
+> users in the process list and may end up in your shell history. Prefer the prompt.
+
+Unlike the `oo7` backend, `oo7-cli` may need a session D-Bus even when it only reads a file, so over SSH you may have
+to point `DBUS_SESSION_BUS_ADDRESS` at your session bus first.
+
+To move existing credentials from another backend, use `migrate-backend`, for example
+`aws-vault migrate-backend --from secret-service --to oo7`.
 
 ## Proton Pass
 

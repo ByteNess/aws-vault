@@ -13,7 +13,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.44.3
 	github.com/aws/aws-sdk-go-v2/service/sts v1.51.8
 	github.com/aws/smithy-go v1.28.8
-	github.com/byteness/keyring v1.15.1
+	github.com/byteness/keyring v1.16.0
 	github.com/gofrs/flock v0.13.1
 	github.com/google/go-cmp v0.7.0
 	github.com/mattn/go-isatty v0.0.24
@@ -58,7 +58,7 @@ require (
 	github.com/xhit/go-str2duration/v2 v2.1.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.9.0 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
-	golang.org/x/sys v0.49.0 // indirect
+	golang.org/x/sys v0.50.0 // indirect
 	golang.org/x/text v0.38.0 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
 )
