@@ -37,6 +37,7 @@ func main() {
 	cli.ConfigureExportCommand(app, a)
 	cli.ConfigureClearCommand(app, a)
 	cli.ConfigureLoginCommand(app, a)
+	cli.ConfigureSSOCommand(app, a)
 	cli.ConfigureProxyCommand(app)
 	cli.ConfigureVersionCommand(app, versionInfo)
 
