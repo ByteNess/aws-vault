@@ -261,6 +261,26 @@ func (p *SSORoleCredentialsProvider) getRoleCredentialsAsStsCredentials(ctx cont
 	}, nil
 }
 
+// SSOAccessToken is an IAM Identity Center access token, the bearer token the
+// SSO portal API takes in place of AWS credentials.
+type SSOAccessToken struct {
+	AccessToken string
+	Expiration  time.Time
+}
+
+// AccessToken returns the access token for the provider's start URL: the
+// cached one, a refreshed one, or one from a new sign-in.
+func (p *SSORoleCredentialsProvider) AccessToken(ctx context.Context) (*SSOAccessToken, error) {
+	token, _, err := p.getOIDCToken(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &SSOAccessToken{
+		AccessToken: aws.ToString(token.AccessToken),
+		Expiration:  p.ssoNow().Add(time.Duration(token.ExpiresIn) * time.Second),
+	}, nil
+}
+
 // oidcRefreshWindow is how long before expiry a refreshable token is renewed.
 // It matches the AWS CLI's SSOTokenProvider and keeps GetRoleCredentials from
 // being handed a token with seconds left, whose 401 would drop the cached
