@@ -1,13 +1,7 @@
 package cli
 
 import (
-	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"os"
-	"text/tabwriter"
-	"time"
 
 	"github.com/alecthomas/kingpin/v2"
 	"github.com/byteness/aws-vault/v7/vault"
@@ -22,16 +16,6 @@ type ssoCommandInput struct {
 	UseDeviceCode bool
 	Browser       string
 	ParallelSafe  bool
-}
-
-type ssoExportCommandInput struct {
-	ssoCommandInput
-	Format string
-}
-
-type ssoListAccountsCommandInput struct {
-	ssoCommandInput
-	Format string
 }
 
 // Output formats of the sso subcommands.
@@ -106,122 +90,4 @@ func ssoProvider(input ssoCommandInput, f *vault.ConfigFile, keyring keyring.Key
 	}
 
 	return vault.NewSSOAccessTokenProvider(keyring, config, input.ParallelSafe)
-}
-
-func configureSSOExportCommand(app *kingpin.Application, sso *kingpin.CmdClause, a *AwsVault) {
-	input := ssoExportCommandInput{}
-
-	cmd := sso.Command("export", "Export the SSO access token of a profile, signing in if needed. The token is a secret.")
-
-	cmd.Flag("format", fmt.Sprintf("Format to output the token. Valid formats: %s, %s", formatTypeSSOPlain, formatTypeSSOJSON)).
-		Default(formatTypeSSOPlain).
-		EnumVar(&input.Format, formatTypeSSOPlain, formatTypeSSOJSON)
-
-	addSSOCommandFlags(cmd, a, &input.ssoCommandInput)
-
-	cmd.Action(func(_ *kingpin.ParseContext) (err error) {
-		f, keyring, err := resolveSSOCommandInput(a, &input.ssoCommandInput)
-		if err != nil {
-			return err
-		}
-
-		err = ssoExportCommand(input, f, keyring, os.Stdout)
-		app.FatalIfError(err, "sso export")
-		return nil
-	})
-}
-
-func ssoExportCommand(input ssoExportCommandInput, f *vault.ConfigFile, keyring keyring.Keyring, w io.Writer) error {
-	provider, err := ssoProvider(input.ssoCommandInput, f, keyring)
-	if err != nil {
-		return err
-	}
-
-	token, err := provider.AccessToken(context.TODO())
-	if err != nil {
-		return fmt.Errorf("getting SSO access token: %w", err)
-	}
-
-	if input.Format == formatTypeSSOJSON {
-		// Field names follow the AWS CLI's ~/.aws/sso/cache token files.
-		out, err := json.MarshalIndent(struct {
-			AccessToken string `json:"accessToken"`
-			ExpiresAt   string `json:"expiresAt"`
-		}{
-			AccessToken: token.AccessToken,
-			ExpiresAt:   token.Expiration.UTC().Format(time.RFC3339),
-		}, "", "  ")
-		if err != nil {
-			return err
-		}
-		_, err = fmt.Fprintln(w, string(out))
-		return err
-	}
-
-	_, err = fmt.Fprintln(w, token.AccessToken)
-	return err
-}
-
-func configureSSOListAccountsCommand(app *kingpin.Application, sso *kingpin.CmdClause, a *AwsVault) {
-	input := ssoListAccountsCommandInput{}
-
-	cmd := sso.Command("list-accounts", "List the AWS accounts the SSO sign-in of a profile gives access to, signing in if needed.")
-
-	cmd.Flag("format", fmt.Sprintf("Format to output the accounts. Valid formats: %s, %s", formatTypeSSOText, formatTypeSSOJSON)).
-		Default(formatTypeSSOText).
-		EnumVar(&input.Format, formatTypeSSOText, formatTypeSSOJSON)
-
-	addSSOCommandFlags(cmd, a, &input.ssoCommandInput)
-
-	cmd.Action(func(_ *kingpin.ParseContext) (err error) {
-		f, keyring, err := resolveSSOCommandInput(a, &input.ssoCommandInput)
-		if err != nil {
-			return err
-		}
-
-		err = ssoListAccountsCommand(input, f, keyring, os.Stdout)
-		app.FatalIfError(err, "sso list-accounts")
-		return nil
-	})
-}
-
-func ssoListAccountsCommand(input ssoListAccountsCommandInput, f *vault.ConfigFile, keyring keyring.Keyring, w io.Writer) error {
-	provider, err := ssoProvider(input.ssoCommandInput, f, keyring)
-	if err != nil {
-		return err
-	}
-
-	accounts, err := provider.ListAccounts(context.TODO())
-	if err != nil {
-		return fmt.Errorf("listing SSO accounts: %w", err)
-	}
-
-	if input.Format == formatTypeSSOJSON {
-		// The shape of `aws sso list-accounts`, so scripts can switch over.
-		type account struct {
-			AccountID    string `json:"accountId"`
-			AccountName  string `json:"accountName"`
-			EmailAddress string `json:"emailAddress"`
-		}
-		list := make([]account, 0, len(accounts))
-		for _, a := range accounts {
-			list = append(list, account(a))
-		}
-		out, err := json.MarshalIndent(struct {
-			AccountList []account `json:"accountList"`
-		}{list}, "", "  ")
-		if err != nil {
-			return err
-		}
-		_, err = fmt.Fprintln(w, string(out))
-		return err
-	}
-
-	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
-	_, _ = fmt.Fprintln(tw, "Account ID\tAccount Name\tEmail")
-	_, _ = fmt.Fprintln(tw, "==========\t============\t=====")
-	for _, a := range accounts {
-		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\n", a.AccountID, a.AccountName, a.EmailAddress)
-	}
-	return tw.Flush()
 }
