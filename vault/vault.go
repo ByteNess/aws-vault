@@ -159,30 +159,7 @@ func NewAssumeRoleWithWebIdentityProvider(k keyring.Keyring, config *ProfileConf
 // NewSSORoleCredentialsProvider creates a provider for SSO credentials using
 // separate OIDC and session keyrings.
 func NewSSORoleCredentialsProvider(oidcKeyring, sessionKeyring keyring.Keyring, config *ProfileConfig, useSessionCache bool, parallelSafe bool) (aws.CredentialsProvider, error) {
-	cfg := NewAwsConfig(config.SSORegion, config.STSRegionalEndpoints, config.EndpointURL)
-
-	var ssoOptions []func(*sso.Options)
-	if parallelSafe {
-		ssoOptions = append(ssoOptions, leaveRateLimitsToProvider)
-	}
-
-	ssoRoleCredentialsProvider := &SSORoleCredentialsProvider{
-		OIDCClient:    ssooidc.NewFromConfig(cfg),
-		StartURL:      config.SSOStartURL,
-		SSOClient:     sso.NewFromConfig(cfg, ssoOptions...),
-		AccountID:     config.SSOAccountID,
-		RoleName:      config.SSORoleName,
-		UseStdout:     config.SSOUseStdout,
-		UseDeviceCode: config.SSOUseDeviceCode,
-		Browser:       config.SSOBrowser,
-
-		RegistrationScopes: ParseSSORegistrationScopes(config.SSORegistrationScopes),
-	}
-	ssoRoleCredentialsProvider.initSSODefaults()
-	if parallelSafe {
-		ssoRoleCredentialsProvider.EnableSSOTokenLock()
-		ssoRoleCredentialsProvider.RetryRateLimit = true
-	}
+	ssoRoleCredentialsProvider := newSSORoleCredentialsProvider(config, parallelSafe)
 
 	if useSessionCache {
 		ssoRoleCredentialsProvider.OIDCTokenCache = OIDCTokenKeyring{Keyring: oidcKeyring}
@@ -200,6 +177,45 @@ func NewSSORoleCredentialsProvider(oidcKeyring, sessionKeyring keyring.Keyring, 
 	}
 
 	return ssoRoleCredentialsProvider, nil
+}
+
+// NewSSOAccessTokenProvider creates a provider whose AccessToken method returns
+// the IAM Identity Center access token of an SSO profile, cached in oidcKeyring.
+func NewSSOAccessTokenProvider(oidcKeyring keyring.Keyring, config *ProfileConfig, parallelSafe bool) (*SSORoleCredentialsProvider, error) {
+	if !config.HasSSOStartURL() {
+		return nil, fmt.Errorf("profile '%s' is not configured for SSO: it has no sso_start_url or sso_session", config.ProfileName)
+	}
+	p := newSSORoleCredentialsProvider(config, parallelSafe)
+	p.OIDCTokenCache = OIDCTokenKeyring{Keyring: oidcKeyring}
+	return p, nil
+}
+
+func newSSORoleCredentialsProvider(config *ProfileConfig, parallelSafe bool) *SSORoleCredentialsProvider {
+	cfg := NewAwsConfig(config.SSORegion, config.STSRegionalEndpoints, config.EndpointURL)
+
+	var ssoOptions []func(*sso.Options)
+	if parallelSafe {
+		ssoOptions = append(ssoOptions, leaveRateLimitsToProvider)
+	}
+
+	p := &SSORoleCredentialsProvider{
+		OIDCClient:    ssooidc.NewFromConfig(cfg),
+		StartURL:      config.SSOStartURL,
+		SSOClient:     sso.NewFromConfig(cfg, ssoOptions...),
+		AccountID:     config.SSOAccountID,
+		RoleName:      config.SSORoleName,
+		UseStdout:     config.SSOUseStdout,
+		UseDeviceCode: config.SSOUseDeviceCode,
+		Browser:       config.SSOBrowser,
+
+		RegistrationScopes: ParseSSORegistrationScopes(config.SSORegistrationScopes),
+	}
+	p.initSSODefaults()
+	if parallelSafe {
+		p.EnableSSOTokenLock()
+		p.RetryRateLimit = true
+	}
+	return p
 }
 
 // ParseSSORegistrationScopes splits the sso_registration_scopes config value,

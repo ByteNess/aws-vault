@@ -94,6 +94,39 @@ that you can close it:
 
 ![The sign-in tab after approving access in the browser](sso-signin-success.png)
 
+## Exporting the access token
+
+Signing in gives `aws-vault` an IAM Identity Center access token, which it trades for the role credentials of a
+profile. Some AWS APIs take that token directly instead of AWS credentials, for example the portal's `ListAccounts` and
+`ListAccountRoles`. `aws-vault sso export` prints the token of a profile, signing in or refreshing the token first when
+needed:
+
+```shell
+# List the accounts you can access
+aws sso list-accounts --region eu-west-1 --access-token "$(aws-vault sso export Administrator-123456789012)"
+
+# List the roles you can use in one of them
+aws sso list-account-roles --region eu-west-1 --account-id 123456789012 \
+  --access-token "$(aws-vault sso export Administrator-123456789012)"
+```
+
+`--region` is the `sso_region` of the profile. Every profile that shares a start URL shares one token, so any of them
+works as the argument.
+
+`--format=json` prints the token together with its expiry:
+
+```json
+{
+  "accessToken": "...",
+  "expiresAt": "2026-01-01T12:00:00Z"
+}
+```
+
+The access token is a secret: until it expires it grants role credentials for every account and role you can access
+through IAM Identity Center. The refresh token and the OIDC client registration stay in the keyring and are never
+printed. The sign-in prompts go to stderr, and `--stdout`, `--device-code` and `--browser` work as described in
+[Signing in](#signing-in).
+
 ## Assuming a role with SSO
 
 If your SSO Permission Set allows you to assume another IAM role
