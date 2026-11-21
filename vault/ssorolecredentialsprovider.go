@@ -170,9 +170,34 @@ func (p *SSORoleCredentialsProvider) Retrieve(ctx context.Context) (aws.Credenti
 }
 
 func (p *SSORoleCredentialsProvider) getRoleCredentials(ctx context.Context) (*ssotypes.RoleCredentials, error) {
-	token, cached, err := p.getOIDCToken(ctx)
+	var creds *ssotypes.RoleCredentials
+	err := p.callPortal(ctx, fmt.Sprintf("role %s (account: %s)", p.RoleName, p.AccountID), func(accessToken *string) error {
+		resp, err := p.SSOClient.GetRoleCredentials(ctx, &sso.GetRoleCredentialsInput{
+			AccessToken: accessToken,
+			AccountId:   aws.String(p.AccountID),
+			RoleName:    aws.String(p.RoleName),
+		})
+		if err != nil {
+			return err
+		}
+		creds = resp.RoleCredentials
+		return nil
+	})
 	if err != nil {
 		return nil, err
+	}
+	log.Printf("Got credentials %s for SSO role %s (account: %s), expires in %s", FormatKeyForDisplay(*creds.AccessKeyId), p.RoleName, p.AccountID, time.Until(millisecondsTimeValue(creds.Expiration)).String())
+	return creds, nil
+}
+
+// callPortal runs one SSO portal call with the access token. A cached token
+// the portal rejects is replaced once, and with RetryRateLimit a rate limit is
+// retried until ssoRetryTimeout. subject names what the call is for in logs
+// and errors.
+func (p *SSORoleCredentialsProvider) callPortal(ctx context.Context, subject string, call func(accessToken *string) error) error {
+	token, cached, err := p.getOIDCToken(ctx)
+	if err != nil {
+		return err
 	}
 
 	baseDelay, maxDelay := ssoRetryBase, ssoRetryMax
@@ -183,14 +208,9 @@ func (p *SSORoleCredentialsProvider) getRoleCredentials(ctx context.Context) (*s
 	var maxRetryAfterSeen time.Duration
 	for {
 		attempt++
-		resp, err := p.SSOClient.GetRoleCredentials(ctx, &sso.GetRoleCredentialsInput{
-			AccessToken: token.AccessToken,
-			AccountId:   aws.String(p.AccountID),
-			RoleName:    aws.String(p.RoleName),
-		})
+		err := call(token.AccessToken)
 		if err == nil {
-			log.Printf("Got credentials %s for SSO role %s (account: %s), expires in %s", FormatKeyForDisplay(*resp.RoleCredentials.AccessKeyId), p.RoleName, p.AccountID, time.Until(millisecondsTimeValue(resp.RoleCredentials.Expiration)).String())
-			return resp.RoleCredentials, nil
+			return nil
 		}
 
 		if cached && !reauthenticated && p.OIDCTokenCache != nil {
@@ -201,7 +221,7 @@ func (p *SSORoleCredentialsProvider) getRoleCredentials(ctx context.Context) (*s
 				reauthenticated = true
 				token, cached, err = p.replaceRejectedOIDCToken(ctx, token)
 				if err != nil {
-					return nil, err
+					return err
 				}
 				// The sign-in can take minutes; the budget is for the 429s after it.
 				deadline = p.ssoNow().Add(ssoRetryTimeout)
@@ -228,16 +248,16 @@ func (p *SSORoleCredentialsProvider) getRoleCredentials(ctx context.Context) (*s
 				if remaining < delay {
 					delay = remaining
 				}
-				log.Printf("SSO rate limited for role %s (account: %s); backing off %s, attempt %d (%d 429s, max retry-after %s)", p.RoleName, p.AccountID, delay, attempt, rateLimitCount, maxRetryAfterSeen)
+				log.Printf("SSO rate limited for %s; backing off %s, attempt %d (%d 429s, max retry-after %s)", subject, delay, attempt, rateLimitCount, maxRetryAfterSeen)
 				if err = p.ssoSleep(ctx, delay); err != nil {
-					return nil, err
+					return err
 				}
 				continue
 			}
-			return nil, fmt.Errorf("SSO rate limited for role %s (account: %s) persistently for %s (%d 429s, max retry-after %s); giving up — try again later: %w", p.RoleName, p.AccountID, ssoRetryTimeout, rateLimitCount, maxRetryAfterSeen, err)
+			return fmt.Errorf("SSO rate limited for %s persistently for %s (%d 429s, max retry-after %s); giving up — try again later: %w", subject, ssoRetryTimeout, rateLimitCount, maxRetryAfterSeen, err)
 		}
 
-		return nil, err
+		return err
 	}
 }
 
