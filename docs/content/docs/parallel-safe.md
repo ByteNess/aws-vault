@@ -27,7 +27,7 @@ The lock files live in a per-user directory, `aws-vault/locks` under the user ca
 
 ## Commands
 
-Every command that uses the configured keyrings takes the keyring lock. `exec`, `export`, `login`, `rotate` and `sso export` also take the SSO token lock, and all of them except `rotate` and `sso export`, which don't cache sessions, take the session cache lock. A console session from `login` is single-use, but getting one still reads and writes the same session cache and SSO token as `exec` and `export`, and can start the same SSO sign-in, so it takes the same locks. `migrate-backend` opens the backends it migrates between itself and takes no locks.
+Every command that uses the configured keyrings takes the keyring lock. `exec`, `export`, `login`, `rotate` and the `sso` subcommands also take the SSO token lock, and all of them except `rotate` and the `sso` subcommands, which don't cache sessions, take the session cache lock. A console session from `login` is single-use, but getting one still reads and writes the same session cache and SSO token as `exec` and `export`, and can start the same SSO sign-in, so it takes the same locks. `migrate-backend` opens the backends it migrates between itself and takes no locks.
 
 ## Limitations
 

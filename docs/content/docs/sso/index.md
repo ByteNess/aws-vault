@@ -94,6 +94,35 @@ that you can close it:
 
 ![The sign-in tab after approving access in the browser](sso-signin-success.png)
 
+## Listing accounts
+
+`aws-vault sso list-accounts` lists the AWS accounts you can access through IAM Identity Center, signing in or
+refreshing the token first when needed. It needs no AWS CLI:
+
+```shell
+$ aws-vault sso list-accounts Administrator-123456789012
+Account ID    Account Name  Email
+==========    ============  =====
+123456789012  development   aws-dev@example.com
+123456789013  production    aws-prod@example.com
+```
+
+The profile only selects the sign-in: the list holds every account assigned to you, not just the profile's own.
+
+`--format=json` prints the accounts in the shape of `aws sso list-accounts`, for scripts:
+
+```json
+{
+  "accountList": [
+    {
+      "accountId": "123456789012",
+      "accountName": "development",
+      "emailAddress": "aws-dev@example.com"
+    }
+  ]
+}
+```
+
 ## Exporting the access token
 
 Signing in gives `aws-vault` an IAM Identity Center access token, which it trades for the role credentials of a
