@@ -301,6 +301,45 @@ func (p *SSORoleCredentialsProvider) AccessToken(ctx context.Context) (*SSOAcces
 	}, nil
 }
 
+// SSOAccount is an AWS account the signed-in user is assigned to in IAM
+// Identity Center.
+type SSOAccount struct {
+	AccountID    string
+	AccountName  string
+	EmailAddress string
+}
+
+// ListAccounts returns every AWS account the signed-in user is assigned to,
+// signing in first if needed.
+func (p *SSORoleCredentialsProvider) ListAccounts(ctx context.Context) ([]SSOAccount, error) {
+	var accounts []SSOAccount
+	var nextToken *string
+	for {
+		var page *sso.ListAccountsOutput
+		err := p.callPortal(ctx, "listing accounts", func(accessToken *string) (err error) {
+			page, err = p.SSOClient.ListAccounts(ctx, &sso.ListAccountsInput{
+				AccessToken: accessToken,
+				NextToken:   nextToken,
+			})
+			return err
+		})
+		if err != nil {
+			return nil, err
+		}
+		for _, a := range page.AccountList {
+			accounts = append(accounts, SSOAccount{
+				AccountID:    aws.ToString(a.AccountId),
+				AccountName:  aws.ToString(a.AccountName),
+				EmailAddress: aws.ToString(a.EmailAddress),
+			})
+		}
+		if aws.ToString(page.NextToken) == "" {
+			return accounts, nil
+		}
+		nextToken = page.NextToken
+	}
+}
+
 // oidcRefreshWindow is how long before expiry a refreshable token is renewed.
 // It matches the AWS CLI's SSOTokenProvider and keeps GetRoleCredentials from
 // being handed a token with seconds left, whose 401 would drop the cached
