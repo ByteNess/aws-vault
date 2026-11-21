@@ -54,7 +54,7 @@ func TestSSOExportCommand_Plain(t *testing.T) {
 	f, kr := ssoExportFixture(t)
 
 	var out bytes.Buffer
-	err := ssoExportCommand(ssoExportCommandInput{ProfileName: "sso-profile", Format: formatTypeSSOPlain}, f, kr, &out)
+	err := ssoExportCommand(ssoExportCommandInput{ssoCommandInput: ssoCommandInput{ProfileName: "sso-profile"}, Format: formatTypeSSOPlain}, f, kr, &out)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +67,7 @@ func TestSSOExportCommand_JSON(t *testing.T) {
 	f, kr := ssoExportFixture(t)
 
 	var out bytes.Buffer
-	err := ssoExportCommand(ssoExportCommandInput{ProfileName: "sso-profile", Format: formatTypeSSOJSON}, f, kr, &out)
+	err := ssoExportCommand(ssoExportCommandInput{ssoCommandInput: ssoCommandInput{ProfileName: "sso-profile"}, Format: formatTypeSSOJSON}, f, kr, &out)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +100,7 @@ func TestSSOExportCommand_ProfileWithoutSSO(t *testing.T) {
 	f, kr := ssoExportFixture(t)
 
 	var out bytes.Buffer
-	err := ssoExportCommand(ssoExportCommandInput{ProfileName: "plain", Format: formatTypeSSOPlain}, f, kr, &out)
+	err := ssoExportCommand(ssoExportCommandInput{ssoCommandInput: ssoCommandInput{ProfileName: "plain"}, Format: formatTypeSSOPlain}, f, kr, &out)
 	if err == nil || !strings.Contains(err.Error(), "not configured for SSO") {
 		t.Errorf("err = %v, want a not configured for SSO error", err)
 	}
@@ -112,7 +112,7 @@ func TestSSOExportCommand_ProfileWithoutSSO(t *testing.T) {
 func TestSSOExportCommand_UnknownProfile(t *testing.T) {
 	f, kr := ssoExportFixture(t)
 
-	err := ssoExportCommand(ssoExportCommandInput{ProfileName: "missing", Format: formatTypeSSOPlain}, f, kr, &bytes.Buffer{})
+	err := ssoExportCommand(ssoExportCommandInput{ssoCommandInput: ssoCommandInput{ProfileName: "missing"}, Format: formatTypeSSOPlain}, f, kr, &bytes.Buffer{})
 	if err == nil || !strings.Contains(err.Error(), "not found") {
 		t.Errorf("err = %v, want a profile not found error", err)
 	}
@@ -125,7 +125,7 @@ func TestSSOExportCommand_RunsInSubshell(t *testing.T) {
 	t.Setenv("AWS_VAULT", "sso-profile")
 
 	var out bytes.Buffer
-	if err := ssoExportCommand(ssoExportCommandInput{ProfileName: "sso-profile", Format: formatTypeSSOPlain}, f, kr, &out); err != nil {
+	if err := ssoExportCommand(ssoExportCommandInput{ssoCommandInput: ssoCommandInput{ProfileName: "sso-profile"}, Format: formatTypeSSOPlain}, f, kr, &out); err != nil {
 		t.Fatal(err)
 	}
 	if out.String() != "the-access-token\n" {
