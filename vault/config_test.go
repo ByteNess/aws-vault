@@ -730,7 +730,6 @@ sso_start_url=https://other.example/start
 
 func TestSSOSessionNames(t *testing.T) {
 	f := newConfigFile(t, []byte(ssoSessionsConfig))
-	defer os.Remove(f)
 	configFile, err := vault.LoadConfig(f)
 	if err != nil {
 		t.Fatal(err)
@@ -745,7 +744,6 @@ func TestSSOSessionNames(t *testing.T) {
 
 func TestGetSSOSessionConfig(t *testing.T) {
 	f := newConfigFile(t, []byte(ssoSessionsConfig))
-	defer os.Remove(f)
 	configFile, err := vault.LoadConfig(f)
 	if err != nil {
 		t.Fatal(err)
@@ -770,7 +768,6 @@ func TestGetSSOSessionConfig(t *testing.T) {
 
 func TestGetSSOSessionConfig_EndpointFromEnv(t *testing.T) {
 	f := newConfigFile(t, []byte(ssoSessionsConfig))
-	defer os.Remove(f)
 	configFile, err := vault.LoadConfig(f)
 	if err != nil {
 		t.Fatal(err)
@@ -788,7 +785,6 @@ func TestGetSSOSessionConfig_EndpointFromEnv(t *testing.T) {
 
 func TestGetSSOSessionConfig_Errors(t *testing.T) {
 	f := newConfigFile(t, []byte(ssoSessionsConfig))
-	defer os.Remove(f)
 	configFile, err := vault.LoadConfig(f)
 	if err != nil {
 		t.Fatal(err)
