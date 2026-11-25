@@ -67,16 +67,16 @@ sends it only to AWS. If sign-in isn't completed within 10 minutes, `aws-vault` 
 `aws-vault` uses the device code flow instead, which shows a URL and code to confirm in any browser, when:
 
 * `--device-code` is passed, or `AWS_VAULT_DEVICE_CODE` is set
-* `--stdout` is passed to `exec` or `export`, or `AWS_VAULT_STDOUT` is set for them, since the URL may then be
-  opened on another machine. `login --stdout` only prints the console login URL, so SSO sign-in still opens the
+* `--stdout` is passed to `exec`, `export` or an `sso` subcommand, or `AWS_VAULT_STDOUT` is set for them, since the
+  URL may then be opened on another machine. `login --stdout` only prints the console login URL, so SSO sign-in still opens the
   browser; pass `--device-code` to sign in from another machine.
 * it runs in an SSH session (`SSH_CONNECTION`, `SSH_CLIENT` or `SSH_TTY` is set)
 
 The browser can only reach the callback server when it runs on the same machine, which is why these cases use the
-device code flow. `--device-code` is available on `exec`, `export` and `login`.
+device code flow. `--device-code` is available on `exec`, `export`, `login` and the `sso` subcommands.
 
 To open the sign-in page in a browser other than your default one, pass `--browser` or set `AWS_VAULT_BROWSER`
-(available on `exec`, `export` and `login`). The value is an executable on Linux and an application name on macOS:
+(available on `exec`, `export`, `login` and the `sso` subcommands). The value is an executable on Linux and an application name on macOS:
 
 ```shell
 AWS_VAULT_BROWSER=google-chrome aws-vault exec work
@@ -123,19 +123,49 @@ The profile only selects the sign-in: the list holds every account assigned to y
 }
 ```
 
+## Listing the roles of an account
+
+`aws-vault sso list-account-roles` lists the roles you can use in one AWS account. The account is the profile's
+`sso_account_id`, or the one given with `--account-id`:
+
+```shell
+$ aws-vault sso list-account-roles Administrator-123456789012
+Account ID    Role Name
+==========    =========
+123456789012  Administrator
+123456789012  ReadOnly
+
+$ aws-vault sso list-account-roles --account-id 123456789013 Administrator-123456789012
+Account ID    Role Name
+==========    =========
+123456789013  ReadOnly
+```
+
+Together with `sso list-accounts` this gives the `sso_account_id` and `sso_role_name` values for a new profile.
+
+`--format=json` prints the roles in the shape of `aws sso list-account-roles`:
+
+```json
+{
+  "roleList": [
+    {
+      "roleName": "Administrator",
+      "accountId": "123456789012"
+    }
+  ]
+}
+```
+
 ## Exporting the access token
 
 Signing in gives `aws-vault` an IAM Identity Center access token, which it trades for the role credentials of a
-profile. Some AWS APIs take that token directly instead of AWS credentials, for example the portal's `ListAccounts` and
-`ListAccountRoles`. `aws-vault sso export` prints the token of a profile, signing in or refreshing the token first when
-needed:
+profile. The SSO portal API takes that token directly instead of AWS credentials. `aws-vault sso list-accounts` and
+`aws-vault sso list-account-roles` cover its listing calls; for any other tool that needs the token,
+`aws-vault sso export` prints the token of a profile, signing in or refreshing the token first when needed:
 
 ```shell
-# List the accounts you can access
-aws sso list-accounts --region eu-west-1 --access-token "$(aws-vault sso export Administrator-123456789012)"
-
-# List the roles you can use in one of them
-aws sso list-account-roles --region eu-west-1 --account-id 123456789012 \
+# Use the AWS CLI's own output options on the account list
+aws sso list-accounts --region eu-west-1 --output table --query 'accountList[].[accountId,accountName]' \
   --access-token "$(aws-vault sso export Administrator-123456789012)"
 ```
 

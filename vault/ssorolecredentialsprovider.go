@@ -340,6 +340,43 @@ func (p *SSORoleCredentialsProvider) ListAccounts(ctx context.Context) ([]SSOAcc
 	}
 }
 
+// SSOAccountRole is a role the signed-in user is assigned in an AWS account.
+type SSOAccountRole struct {
+	AccountID string
+	RoleName  string
+}
+
+// ListAccountRoles returns every role the signed-in user is assigned in the
+// account, signing in first if needed.
+func (p *SSORoleCredentialsProvider) ListAccountRoles(ctx context.Context, accountID string) ([]SSOAccountRole, error) {
+	var roles []SSOAccountRole
+	var nextToken *string
+	for {
+		var page *sso.ListAccountRolesOutput
+		err := p.callPortal(ctx, fmt.Sprintf("listing roles (account: %s)", accountID), func(accessToken *string) (err error) {
+			page, err = p.SSOClient.ListAccountRoles(ctx, &sso.ListAccountRolesInput{
+				AccessToken: accessToken,
+				AccountId:   aws.String(accountID),
+				NextToken:   nextToken,
+			})
+			return err
+		})
+		if err != nil {
+			return nil, err
+		}
+		for _, r := range page.RoleList {
+			roles = append(roles, SSOAccountRole{
+				AccountID: aws.ToString(r.AccountId),
+				RoleName:  aws.ToString(r.RoleName),
+			})
+		}
+		if aws.ToString(page.NextToken) == "" {
+			return roles, nil
+		}
+		nextToken = page.NextToken
+	}
+}
+
 // oidcRefreshWindow is how long before expiry a refreshable token is renewed.
 // It matches the AWS CLI's SSOTokenProvider and keeps GetRoleCredentials from
 // being handed a token with seconds left, whose 401 would drop the cached

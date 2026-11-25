@@ -199,7 +199,7 @@ To configure the default flag values of `aws-vault` and its subcommands:
 | `AWS_VAULT_PROTON_PASS_TIMEOUT` | Timeout for Proton Pass API operations | `--proton-pass-timeout` |
 | `AWS_VAULT_PROFILE_ENV` | Set `AWS_PROFILE` instead of injecting `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` to allow profile-based SDK auth | `profile-env` (for `exec`) |
 | `AWS_CONFIG_FILE` | The location of the AWS config file | — |
-| `AWS_VAULT_STDOUT` | Print the URL to stdout instead of opening it in the default browser: the console login URL for `login`, the SSO sign-in URL for `exec` and `export` | `--stdout` |
+| `AWS_VAULT_STDOUT` | Print the URL to stdout instead of opening it in the default browser: the console login URL for `login`, the SSO sign-in URL for `exec`, `export` and the `sso` subcommands | `--stdout` |
 | `AWS_VAULT_DEVICE_CODE` | Use the device code flow for SSO sign-in instead of the default PKCE browser flow (see [SSO](/docs/sso#signing-in)) | `--device-code` |
 | `AWS_VAULT_BROWSER` | Browser to open the SSO sign-in page in and, for `login`, the AWS Console, instead of the default browser (see [SSO](/docs/sso#signing-in)) | `--browser` |
 
