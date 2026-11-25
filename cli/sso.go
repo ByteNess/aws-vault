@@ -11,6 +11,7 @@ import (
 // ssoCommandInput is what every sso subcommand needs to reach a sign-in.
 type ssoCommandInput struct {
 	ProfileName   string
+	SSOSession    string
 	Config        vault.ProfileConfig
 	UseStdout     bool
 	UseDeviceCode bool
@@ -33,8 +34,8 @@ func ConfigureSSOCommand(app *kingpin.Application, a *AwsVault) {
 	configureSSOListAccountRolesCommand(app, sso, a)
 }
 
-// addSSOCommandFlags adds the sign-in flags and the profile argument shared by
-// the sso subcommands.
+// addSSOCommandFlags adds the sign-in flags, the --sso-session flag and the
+// profile argument shared by the sso subcommands.
 func addSSOCommandFlags(cmd *kingpin.CmdClause, a *AwsVault, input *ssoCommandInput) {
 	cmd.Flag("stdout", "Print the SSO link to the terminal without automatically opening the browser").
 		OverrideDefaultFromEnvar("AWS_VAULT_STDOUT").
@@ -47,6 +48,10 @@ func addSSOCommandFlags(cmd *kingpin.CmdClause, a *AwsVault, input *ssoCommandIn
 	cmd.Flag("browser", "Browser to open the SSO sign-in page in instead of the default browser, e.g. google-chrome, or \"Google Chrome\" on macOS").
 		Envar("AWS_VAULT_BROWSER").
 		StringVar(&input.Browser)
+
+	cmd.Flag("sso-session", "Name of an [sso-session] section to sign in to, instead of a profile").
+		HintAction(a.MustGetSSOSessionNames).
+		StringVar(&input.SSOSession)
 
 	cmd.Arg("profile", "Name of the profile").
 		HintAction(a.MustGetProfileNames).
@@ -70,7 +75,7 @@ func resolveSSOCommandInput(a *AwsVault, input *ssoCommandInput) (*vault.ConfigF
 		return nil, nil, err
 	}
 
-	if input.ProfileName == "" {
+	if input.ProfileName == "" && input.SSOSession == "" {
 		input.ProfileName, err = pickAwsProfile(f.ProfileNames())
 		if err != nil {
 			return nil, nil, fmt.Errorf("unable to select a 'profile'. Try --help: %w", err)
@@ -79,8 +84,20 @@ func resolveSSOCommandInput(a *AwsVault, input *ssoCommandInput) (*vault.ConfigF
 	return f, keyring, nil
 }
 
-// ssoProvider returns the provider for the sign-in of the input's profile.
+// ssoProvider returns the provider for the sign-in of the input's profile, or
+// of its [sso-session] section when --sso-session names one.
 func ssoProvider(input ssoCommandInput, f *vault.ConfigFile, keyring keyring.Keyring) (*vault.SSORoleCredentialsProvider, error) {
+	if input.SSOSession != "" {
+		if input.ProfileName != "" {
+			return nil, fmt.Errorf("--sso-session and the profile '%s' both select a sign-in: pass only one", input.ProfileName)
+		}
+		config, err := vault.NewConfigLoader(input.Config, f, "").GetSSOSessionConfig(input.SSOSession)
+		if err != nil {
+			return nil, err
+		}
+		return vault.NewSSOAccessTokenProvider(keyring, config, input.ParallelSafe)
+	}
+
 	if _, ok := f.ProfileSection(input.ProfileName); !ok {
 		return nil, fmt.Errorf("profile '%s' not found in ~/.aws/config", input.ProfileName)
 	}

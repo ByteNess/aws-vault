@@ -94,6 +94,28 @@ that you can close it:
 
 ![The sign-in tab after approving access in the browser](sso-signin-success.png)
 
+## Using a sign-in without a profile
+
+The `sso` subcommands below take a profile, which selects the sign-in. Before any profile exists, pass
+`--sso-session` with the name of an `[sso-session]` section instead. The section needs `sso_start_url` and `sso_region`:
+
+```ini
+[sso-session my-sso]
+sso_start_url=https://aws-sso-portal.awsapps.com/start
+sso_region=eu-west-1
+sso_registration_scopes=sso:account:access
+```
+
+```shell
+# Which accounts can I access, and which roles in one of them?
+aws-vault sso list-accounts --sso-session my-sso
+aws-vault sso list-account-roles --sso-session my-sso --account-id 123456789012
+```
+
+The answers are the `sso_account_id` and `sso_role_name` values for a profile that uses the session. A session has no
+account of its own, so `sso list-account-roles` needs `--account-id` with it. Profiles that use the session share its
+sign-in, so the profile and `--sso-session` forms return the same token; passing both is an error.
+
 ## Listing accounts
 
 `aws-vault sso list-accounts` lists the AWS accounts you can access through IAM Identity Center, signing in or

@@ -24,7 +24,7 @@ func configureSSOListAccountRolesCommand(app *kingpin.Application, sso *kingpin.
 
 	cmd := sso.Command("list-account-roles", "List the roles the SSO sign-in of a profile gives access to in an AWS account, signing in if needed.")
 
-	cmd.Flag("account-id", "The AWS account to list roles for. Defaults to the sso_account_id of the profile").
+	cmd.Flag("account-id", "The AWS account to list roles for. Defaults to the sso_account_id of the profile, and is required with --sso-session").
 		StringVar(&input.AccountID)
 
 	cmd.Flag("format", fmt.Sprintf("Format to output the roles. Valid formats: %s, %s", formatTypeSSOText, formatTypeSSOJSON)).
@@ -56,6 +56,9 @@ func ssoListAccountRolesCommand(input ssoListAccountRolesCommandInput, f *vault.
 		accountID = provider.AccountID
 	}
 	if accountID == "" {
+		if input.SSOSession != "" {
+			return fmt.Errorf("an sso-session has no account: pass --account-id")
+		}
 		return fmt.Errorf("profile '%s' has no sso_account_id: pass --account-id", input.ProfileName)
 	}
 
