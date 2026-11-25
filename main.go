@@ -27,19 +27,7 @@ func main() {
 	app.Version(versionInfo)
 	app.VersionFlag.Short('v')
 
-	a := cli.ConfigureGlobals(app)
-	cli.ConfigureAddCommand(app, a)
-	cli.ConfigureRemoveCommand(app, a)
-	cli.ConfigureMigrateBackendCommand(app, a)
-	cli.ConfigureListCommand(app, a)
-	cli.ConfigureRotateCommand(app, a)
-	cli.ConfigureExecCommand(app, a)
-	cli.ConfigureExportCommand(app, a)
-	cli.ConfigureClearCommand(app, a)
-	cli.ConfigureLoginCommand(app, a)
-	cli.ConfigureSSOCommand(app, a)
-	cli.ConfigureProxyCommand(app)
-	cli.ConfigureVersionCommand(app, versionInfo)
+	cli.ConfigureCommands(app, cli.ConfigureGlobals(app), versionInfo)
 
 	kingpin.MustParse(app.Parse(os.Args[1:]))
 }
