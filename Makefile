@@ -3,7 +3,7 @@ BUILD_FLAGS=-ldflags="-s -w -X main.Version=$(VERSION)" -trimpath
 CERT_ID ?= Developer ID Application: ByteNess (R)
 INSTALL_DIR ?= ~/bin
 GOTEST_FLAGS ?= -race
-.PHONY: binaries clean release install snapshot run check-fmt docs-serve docs-build
+.PHONY: binaries clean release install snapshot run check-fmt docs-serve docs-build test-zsh-completion
 # Go's build cache skips unchanged work, so always invoke go build
 .PHONY: aws-vault aws-vault-darwin-amd64 aws-vault-darwin-arm64 aws-vault-freebsd-amd64 aws-vault-linux-amd64 aws-vault-linux-arm64 aws-vault-linux-ppc64le aws-vault-linux-arm7 aws-vault-windows-386.exe aws-vault-windows-amd64.exe aws-vault-windows-arm64.exe
 
@@ -49,6 +49,11 @@ run:
 
 test: ## Run tests
 	go test $(GOTEST_FLAGS) ./...
+
+test-zsh-completion: ## Check the zsh completion script in a real zsh (needs zsh)
+	@tmp=$$(mktemp -d); \
+	go build -o $$tmp/aws-vault . && zsh -f contrib/completions/zsh/test/run.zsh $$tmp/aws-vault; \
+	status=$$?; rm -rf $$tmp; exit $$status
 
 fmt: **/*.go ## Formt Golang code
 	go fmt ./...
