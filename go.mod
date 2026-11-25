@@ -13,7 +13,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.44.5
 	github.com/aws/aws-sdk-go-v2/service/sts v1.53.0
 	github.com/aws/smithy-go v1.28.10
-	github.com/byteness/keyring v1.16.1
+	github.com/byteness/keyring v1.16.2
 	github.com/gofrs/flock v0.13.2
 	github.com/google/go-cmp v0.7.0
 	github.com/mattn/go-isatty v0.0.24
