@@ -123,6 +123,39 @@ The profile only selects the sign-in: the list holds every account assigned to y
 }
 ```
 
+## Listing the roles of an account
+
+`aws-vault sso list-account-roles` lists the roles you can use in one AWS account. The account is the profile's
+`sso_account_id`, or the one given with `--account-id`:
+
+```shell
+$ aws-vault sso list-account-roles Administrator-123456789012
+Account ID    Role Name
+==========    =========
+123456789012  Administrator
+123456789012  ReadOnly
+
+$ aws-vault sso list-account-roles --account-id 123456789013 Administrator-123456789012
+Account ID    Role Name
+==========    =========
+123456789013  ReadOnly
+```
+
+Together with `sso list-accounts` this gives the `sso_account_id` and `sso_role_name` values for a new profile.
+
+`--format=json` prints the roles in the shape of `aws sso list-account-roles`:
+
+```json
+{
+  "roleList": [
+    {
+      "roleName": "Administrator",
+      "accountId": "123456789012"
+    }
+  ]
+}
+```
+
 ## Exporting the access token
 
 Signing in gives `aws-vault` an IAM Identity Center access token, which it trades for the role credentials of a

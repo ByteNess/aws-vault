@@ -30,6 +30,7 @@ func ConfigureSSOCommand(app *kingpin.Application, a *AwsVault) {
 	sso := app.Command("sso", "Work with AWS IAM Identity Center (SSO) sign-ins.")
 	configureSSOExportCommand(app, sso, a)
 	configureSSOListAccountsCommand(app, sso, a)
+	configureSSOListAccountRolesCommand(app, sso, a)
 }
 
 // addSSOCommandFlags adds the sign-in flags and the profile argument shared by
