@@ -12,7 +12,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sso v1.39.5
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.44.5
 	github.com/aws/aws-sdk-go-v2/service/sts v1.53.0
-	github.com/aws/smithy-go v1.28.9
+	github.com/aws/smithy-go v1.28.10
 	github.com/byteness/keyring v1.16.1
 	github.com/gofrs/flock v0.13.2
 	github.com/google/go-cmp v0.7.0
@@ -34,31 +34,31 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.25 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.14.12 // indirect
 	github.com/aws/aws-sdk-go-v2/service/signin v1.14.0 // indirect
-	github.com/byteness/go-keychain v0.1.0 // indirect
-	github.com/byteness/go-libsecret v0.0.0-20260108215642-107379d3dee0 // indirect
+	github.com/byteness/go-keychain v0.2.0 // indirect
+	github.com/byteness/go-libsecret v0.0.0-20261025202909-3bd6b3d4cee4 // indirect
 	github.com/byteness/percent v0.2.2 // indirect
 	github.com/creack/pty v1.1.24 // indirect
 	github.com/danieljoos/wincred v1.2.3 // indirect
 	github.com/dvsekhvalnov/jose2go v1.11.0 // indirect
 	github.com/dylibso/observe-sdk/go v0.0.0-20240828172851-9145d8ad07e1 // indirect
 	github.com/extism/go-sdk v1.7.1 // indirect
-	github.com/gobwas/glob v0.2.3 // indirect
+	github.com/gobwas/glob v1.1.0 // indirect
 	github.com/godbus/dbus/v5 v5.2.4 // indirect
-	github.com/ianlancetaylor/demangle v0.0.0-20251118225945-96ee0021ea0f // indirect
+	github.com/ianlancetaylor/demangle v0.0.0-20261012173340-cbb8aaea4290 // indirect
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51 // indirect
-	github.com/mattn/go-colorable v0.1.14 // indirect
+	github.com/mattn/go-colorable v0.1.16 // indirect
 	github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d // indirect
 	github.com/noamcohen97/touchid-go v0.3.0 // indirect
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/tetratelabs/wabin v0.0.0-20230304001439-f6f874872834 // indirect
-	github.com/tetratelabs/wazero v1.11.0 // indirect
+	github.com/tetratelabs/wazero v1.12.0 // indirect
 	github.com/uber/jaeger-client-go v2.30.0+incompatible // indirect
 	github.com/uber/jaeger-lib v2.4.1+incompatible // indirect
-	github.com/xhit/go-str2duration/v2 v2.1.0 // indirect
-	go.opentelemetry.io/proto/otlp v1.9.0 // indirect
-	go.uber.org/atomic v1.11.0 // indirect
+	github.com/xhit/go-str2duration/v2 v2.2.0 // indirect
+	go.opentelemetry.io/proto/otlp v1.11.1 // indirect
+	go.uber.org/atomic v1.12.0 // indirect
 	golang.org/x/sys v0.50.0 // indirect
-	golang.org/x/text v0.38.0 // indirect
+	golang.org/x/text v0.44.0 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
 )
