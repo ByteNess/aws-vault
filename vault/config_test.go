@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/byteness/aws-vault/v7/vault"
@@ -709,5 +710,94 @@ source_profile = self
 	}
 	if config.SourceProfile == nil || config.SourceProfile.ProfileName != "self" || config.SourceProfile.SourceProfile != nil {
 		t.Fatalf("d should source from self, which has no source profile, got %+v", config.SourceProfile)
+	}
+}
+
+const ssoSessionsConfig = `[sso-session my-sso]
+sso_start_url=https://sso.example/start
+sso_region=eu-west-1
+sso_registration_scopes=sso:account:access
+
+[profile dev]
+sso_session=my-sso
+
+[sso-session no-url]
+sso_region=eu-west-1
+
+[sso-session no-region]
+sso_start_url=https://other.example/start
+`
+
+func TestSSOSessionNames(t *testing.T) {
+	f := newConfigFile(t, []byte(ssoSessionsConfig))
+	configFile, err := vault.LoadConfig(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got := configFile.SSOSessionNames()
+	want := []string{"my-sso", "no-url", "no-region"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("SSOSessionNames() = %q, want %q", got, want)
+	}
+}
+
+func TestGetSSOSessionConfig(t *testing.T) {
+	f := newConfigFile(t, []byte(ssoSessionsConfig))
+	configFile, err := vault.LoadConfig(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	loader := &vault.ConfigLoader{File: configFile, BaseConfig: vault.ProfileConfig{SSOUseDeviceCode: true}}
+	config, err := loader.GetSSOSessionConfig("my-sso")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if config.SSOSession != "my-sso" || config.SSOStartURL != "https://sso.example/start" ||
+		config.SSORegion != "eu-west-1" || config.SSORegistrationScopes != "sso:account:access" {
+		t.Errorf("config not taken from the sso-session section: %+v", config)
+	}
+	if !config.SSOUseDeviceCode {
+		t.Error("the base config must carry over")
+	}
+	if config.SSOAccountID != "" || config.SSORoleName != "" {
+		t.Errorf("a session has no account or role, got %q %q", config.SSOAccountID, config.SSORoleName)
+	}
+}
+
+func TestGetSSOSessionConfig_EndpointFromEnv(t *testing.T) {
+	f := newConfigFile(t, []byte(ssoSessionsConfig))
+	configFile, err := vault.LoadConfig(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("AWS_ENDPOINT_URL", "http://127.0.0.1:1")
+
+	config, err := (&vault.ConfigLoader{File: configFile}).GetSSOSessionConfig("my-sso")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if config.EndpointURL != "http://127.0.0.1:1" {
+		t.Errorf("EndpointURL = %q, want the AWS_ENDPOINT_URL value", config.EndpointURL)
+	}
+}
+
+func TestGetSSOSessionConfig_Errors(t *testing.T) {
+	f := newConfigFile(t, []byte(ssoSessionsConfig))
+	configFile, err := vault.LoadConfig(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for name, want := range map[string]string{
+		"missing":   "not found",
+		"no-url":    "sso_start_url",
+		"no-region": "sso_region",
+	} {
+		_, err := (&vault.ConfigLoader{File: configFile}).GetSSOSessionConfig(name)
+		if err == nil || !strings.Contains(err.Error(), want) || !strings.Contains(err.Error(), name) {
+			t.Errorf("GetSSOSessionConfig(%q) error = %v, want one naming the session and %q", name, err, want)
+		}
 	}
 }

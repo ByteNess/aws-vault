@@ -397,6 +397,15 @@ func (a *AwsVault) MustGetProfileNames() []string {
 	return config.ProfileNames()
 }
 
+// MustGetSSOSessionNames returns the [sso-session] names in the AWS config file, exiting if it can't be loaded.
+func (a *AwsVault) MustGetSSOSessionNames() []string {
+	config, err := a.AwsConfigFile()
+	if err != nil {
+		log.Fatalf("Error loading AWS config: %s", err.Error())
+	}
+	return config.SSOSessionNames()
+}
+
 // ConfigureGlobals registers the global flags and returns the state they populate.
 func ConfigureGlobals(app *kingpin.Application) *AwsVault {
 	a := &AwsVault{
