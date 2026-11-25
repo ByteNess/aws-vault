@@ -1,30 +1,35 @@
 #compdef aws-vault
 
+# aws-vault completes its own command line: commands, subcommands, flags and
+# profile names all come from `aws-vault --completion-bash <words>`.
 _aws-vault() {
-	_arguments -C \
-		'1: :->command' \
-		'2: :->profiles'
+	# After `--` the words are the command to run, not aws-vault's.
+	local i
+	for (( i = 2; i < CURRENT; i++ )); do
+		if [[ ${words[i]} == -- ]]; then
+			shift $i words
+			(( CURRENT -= i ))
+			_normal
+			return
+		fi
+	done
 
-	case $state in
-		command)
-			local -a commands=( $(${words[1]} --completion-bash) )
-			_describe -t commands 'Commands' commands
+	local -a matches
+	matches=( ${(f)"$(${words[1]} --completion-bash "${(@)words[2,CURRENT]}" 2>/dev/null)"} )
+	compadd -a matches
 
-			;;
-		profiles)
-			case "${words[2]}" in
-				exec|login|remove|rm|rotate)
-					local -a profiles=(  $(cat ~/.aws/config | awk '/^\[profile/ {print $2;}' | tr -d \])  )
-					_describe -t profiles 'AWS Profiles' profiles
-					;;
-			esac
-			;;
-		args)
-			_describe -t args 'Args' args
-	esac
+	# Nothing from aws-vault: the word may be a file, such as the command for
+	# `exec` to run. The bash completion falls back the same way.
+	if (( compstate[nmatches] == 0 )) && [[ ${words[CURRENT]} != -* ]]; then
+		_files
+	fi
 }
 
-
 if [[ "$(basename -- ${(%):-%x})" != "_aws-vault" ]]; then
-    compdef _aws-vault aws-vault
+	# Sourced, for example from .zshrc.
+	compdef _aws-vault aws-vault
+else
+	# Autoloaded from fpath: zsh ran this file as the body of _aws-vault, which
+	# only defined the function above, so the first completion has to call it.
+	_aws-vault "$@"
 fi
