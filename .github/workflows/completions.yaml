@@ -1,0 +1,39 @@
+name: Shell completions
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'contrib/completions/**'
+      - '.github/workflows/completions.yaml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  GOTELEMETRY: off
+
+jobs:
+  zsh:
+    name: zsh
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: 'stable'
+          check-latest: true
+      - name: Install zsh
+        if: runner.os == 'Linux'
+        run: command -v zsh || (sudo apt-get update && sudo apt-get install -y zsh)
+      - name: Check the zsh completion script
+        run: make test-zsh-completion

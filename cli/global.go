@@ -406,6 +406,22 @@ func (a *AwsVault) MustGetSSOSessionNames() []string {
 	return config.SSOSessionNames()
 }
 
+// ConfigureCommands registers every aws-vault command on app.
+func ConfigureCommands(app *kingpin.Application, a *AwsVault, versionInfo string) {
+	ConfigureAddCommand(app, a)
+	ConfigureRemoveCommand(app, a)
+	ConfigureMigrateBackendCommand(app, a)
+	ConfigureListCommand(app, a)
+	ConfigureRotateCommand(app, a)
+	ConfigureExecCommand(app, a)
+	ConfigureExportCommand(app, a)
+	ConfigureClearCommand(app, a)
+	ConfigureLoginCommand(app, a)
+	ConfigureSSOCommand(app, a)
+	ConfigureProxyCommand(app)
+	ConfigureVersionCommand(app, versionInfo)
+}
+
 // ConfigureGlobals registers the global flags and returns the state they populate.
 func ConfigureGlobals(app *kingpin.Application) *AwsVault {
 	a := &AwsVault{
