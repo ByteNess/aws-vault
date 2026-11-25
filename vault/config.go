@@ -327,6 +327,21 @@ func (c *ConfigFile) ProfileNames() []string {
 	return profileNames
 }
 
+// SSOSessionNames returns the names of the [sso-session] sections, in file
+// order.
+func (c *ConfigFile) SSOSessionNames() []string {
+	var names []string
+	if c.iniFile == nil {
+		return names
+	}
+	for _, sectionName := range c.iniFile.SectionStrings() {
+		if name, ok := strings.CutPrefix(sectionName, "sso-session "); ok {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
 // ConfigLoader loads config from configfile and environment variables
 type ConfigLoader struct {
 	BaseConfig    ProfileConfig
@@ -489,6 +504,33 @@ func (cl *ConfigLoader) populateFromConfigFile(config *ProfileConfig, profileNam
 	}
 
 	return nil
+}
+
+// GetSSOSessionConfig returns the config for signing in to the named
+// [sso-session] section on its own, without a profile: it has the sign-in
+// settings and no account or role.
+func (cl *ConfigLoader) GetSSOSessionConfig(name string) (*ProfileConfig, error) {
+	session, ok := cl.File.SSOSessionSection(name)
+	if !ok {
+		return nil, fmt.Errorf("sso-session '%s' not found in the config file", name)
+	}
+	if session.SSOStartURL == "" {
+		return nil, fmt.Errorf("sso-session '%s' has no sso_start_url", name)
+	}
+	if session.SSORegion == "" {
+		return nil, fmt.Errorf("sso-session '%s' has no sso_region", name)
+	}
+
+	config := cl.BaseConfig
+	config.SSOSession = name
+	config.SSOStartURL = session.SSOStartURL
+	config.SSORegion = session.SSORegion
+	config.SSORegistrationScopes = session.SSORegistrationScopes
+	if endpointURL := os.Getenv("AWS_ENDPOINT_URL"); endpointURL != "" && config.EndpointURL == "" {
+		log.Printf("Using %q from AWS_ENDPOINT_URL", endpointURL)
+		config.EndpointURL = endpointURL
+	}
+	return &config, nil
 }
 
 func (cl *ConfigLoader) populateFromEnv(profile *ProfileConfig) {
