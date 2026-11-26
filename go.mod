@@ -5,13 +5,13 @@ go 1.27
 require (
 	github.com/AlecAivazis/survey/v2 v2.3.7
 	github.com/alecthomas/kingpin/v2 v2.4.0
-	github.com/aws/aws-sdk-go-v2 v1.48.0
-	github.com/aws/aws-sdk-go-v2/config v1.33.21
-	github.com/aws/aws-sdk-go-v2/credentials v1.21.3
-	github.com/aws/aws-sdk-go-v2/service/iam v1.68.0
-	github.com/aws/aws-sdk-go-v2/service/sso v1.39.5
-	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.44.5
-	github.com/aws/aws-sdk-go-v2/service/sts v1.53.0
+	github.com/aws/aws-sdk-go-v2 v1.48.1
+	github.com/aws/aws-sdk-go-v2/config v1.33.22
+	github.com/aws/aws-sdk-go-v2/credentials v1.21.4
+	github.com/aws/aws-sdk-go-v2/service/iam v1.68.1
+	github.com/aws/aws-sdk-go-v2/service/sso v1.39.6
+	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.44.6
+	github.com/aws/aws-sdk-go-v2/service/sts v1.53.1
 	github.com/aws/smithy-go v1.28.10
 	github.com/byteness/keyring v1.16.2
 	github.com/gofrs/flock v0.13.2
@@ -27,13 +27,13 @@ require (
 	github.com/1Password/connect-sdk-go v1.5.4-0.20250417152128-c154b387248b // indirect
 	github.com/1password/onepassword-sdk-go v0.4.1 // indirect
 	github.com/alecthomas/units v0.0.0-20240927000941-0f3dac36c52b // indirect
-	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.20.9 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/configsources v1.5.12 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.8.12 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/v4a v1.5.12 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.25 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.14.12 // indirect
-	github.com/aws/aws-sdk-go-v2/service/signin v1.14.0 // indirect
+	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.20.10 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/configsources v1.5.13 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.8.13 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/v4a v1.5.13 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.26 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.14.13 // indirect
+	github.com/aws/aws-sdk-go-v2/service/signin v1.14.1 // indirect
 	github.com/byteness/go-keychain v0.2.0 // indirect
 	github.com/byteness/go-libsecret v0.0.0-20261025202909-3bd6b3d4cee4 // indirect
 	github.com/byteness/percent v0.2.2 // indirect
