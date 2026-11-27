@@ -29,7 +29,7 @@ module:
     # which means it -- not the `require` in go.mod -- decides the theme
     # version actually built. Bump the theme here.
     - path: github.com/imfing/hextra
-      version: v0.12.3
+      version: v0.13.0
 
 defaultContentLanguage: en
 languages:
