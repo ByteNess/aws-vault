@@ -45,3 +45,15 @@ updates:
     labels:
       - "dependencies"
       - "github_actions"
+  # docs/Dockerfile pins the Hugo version the docs site is built with.
+  - package-ecosystem: "docker"
+    directory: "/docs"
+    schedule:
+      interval: "weekly"
+      day: "thursday"
+      time: "11:00"
+    cooldown:
+      default-days: 1
+    labels:
+      - "dependencies"
+      - "docs"
