@@ -12,7 +12,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sso v1.39.6
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.44.6
 	github.com/aws/aws-sdk-go-v2/service/sts v1.53.1
-	github.com/aws/smithy-go v1.28.10
+	github.com/aws/smithy-go v1.28.11
 	github.com/byteness/keyring v1.16.2
 	github.com/gofrs/flock v0.13.2
 	github.com/google/go-cmp v0.7.0

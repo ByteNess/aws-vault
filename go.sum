@@ -40,8 +40,8 @@ github.com/aws/aws-sdk-go-v2/service/ssooidc v1.44.6 h1:BNTt0xfMtfLF3/YpcPCPioL2
 github.com/aws/aws-sdk-go-v2/service/ssooidc v1.44.6/go.mod h1:9IiNXZPnSBSF0bKM9dHRzLEb49IqSPh0voOhp7KVmkg=
 github.com/aws/aws-sdk-go-v2/service/sts v1.53.1 h1:v6vt91IoL7PWx0TjIETO5IWtjAVQqOZ3oKUus6XykLY=
 github.com/aws/aws-sdk-go-v2/service/sts v1.53.1/go.mod h1:HeFBzksjwXSkhBvH20Yp2xdgn+e3lHRiVACMMr0mzOU=
-github.com/aws/smithy-go v1.28.10 h1:SfPnj8fGCVAI/P5YC4/1JjuMsucbPp2dROnSTYNo2PE=
-github.com/aws/smithy-go v1.28.10/go.mod h1:YE2RhdIuDbA5E5bTdciG9KrW3+TiEONeUWCqxX9i1Fc=
+github.com/aws/smithy-go v1.28.11 h1:2aArhkXe0dFld6IFMlaVy47SbSdU/ZGbDaE7X2DjZkI=
+github.com/aws/smithy-go v1.28.11/go.mod h1:YE2RhdIuDbA5E5bTdciG9KrW3+TiEONeUWCqxX9i1Fc=
 github.com/byteness/go-keychain v0.2.0 h1:gDsAJWTiKOFzmNFZdQiw1n2vWasENnMIdjHdtcnQKUY=
 github.com/byteness/go-keychain v0.2.0/go.mod h1:Y52cXNfpw48FhmWz9cDwyu2XIDxRm1LKr7WGj0eKcpU=
 github.com/byteness/go-libsecret v0.0.0-20261025202909-3bd6b3d4cee4 h1:8ZsyVMqQpoJt/BqG8Esx7XQUIoYN5wwD7zc8s0/KoAk=
