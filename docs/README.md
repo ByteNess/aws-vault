@@ -3,12 +3,31 @@
 The source for <https://byteness.github.io/aws-vault/>, built with
 [Hugo](https://gohugo.io/) and the [Hextra](https://github.com/imfing/hextra) theme.
 
-## Prerequisites
+## Hugo version
 
-- **Hugo extended**, v0.165.0 or newer — `brew install hugo`
-- **Go** — Hextra is installed as a Hugo Module, which uses the Go toolchain to fetch it
+[`Dockerfile`](./Dockerfile) pins the Hugo version: the Pages workflow installs the version
+named in its `FROM` tag, and Dependabot opens a pull request when Hugo publishes a newer
+image. `module.hugoVersion.min` in `hugo.yaml` is only the oldest version that builds the
+site correctly.
 
 ## Preview locally
+
+### With Docker (recommended)
+
+Needs only Docker, and runs the same Hugo version as CI. From the repository root:
+
+```shell
+make docs-serve-docker
+```
+
+Then open <http://localhost:1313/>. The target builds an image from `Dockerfile` and runs
+`hugo server` in it with the repository mounted, so edits reload live. The official Hugo
+image bundles Go, Git and Dart Sass, and runs as UID 1000.
+
+### With a local Hugo
+
+- **Hugo extended**, ideally the version in `Dockerfile` — `brew install hugo`
+- **Go** — Hextra is installed as a Hugo Module, which uses the Go toolchain to fetch it
 
 ```shell
 cd docs

@@ -3,7 +3,7 @@ BUILD_FLAGS=-ldflags="-s -w -X main.Version=$(VERSION)" -trimpath
 CERT_ID ?= Developer ID Application: ByteNess (R)
 INSTALL_DIR ?= ~/bin
 GOTEST_FLAGS ?= -race
-.PHONY: binaries clean release install snapshot run check-fmt docs-serve docs-build test-zsh-completion
+.PHONY: binaries clean release install snapshot run check-fmt docs-serve docs-serve-docker docs-build test-zsh-completion
 # Go's build cache skips unchanged work, so always invoke go build
 .PHONY: aws-vault aws-vault-darwin-amd64 aws-vault-darwin-arm64 aws-vault-freebsd-amd64 aws-vault-linux-amd64 aws-vault-linux-arm64 aws-vault-linux-ppc64le aws-vault-linux-arm7 aws-vault-windows-386.exe aws-vault-windows-amd64.exe aws-vault-windows-arm64.exe
 
@@ -66,6 +66,10 @@ vet:
 
 docs-serve: ## Serve the documentation site locally on http://localhost:1313/
 	cd docs && hugo server --disableFastRender
+
+docs-serve-docker: ## Serve the documentation site with the Hugo version pinned in docs/Dockerfile
+	docker build -t aws-vault-docs - < docs/Dockerfile
+	docker run --rm -p 1313:1313 -v "$(CURDIR)":/project aws-vault-docs server --source docs --bind 0.0.0.0 --disableFastRender
 
 docs-build: ## Build the documentation site into docs/public/
 	cd docs && hugo --gc --minify
