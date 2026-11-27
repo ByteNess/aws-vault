@@ -19,16 +19,11 @@ enableEmoji: true
 module:
   hugoVersion:
     extended: true
-    # The import's `version` key below is only honoured from 0.150.0 onwards; on
-    # older Hugo the theme silently resolves to whatever is latest instead. The
-    # version CI builds with is pinned in docs/Dockerfile.
-    min: "0.150.0"
   imports:
-    # `version` takes a Go version query and makes this a direct dependency,
-    # which means it -- not the `require` in go.mod -- decides the theme
-    # version actually built. Bump the theme here.
+    # The theme version is the `require` in docs/go.mod, which Dependabot
+    # bumps. A `version` key here would override go.mod and stop those bumps
+    # from taking effect.
     - path: github.com/imfing/hextra
-      version: v0.13.0
 
 defaultContentLanguage: en
 languages:

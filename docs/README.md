@@ -142,11 +142,18 @@ To change what the footer shows, in `hugo.yaml`:
 
 ## Updating the theme
 
+`go.mod` pins the Hextra version, and Dependabot opens a pull request when the theme
+publishes a new release. `go.sum` holds the checksums, so both files change together. To
+bump by hand:
+
 ```shell
 cd docs
 hugo mod get -u github.com/imfing/hextra
 hugo mod tidy
 ```
+
+Keep the `imports` entry in `hugo.yaml` free of a `version` key: Hugo would build that
+version and ignore `go.mod`.
 
 ## Deployment
 
