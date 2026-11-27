@@ -1,0 +1,5 @@
+{{- /* Hextra hook, rendered at the end of <head> on every page. */ -}}
+{{- with resources.Get "js/github-stars.js" -}}
+  {{- $js := . | minify | fingerprint -}}
+  <script defer src="{{ $js.RelPermalink }}" integrity="{{ $js.Data.Integrity }}"></script>
+{{- end -}}

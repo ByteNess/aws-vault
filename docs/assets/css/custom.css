@@ -1,0 +1,14 @@
+/* Star count appended to the navbar GitHub link by assets/js/github-stars.js. */
+.github-stars-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.github-stars {
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
