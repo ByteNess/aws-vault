@@ -25,6 +25,19 @@ updates:
     labels:
       - "dependencies"
       - "go"
+  # docs/go.mod pins the Hextra theme. Kept apart from the entry above so a
+  # theme bump is not grouped into the CLI's Go dependency updates.
+  - package-ecosystem: "gomod"
+    directory: "/docs"
+    schedule:
+      interval: "weekly"
+      day: "thursday"
+      time: "11:00"
+    cooldown:
+      default-days: 1
+    labels:
+      - "dependencies"
+      - "docs"
   - package-ecosystem: "github-actions"
     open-pull-requests-limit: 10
     directory: "/"
